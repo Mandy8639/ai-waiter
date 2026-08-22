@@ -1,0 +1,95 @@
+"use client";
+
+import { useActionState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import type { AuthFormState } from "@/lib/auth/actions";
+
+interface AuthFormProps {
+  action: (
+    prevState: AuthFormState,
+    formData: FormData,
+  ) => Promise<AuthFormState>;
+  submitLabel: string;
+  pendingLabel: string;
+  passwordAutoComplete: "current-password" | "new-password";
+  passwordHint?: string;
+}
+
+const initialState: AuthFormState = {};
+
+export function AuthForm({
+  action,
+  submitLabel,
+  pendingLabel,
+  passwordAutoComplete,
+  passwordHint,
+}: AuthFormProps) {
+  const [state, formAction, isPending] = useActionState(action, initialState);
+
+  return (
+    <form action={formAction} className="flex flex-col gap-5" noValidate>
+      {state.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{state.error}</AlertDescription>
+        </Alert>
+      )}
+      {state.message && (
+        <Alert>
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          disabled={isPending}
+          aria-invalid={!!state.fieldErrors?.email}
+          aria-describedby={
+            state.fieldErrors?.email ? "email-error" : undefined
+          }
+        />
+        {state.fieldErrors?.email && (
+          <p id="email-error" className="text-destructive text-sm">
+            {state.fieldErrors.email[0]}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="password">Password</Label>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete={passwordAutoComplete}
+          required
+          disabled={isPending}
+          aria-invalid={!!state.fieldErrors?.password}
+          aria-describedby={
+            state.fieldErrors?.password ? "password-error" : undefined
+          }
+        />
+        {passwordHint && !state.fieldErrors?.password && (
+          <p className="text-muted-foreground text-sm">{passwordHint}</p>
+        )}
+        {state.fieldErrors?.password && (
+          <p id="password-error" className="text-destructive text-sm">
+            {state.fieldErrors.password[0]}
+          </p>
+        )}
+      </div>
+
+      <Button type="submit" disabled={isPending} className="mt-2">
+        {isPending ? pendingLabel : submitLabel}
+      </Button>
+    </form>
+  );
+}

@@ -1,0 +1,165 @@
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { DeleteButton } from "@/components/dashboard/delete-button";
+import { EmptyState } from "@/components/dashboard/empty-state";
+import { createClient } from "@/lib/supabase/server";
+import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
+import { deleteMenuItem, toggleMenuItemAvailability } from "@/lib/menu/actions";
+
+export const metadata = {
+  title: "Menu — AI Waiter",
+};
+
+export default async function MenuPage() {
+  const { restaurant } = await requireCurrentRestaurant();
+  const supabase = await createClient();
+
+  const [{ data: menuItems }, { data: categories }] = await Promise.all([
+    supabase
+      .from("menu_items")
+      .select(
+        "id, name, category_id, price, is_available, is_vegetarian, is_spicy, display_order",
+      )
+      .eq("restaurant_id", restaurant.id)
+      .order("display_order", { ascending: true }),
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("restaurant_id", restaurant.id),
+  ]);
+
+  const categoryNameById = new Map(
+    (categories ?? []).map((c) => [c.id, c.name]),
+  );
+  const canManage =
+    restaurant.role === "owner" || restaurant.role === "manager";
+  const currency = new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+  });
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Menu</h1>
+          <p className="text-muted-foreground text-sm">
+            Manage the dishes customers will see.
+          </p>
+        </div>
+        {canManage && (
+          <Link
+            href="/dashboard/menu/new"
+            className={buttonVariants({ variant: "default" })}
+          >
+            New menu item
+          </Link>
+        )}
+      </div>
+
+      {!menuItems || menuItems.length === 0 ? (
+        <EmptyState
+          title="No menu items yet"
+          description={
+            categories && categories.length > 0
+              ? "Add your first dish to get started."
+              : "Create a category first, then add dishes to it."
+          }
+          actionHref={canManage ? "/dashboard/menu/new" : undefined}
+          actionLabel={canManage ? "New menu item" : undefined}
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Availability</TableHead>
+                <TableHead>Vegetarian</TableHead>
+                <TableHead>Spicy</TableHead>
+                {canManage && (
+                  <TableHead className="text-right">Actions</TableHead>
+                )}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {menuItems.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="font-medium">{item.name}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {categoryNameById.get(item.category_id) ?? "—"}
+                  </TableCell>
+                  <TableCell>{currency.format(Number(item.price))}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={item.is_available ? "secondary" : "outline"}
+                    >
+                      {item.is_available ? "Available" : "Unavailable"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{item.is_vegetarian ? "Yes" : "—"}</TableCell>
+                  <TableCell>{item.is_spicy ? "Yes" : "—"}</TableCell>
+                  {canManage && (
+                    <TableCell>
+                      <div className="flex justify-end gap-2">
+                        <form
+                          action={toggleMenuItemAvailability.bind(
+                            null,
+                            restaurant.id,
+                            item.id,
+                            !item.is_available,
+                          )}
+                        >
+                          <button
+                            type="submit"
+                            className={buttonVariants({
+                              variant: "outline",
+                              size: "sm",
+                            })}
+                          >
+                            {item.is_available
+                              ? "Mark unavailable"
+                              : "Mark available"}
+                          </button>
+                        </form>
+                        <Link
+                          href={`/dashboard/menu/${item.id}/edit`}
+                          className={buttonVariants({
+                            variant: "outline",
+                            size: "sm",
+                          })}
+                        >
+                          Edit
+                        </Link>
+                        <DeleteButton
+                          onDelete={deleteMenuItem.bind(
+                            null,
+                            restaurant.id,
+                            item.id,
+                          )}
+                          confirmTitle={`Delete "${item.name}"?`}
+                          confirmDescription="This can't be undone. Modifiers, ingredient links, and allergen links for this item will be removed too."
+                        />
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}

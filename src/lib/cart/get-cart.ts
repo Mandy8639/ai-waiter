@@ -1,0 +1,156 @@
+import "server-only";
+import { createClient } from "@/lib/supabase/server";
+
+export interface CartLineModifier {
+  id: string;
+  name: string;
+  priceAdjustment: number;
+}
+
+export interface CartLine {
+  id: string;
+  menuItemId: string;
+  menuItemName: string;
+  menuItemImageUrl: string | null;
+  quantity: number;
+  unitPrice: number;
+  modifiersPrice: number;
+  lineTotal: number;
+  modifiers: CartLineModifier[];
+  /** False if the menu item has gone unavailable since this was added — see docs/database.md#menu-availability-revalidation. */
+  stillAvailable: boolean;
+}
+
+export interface CartSummary {
+  lines: CartLine[];
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  total: number;
+  hasUnavailableItems: boolean;
+}
+
+/** Lightweight count for the persistent cart badge — avoids the full joined read on every page. */
+export async function getCartItemCount(
+  customerSessionId: string,
+): Promise<number> {
+  const supabase = await createClient();
+
+  const { data: cart } = await supabase
+    .from("carts")
+    .select("id")
+    .eq("customer_session_id", customerSessionId)
+    .maybeSingle();
+
+  if (!cart) return 0;
+
+  const { data: items } = await supabase
+    .from("cart_items")
+    .select("quantity")
+    .eq("cart_id", cart.id);
+  return (items ?? []).reduce((sum, item) => sum + item.quantity, 0);
+}
+
+/**
+ * Reads the customer's own cart (RLS-scoped, never trusts a client-passed
+ * cart id) with a fresh live join to menu_items for name/image/current
+ * availability — this is the "next cart mutation/revalidation must detect
+ * this" requirement for items that went unavailable after being added.
+ */
+export async function getCart(
+  restaurantId: string,
+  customerSessionId: string,
+): Promise<CartSummary> {
+  const supabase = await createClient();
+
+  const { data: cart } = await supabase
+    .from("carts")
+    .select("id")
+    .eq("customer_session_id", customerSessionId)
+    .maybeSingle();
+
+  const empty: CartSummary = {
+    lines: [],
+    subtotal: 0,
+    taxRate: 0,
+    taxAmount: 0,
+    total: 0,
+    hasUnavailableItems: false,
+  };
+
+  const { data: restaurant } = await supabase
+    .from("restaurants")
+    .select("tax_rate")
+    .eq("id", restaurantId)
+    .maybeSingle();
+  const taxRate = restaurant ? Number(restaurant.tax_rate) : 0;
+
+  if (!cart) return { ...empty, taxRate };
+
+  const { data: items } = await supabase
+    .from("cart_items")
+    .select(
+      "id, menu_item_id, quantity, unit_price, modifiers_price, line_total",
+    )
+    .eq("cart_id", cart.id)
+    .order("created_at", { ascending: true });
+
+  if (!items || items.length === 0) return { ...empty, taxRate };
+
+  const menuItemIds = [...new Set(items.map((i) => i.menu_item_id))];
+  const { data: menuItems } = await supabase
+    .from("menu_items")
+    .select("id, name, image_url, is_available")
+    .in("id", menuItemIds);
+  const menuItemById = new Map((menuItems ?? []).map((m) => [m.id, m]));
+
+  const itemIds = items.map((i) => i.id);
+  const { data: modifiers } =
+    itemIds.length > 0
+      ? await supabase
+          .from("cart_item_modifiers")
+          .select("id, cart_item_id, name, price_adjustment")
+          .in("cart_item_id", itemIds)
+      : {
+          data: [] as {
+            id: string;
+            cart_item_id: string;
+            name: string;
+            price_adjustment: number;
+          }[],
+        };
+
+  const modifiersByCartItemId = new Map<string, CartLineModifier[]>();
+  for (const modifier of modifiers ?? []) {
+    const list = modifiersByCartItemId.get(modifier.cart_item_id) ?? [];
+    list.push({
+      id: modifier.id,
+      name: modifier.name,
+      priceAdjustment: Number(modifier.price_adjustment),
+    });
+    modifiersByCartItemId.set(modifier.cart_item_id, list);
+  }
+
+  const lines: CartLine[] = items.map((item) => {
+    const menuItem = menuItemById.get(item.menu_item_id);
+    return {
+      id: item.id,
+      menuItemId: item.menu_item_id,
+      menuItemName: menuItem?.name ?? "Item no longer available",
+      menuItemImageUrl: menuItem?.image_url ?? null,
+      quantity: item.quantity,
+      unitPrice: Number(item.unit_price),
+      modifiersPrice: Number(item.modifiers_price),
+      lineTotal: Number(item.line_total),
+      modifiers: modifiersByCartItemId.get(item.id) ?? [],
+      stillAvailable: menuItem?.is_available ?? false,
+    };
+  });
+
+  const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
+  const taxAmount = subtotal * taxRate;
+  const total = subtotal + taxAmount;
+  const hasUnavailableItems = lines.some((line) => !line.stillAvailable);
+
+  return { lines, subtotal, taxRate, taxAmount, total, hasUnavailableItems };
+}
