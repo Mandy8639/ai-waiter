@@ -106,6 +106,14 @@ export function appendAssistantMessage(
   ];
 }
 
+/** Injects a plain user-role instruction message — used by the menu-factuality guard's one corrective retry (see loop.ts#TextAcceptanceGuard). Never persisted to ai_conversation_messages; it only exists transiently within this turn's in-flight message list. */
+export function appendUserMessage(
+  messages: OpenRouterMessage[],
+  text: string,
+): OpenRouterMessage[] {
+  return [...messages, { role: "user", content: text }];
+}
+
 export function appendToolResultMessage(
   messages: OpenRouterMessage[],
   results: Array<{ toolUseId: string; content: string; isError: boolean }>,

@@ -23,15 +23,23 @@ where customers can browse the menu, build a cart, and place an order in natural
 entirely by the same validated tools (`submit_order()`, cart mutation, RLS) the deterministic UI
 already uses, never a parallel AI-specific path; and, as of Batch 8, production hardening — abuse
 throttling on customer session creation and order submission, a health check endpoint, and a full
-audit (see [`docs/production-audit.md`](docs/production-audit.md)). 346 automated tests. See
+audit (see [`docs/production-audit.md`](docs/production-audit.md)); and Batch 9, a provider
+abstraction so the AI waiter can run on either Anthropic (production default) or OpenRouter (a
+cost-free development alternative), selected via `AI_PROVIDER` — see
+[`docs/ai.md`](docs/ai.md#provider-and-configuration). 376 automated tests. See
 [`docs/architecture.md`](docs/architecture.md) for the target architecture and what's actually
 implemented today versus planned, and [`docs/ai.md`](docs/ai.md) for the AI waiter's design.
 
-**No real Supabase project or Anthropic API key has been available while building this codebase.**
-Everything above is validated locally (PGlite for RLS/constraints, Vitest/Playwright for the rest)
-— Realtime delivery, live Auth behavior, and live AI model calls remain genuinely unverified
-against real services. See [`docs/production-audit.md`](docs/production-audit.md) for exactly
-what's PASS vs. PENDING.
+**A real Supabase project has since been provisioned and extensively validated** (dashboard,
+customer QR-to-order flow, kitchen display, real order submission with audit trail, and
+cross-tenant security checks all confirmed against live data — see
+[`docs/production-audit.md`](docs/production-audit.md#current-status-production-hardening-pass)
+for the full breakdown). Two things remain genuinely open there, not application bugs: Supabase
+Realtime `postgres_changes` `INSERT` delivery to anonymous-auth connections is a platform-side
+issue under active Supabase support investigation (ticket SU-452145) with no impact on any
+customer-facing code path, and no live AI conversational turn has completed successfully yet (the
+configured free OpenRouter model has returned `429 Too Many Requests` on every attempt so far — an
+external rate limit, not a code defect).
 
 ## Technology stack
 
@@ -63,18 +71,22 @@ Open http://localhost:3000.
 Copy `.env.example` to `.env.local` and fill in real values from your Supabase project (Project
 Settings → API):
 
-| Variable                               | Scope       | Purpose                                                                                                                                                                                                         |
-| -------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Public      | Your Supabase project URL.                                                                                                                                                                                      |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public      | The publishable/anon key — safe for the browser, subject to RLS.                                                                                                                                                |
-| `SUPABASE_SECRET_KEY`                  | Server only | The secret/service_role key. Bypasses RLS — never exposed to the browser. See [`src/lib/supabase/admin.ts`](src/lib/supabase/admin.ts).                                                                         |
-| `ANTHROPIC_API_KEY`                    | Server only | Optional — the AI waiter's model provider key. If unset, the AI waiter simply isn't offered; everything else works normally. See [`src/lib/ai/client.ts`](src/lib/ai/client.ts) and [`docs/ai.md`](docs/ai.md). |
+| Variable                               | Scope       | Purpose                                                                                                                                                                                                                                                                 |
+| -------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Public      | Your Supabase project URL.                                                                                                                                                                                                                                              |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public      | The publishable/anon key — safe for the browser, subject to RLS.                                                                                                                                                                                                        |
+| `SUPABASE_SECRET_KEY`                  | Server only | The secret/service_role key. Bypasses RLS — never exposed to the browser. See [`src/lib/supabase/admin.ts`](src/lib/supabase/admin.ts).                                                                                                                                 |
+| `AI_PROVIDER`                          | Server only | Optional — `anthropic` (production default) or `openrouter` (a cost-free development alternative). See [`docs/ai.md`](docs/ai.md#provider-and-configuration).                                                                                                           |
+| `ANTHROPIC_API_KEY`                    | Server only | Optional — required only when `AI_PROVIDER=anthropic`. If neither provider's key is set, the AI waiter simply isn't offered; everything else works normally. See [`src/lib/ai/providers/`](src/lib/ai/providers/) and [`docs/ai.md`](docs/ai.md).                       |
+| `OPENROUTER_API_KEY`                   | Server only | Optional — required only when `AI_PROVIDER=openrouter`. Never required alongside `ANTHROPIC_API_KEY`, and vice versa. Get one free at [openrouter.ai/keys](https://openrouter.ai/keys). See [`src/lib/ai/providers/openrouter.ts`](src/lib/ai/providers/openrouter.ts). |
 
 `src/lib/env.ts` validates the two public vars with Zod and fails immediately, with a clear
-message, if either is missing — not deep inside a request. `SUPABASE_SECRET_KEY` and
-`ANTHROPIC_API_KEY` both validate separately, lazily, in the one file that reads each
-(`src/lib/supabase/admin.ts`, `src/lib/ai/client.ts`), so a page that never touches the admin
-client or the AI waiter doesn't need either configured to build or run. See
+message, if either is missing — not deep inside a request. `SUPABASE_SECRET_KEY`,
+`ANTHROPIC_API_KEY`, and `OPENROUTER_API_KEY` all validate separately, lazily, in the one file that
+reads each (`src/lib/supabase/admin.ts`, `src/lib/ai/providers/anthropic.ts`,
+`src/lib/ai/providers/openrouter.ts`), so a page that never touches the admin client or the AI
+waiter doesn't need any of them configured to build or run, and whichever provider isn't selected
+via `AI_PROVIDER` is never even referenced. See
 [`docs/security.md`](docs/security.md#server-only-secrets). `.env.example` also documents several
 optional AI-tuning variables (model, effort, rate limits, timeouts) with sensible defaults — see
 [`src/lib/ai/config.ts`](src/lib/ai/config.ts).

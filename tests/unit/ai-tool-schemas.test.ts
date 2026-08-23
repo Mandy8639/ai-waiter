@@ -8,6 +8,7 @@ import {
   updateCartItemSchema,
   removeCartItemSchema,
   clearCartSchema,
+  requestOrderConfirmationSchema,
   submitOrderSchema,
   getOrderStatusSchema,
   getCustomerOrderHistorySchema,
@@ -31,6 +32,7 @@ describe("AI tool schemas — reject unknown/tenant-scoping fields (spec section
     ],
     ["remove_cart_item", removeCartItemSchema, { cartItemId: "abc" }],
     ["clear_cart", clearCartSchema, {}],
+    ["request_order_confirmation", requestOrderConfirmationSchema, {}],
     ["submit_order", submitOrderSchema, {}],
     ["get_order_status", getOrderStatusSchema, {}],
     ["get_customer_order_history", getCustomerOrderHistorySchema, {}],
@@ -63,6 +65,7 @@ describe("AI tool schemas — reject unknown/tenant-scoping fields (spec section
     [updateCartItemSchema, { cartItemId: "abc", quantity: 1 }],
     [removeCartItemSchema, { cartItemId: "abc" }],
     [clearCartSchema, {}],
+    [requestOrderConfirmationSchema, {}],
     [submitOrderSchema, {}],
   ])("rejects a smuggled price/total field", (schema, validBase) => {
     for (const priceField of [
@@ -211,6 +214,22 @@ describe("submitOrderSchema", () => {
     expect(submitOrderSchema.safeParse({ orderId: "some-id" }).success).toBe(
       false,
     );
+  });
+
+  it("never accepts a confirmation id/token/hash/flag from the model — the confirmation gate is server-derived, never a tool argument (see order-confirmation.ts)", () => {
+    for (const smuggledField of [
+      "confirmed",
+      "confirmationId",
+      "confirmationToken",
+      "cartFingerprint",
+      "isConfirmed",
+    ]) {
+      const result = submitOrderSchema.safeParse({
+        [smuggledField]:
+          smuggledField === "confirmed" ? true : "attacker-value",
+      });
+      expect(result.success, `${smuggledField} should be rejected`).toBe(false);
+    }
   });
 });
 

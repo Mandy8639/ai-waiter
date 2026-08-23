@@ -271,4 +271,140 @@ describe("runConversationLoop", () => {
     expect(result.toolLimitExceeded).toBe(true);
     expect(callModel.mock.calls.length).toBeLessThanOrEqual(3 * 2 + 10);
   });
+
+  describe("textAcceptanceGuard (menu-factuality guard integration)", () => {
+    const appendUserMessage = (messages: FakeMessage[], text: string) => [
+      ...messages,
+      { role: "user", note: text },
+    ];
+
+    it("C.1 flagged turn + no tool call at all -> one corrective retry, then accepts the follow-up text", async () => {
+      const callModel = vi
+        .fn<() => Promise<LoopModelResponse>>()
+        .mockResolvedValueOnce({
+          content: [{ type: "text", text: "Paneer Tikka is $8.99." }],
+        })
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: "tool_use",
+              id: "call-1",
+              name: "get_menu_item",
+              input: {},
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          content: [{ type: "text", text: "It's really $8.99, confirmed." }],
+        });
+      const callTool = vi
+        .fn<() => Promise<LoopToolOutcome>>()
+        .mockResolvedValue({
+          toolName: "get_menu_item",
+          result: { ok: true, data: {} },
+        });
+      const shouldAccept = vi.fn((outcomes: LoopToolOutcome[]) =>
+        outcomes.some((o) => o.toolName === "get_menu_item" && o.result.ok),
+      );
+
+      const result = await runConversationLoop(
+        fakeParams({
+          callModel,
+          callTool,
+          textAcceptanceGuard: {
+            shouldAccept,
+            correctiveInstruction: "please use a menu tool",
+            appendUserMessage,
+          },
+        }),
+      );
+
+      expect(callModel).toHaveBeenCalledTimes(3);
+      expect(result.finalText).toBe("It's really $8.99, confirmed.");
+      expect(result.guardCorrectionExhausted).toBe(false);
+    });
+
+    it("C.7 model still refuses to call a menu tool after the corrective retry -> bounded safe response, not an infinite loop", async () => {
+      const callModel = vi
+        .fn<() => Promise<LoopModelResponse>>()
+        .mockResolvedValue({
+          content: [{ type: "text", text: "It's around $8, I think." }],
+        });
+      const callTool = vi.fn();
+      const shouldAccept = vi.fn(() => false);
+
+      const result = await runConversationLoop(
+        fakeParams({
+          callModel,
+          callTool,
+          textAcceptanceGuard: {
+            shouldAccept,
+            correctiveInstruction: "please use a menu tool",
+            appendUserMessage,
+          },
+        }),
+      );
+
+      // Exactly one corrective retry: 2 calls total, never more.
+      expect(callModel).toHaveBeenCalledTimes(2);
+      expect(result.guardCorrectionExhausted).toBe(true);
+      expect(result.finalText).toBe("");
+      expect(callTool).not.toHaveBeenCalled();
+    });
+
+    it("C.8 non-flagged turn (no textAcceptanceGuard passed) -> existing text-only behavior is completely unchanged", async () => {
+      const callModel = vi
+        .fn<() => Promise<LoopModelResponse>>()
+        .mockResolvedValue({
+          content: [{ type: "text", text: "You're welcome!" }],
+        });
+      const callTool = vi.fn();
+
+      const result = await runConversationLoop(
+        fakeParams({ callModel, callTool }),
+      );
+
+      expect(callModel).toHaveBeenCalledTimes(1);
+      expect(result.finalText).toBe("You're welcome!");
+      expect(result.guardCorrectionExhausted).toBe(false);
+    });
+
+    it("accepts immediately, with no retry, when the guard is satisfied on the first attempt", async () => {
+      const callModel = vi
+        .fn<() => Promise<LoopModelResponse>>()
+        .mockResolvedValueOnce({
+          content: [
+            { type: "tool_use", id: "call-1", name: "search_menu", input: {} },
+          ],
+        })
+        .mockResolvedValueOnce({
+          content: [{ type: "text", text: "Here's what's vegetarian." }],
+        });
+      const callTool = vi
+        .fn<() => Promise<LoopToolOutcome>>()
+        .mockResolvedValue({
+          toolName: "search_menu",
+          result: { ok: true, data: [] },
+        });
+      const shouldAccept = vi.fn((outcomes: LoopToolOutcome[]) =>
+        outcomes.some((o) => o.toolName === "search_menu" && o.result.ok),
+      );
+
+      const result = await runConversationLoop(
+        fakeParams({
+          callModel,
+          callTool,
+          textAcceptanceGuard: {
+            shouldAccept,
+            correctiveInstruction: "please use a menu tool",
+            appendUserMessage,
+          },
+        }),
+      );
+
+      expect(callModel).toHaveBeenCalledTimes(2);
+      expect(result.finalText).toBe("Here's what's vegetarian.");
+      expect(result.guardCorrectionExhausted).toBe(false);
+    });
+  });
 });

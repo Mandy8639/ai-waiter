@@ -57,6 +57,8 @@ export const removeCartItemSchema = z
 
 export const clearCartSchema = z.object({}).strict();
 
+export const requestOrderConfirmationSchema = z.object({}).strict();
+
 export const submitOrderSchema = z
   .object({
     customerNote: z.string().trim().max(500).optional(),

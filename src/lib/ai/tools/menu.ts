@@ -194,14 +194,14 @@ export const menuTools: ToolDefinition[] = [
   {
     name: "search_menu",
     description:
-      "Search this restaurant's currently available menu items by name/description text, dietary preference, or spiciness. Returns only items that are actually orderable right now.",
+      "Search this restaurant's currently available menu items by name/description text, dietary preference, or spiciness. Returns only items that are actually orderable right now. Call this for ANY customer question about what's on the menu, recommendations, or dietary options — even if the same topic came up earlier in this conversation; never answer from memory.",
     schema: searchMenuSchema,
     execute: searchMenu as ToolDefinition["execute"],
   },
   {
     name: "get_menu_item",
     description:
-      "Get full detail for one menu item by id (from a prior search_menu result) — description, price, dietary flags, declared allergens, and its modifier groups/options. Use this before adding an item to the cart if you need to know its required modifiers.",
+      "Get full detail for one menu item by id (from a prior search_menu result) — description, price, dietary flags, declared allergens, and its modifier groups/options. Use this before adding an item to the cart if you need to know its required modifiers, and any time a customer asks about a specific item's price, ingredients, or dietary suitability — never state these from memory.",
     schema: getMenuItemSchema,
     execute: getMenuItem as ToolDefinition["execute"],
   },

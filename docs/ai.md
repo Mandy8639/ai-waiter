@@ -403,13 +403,36 @@ underlying menu/cart pages — closing it returns to exactly where the customer 
   enum, content length cap, tool_name/role consistency, composite-FK tenant integrity), and
   `get_public_order_settings()`'s new `allow_ai_recommendations`/`allow_upselling` fields.
 - **E2E** (`tests/e2e/ai-waiter-flow.spec.ts`, gated on a real Supabase project _and_ a real
-  `ANTHROPIC_API_KEY` — both unavailable in this sandbox, confirmed to skip cleanly): the full QR
-  scan → ask about vegetarian dishes → order an item with a required modifier → answer the
-  modifier → verify the cart actually changed (via the ordinary, non-AI cart page) → ask what's in
-  the cart → place the order → confirm if asked → verify a real order exists (via the ordinary,
-  non-AI orders page) → ask for status flow. A second, separately-gated test (only needs real
-  Supabase, not the AI key) verifies the full menu → cart → order flow works regardless of AI
-  configuration.
+  credential for whichever provider `AI_PROVIDER` names — see `tests/e2e/ai-provider-gate.ts` and
+  its unit coverage in `tests/unit/ai-e2e-provider-gate.test.ts`; `AI_PROVIDER=anthropic` requires
+  `ANTHROPIC_API_KEY`, `AI_PROVIDER=openrouter` requires `OPENROUTER_API_KEY`, and an unrecognized
+  value skips with a clear reason rather than silently defaulting): the full QR scan → ask about
+  vegetarian dishes → order an item with a required modifier → answer the modifier → verify the
+  cart actually changed (via the ordinary, non-AI cart page) → ask what's in the cart → place the
+  order → confirm if asked → verify a real order exists (via the ordinary, non-AI orders page) →
+  ask for status flow. A second, separately-gated test (only needs real Supabase, not the AI key)
+  verifies the full menu → cart → order flow works regardless of AI configuration. Against the real
+  project, both of this file's real-AI-gated tests currently skip at runtime for the same reason
+  every other signup-based E2E spec does — the project's "Confirm email" Auth setting blocks an
+  automated test from completing signup — not because of provider gating; see
+  [`docs/production-audit.md`](./production-audit.md) for the full explanation and options.
+
+## Current live-validation status
+
+Validated against the real Supabase project (ref `dqypmprjcyxoeywsumxr`): `AI_PROVIDER=openrouter` +
+a real `OPENROUTER_API_KEY` resolves correctly end to end — `/api/health` reports `aiConfigured:
+true`, the provider correctly resolves to `openrouter` with model `google/gemma-4-26b-a4b-it:free`,
+and no `ANTHROPIC_API_KEY` is present or required anywhere in the environment. A real customer
+session (via the real QR/table flow) was used to send a real message to the AI waiter. **No live
+conversational turn has completed successfully yet** — every attempt so far has returned `429 Too
+Many Requests` from OpenRouter itself (an external free-tier rate limit on `google/gemma-4-26b-a4b-it:free`),
+confirmed via the app's own `ai_error`/`ai_turn` structured logs, not a guess. The provider
+implementation itself (`src/lib/ai/providers/openrouter.ts`/`openrouter-mapping.ts`) was
+re-inspected and found correct — API URL, auth header, model selection, tool-schema mapping,
+tool-call parsing, refusal mapping, timeout, and error handling all match the documented contract
+above. **Do not claim the AI waiter is production-validated** until a real conversational turn —
+menu question, cart add, confirmation gate, and order submission — has actually succeeded end to
+end against a live model.
 
 ## What's explicitly out of scope for this batch
 

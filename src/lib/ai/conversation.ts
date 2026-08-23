@@ -33,6 +33,65 @@ export async function getRecentMessages(
   }));
 }
 
+/**
+ * The user-role message that triggered the CURRENT turn — always the
+ * newest one, since insertMessage(..., "user", ...) runs once per turn,
+ * before any tool executes (see orchestrator.ts#sendAiMessage). Used by
+ * the submit_order confirmation gate (order-confirmation.ts) to detect
+ * "this confirmation was established in an earlier turn, not this one."
+ */
+export async function getLatestUserMessageTimestamp(
+  customerSessionId: string,
+): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("ai_conversation_messages")
+    .select("created_at")
+    .eq("customer_session_id", customerSessionId)
+    .eq("role", "user")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.created_at ?? null;
+}
+
+/**
+ * The most recent SUCCESSFUL call to a given tool for this session,
+ * regardless of the display/context window (aiConfig.maxHistoryMessages)
+ * — the confirmation gate must still work even if the customer has
+ * chatted enough since to push the original request_order_confirmation
+ * call out of what's shown back to the model.
+ *
+ * `before`, when given, filters to calls strictly earlier than that ISO
+ * timestamp — pass the current turn's own user-message timestamp
+ * (getLatestUserMessageTimestamp) so this returns "the latest
+ * confirmation from a PRIOR turn," never one the model just made in the
+ * turn that's trying to use it. Filtering at the query level (rather than
+ * fetching the single global latest and checking client-side) means a
+ * same-turn re-verification call never shadows a still-valid earlier
+ * confirmation — the DB itself only ever returns a qualifying row.
+ */
+export async function getLatestSuccessfulToolCall(
+  customerSessionId: string,
+  toolName: string,
+  before?: string | null,
+): Promise<{ content: string; createdAt: string } | null> {
+  const supabase = await createClient();
+  let query = supabase
+    .from("ai_conversation_messages")
+    .select("content, created_at")
+    .eq("customer_session_id", customerSessionId)
+    .eq("role", "tool")
+    .eq("tool_name", toolName)
+    .eq("tool_success", true);
+  if (before) query = query.lt("created_at", before);
+  const { data } = await query
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ? { content: data.content, createdAt: data.created_at } : null;
+}
+
 export async function insertMessage(
   restaurantId: string,
   customerSessionId: string,

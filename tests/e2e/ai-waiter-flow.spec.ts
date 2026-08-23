@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { resolveAiProviderGate } from "./ai-provider-gate";
 
 /**
  * Batch 7's conversational AI waiter, end to end (spec section 45):
@@ -7,9 +8,10 @@ import { test, expect } from "@playwright/test";
  * modifier question along the way), asks what's in the cart, confirms an
  * order, then asks for its status once the kitchen has moved it along.
  *
- * Needs BOTH a real (test-only) Supabase project AND a real AI provider
- * key (ANTHROPIC_API_KEY) — this is the one flow in this codebase that
- * can't run without a live model, since it depends on the model actually
+ * Needs BOTH a real (test-only) Supabase project AND a real credential for
+ * whichever AI provider is configured (AI_PROVIDER — see
+ * src/lib/ai/config.ts) — this is the one flow in this codebase that can't
+ * run without a live model, since it depends on the model actually
  * understanding natural language and choosing the right tools. Assertions
  * below are intentionally robust to exact wording (the model's phrasing
  * isn't scripted) and instead check for structural evidence of success:
@@ -22,12 +24,24 @@ import { test, expect } from "@playwright/test";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const hasRealSupabaseProject =
   supabaseUrl.length > 0 && !supabaseUrl.includes("placeholder");
-const hasRealAiProvider = !!process.env.ANTHROPIC_API_KEY;
+
+// Which credential is required depends on AI_PROVIDER, not a hardcoded
+// provider — mirrors src/lib/ai/config.ts's own provider selection, so this
+// suite runs under whichever provider local/CI is actually configured for
+// (Batch 9 added `openrouter` as a cost-free alternative to `anthropic`).
+// See ./ai-provider-gate.ts for the gating logic itself and
+// tests/unit/ai-e2e-provider-gate.test.ts for its unit coverage.
+const { hasRealAiProvider, skipReason: aiProviderSkipReason } =
+  resolveAiProviderGate({
+    AI_PROVIDER: process.env.AI_PROVIDER,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  });
 
 test.describe("AI waiter: full conversational order flow", () => {
   test.skip(
     !hasRealSupabaseProject || !hasRealAiProvider,
-    "Requires a real Supabase test project AND a real ANTHROPIC_API_KEY.",
+    aiProviderSkipReason,
   );
 
   test("QR scan -> ask about vegetarian dishes -> add an item with a required modifier -> review cart -> place order -> check status", async ({

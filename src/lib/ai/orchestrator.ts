@@ -7,6 +7,10 @@ import { executeTool } from "./tools/index";
 import { getRecentMessages, insertMessage } from "./conversation";
 import { isRateLimited } from "./rate-limit";
 import { logAiTurn, logAiToolCall, logAiError } from "./logging";
+import {
+  looksLikeMenuFactQuestion,
+  MENU_FACT_GUARD_FALLBACK_TEXT,
+} from "./tools/menu-fact-detection";
 import type { ToolContext } from "./tools/types";
 
 export interface SendAiMessageParams {
@@ -123,6 +127,7 @@ export async function sendAiMessage(
       history: historyMessages,
       userMessage: trimmed,
       maxToolCalls: aiConfig.maxToolCallsPerTurn,
+      requiresAuthoritativeMenuSource: looksLikeMenuFactQuestion(trimmed),
       callTool: async (name, args) => {
         const toolStart = Date.now();
         const outcome = await executeTool(name, args, context);
@@ -181,6 +186,23 @@ export async function sendAiMessage(
       });
     }
 
+    if (loopResult.guardCorrectionExhausted) {
+      // The menu-factuality guard's one corrective retry didn't get the
+      // model to consult a menu tool — fail safely rather than risking a
+      // fabricated/stale answer reaching the customer (see
+      // tools/menu-fact-detection.ts).
+      finalText = MENU_FACT_GUARD_FALLBACK_TEXT;
+      logAiTurn({
+        restaurantId,
+        customerSessionId,
+        toolCallCount: loopResult.toolCallCount,
+        latencyMs: Date.now() - start,
+        model: aiConfig.model,
+        provider: aiConfig.provider,
+        outcome: "menu_fact_guard_exhausted",
+      });
+    }
+
     if (!finalText) {
       finalText =
         "Sorry, I didn't quite catch that — could you say it a different way?";
@@ -197,7 +219,7 @@ export async function sendAiMessage(
       finalText,
     );
 
-    if (!loopResult.toolLimitExceeded) {
+    if (!loopResult.toolLimitExceeded && !loopResult.guardCorrectionExhausted) {
       logAiTurn({
         restaurantId,
         customerSessionId,

@@ -36,7 +36,8 @@ export interface AiTurnLogFields {
     | "provider_error"
     | "tool_limit_exceeded"
     | "unconfigured"
-    | "refused";
+    | "refused"
+    | "menu_fact_guard_exhausted";
 }
 
 export function logAiTurn(fields: AiTurnLogFields): void {

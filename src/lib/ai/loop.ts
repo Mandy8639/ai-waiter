@@ -41,6 +41,22 @@ export interface LoopToolOutcome {
   result: LoopToolResult;
 }
 
+/**
+ * Optional, generic hook for "don't accept a text-only reply unless some
+ * condition on this turn's tool outcomes holds" — loop.ts has no idea what
+ * that condition IS (menu-factuality is defined in
+ * tools/menu-fact-detection.ts); it just knows how to give the model one
+ * bounded corrective round before falling back safely. Reuses the same
+ * `toolOutcomes` the loop already accumulates — no parallel state.
+ */
+export interface TextAcceptanceGuard<TMessages> {
+  /** True = accept the text-only reply as final. False = needs correction. */
+  shouldAccept: (toolOutcomes: LoopToolOutcome[]) => boolean;
+  /** Injected as one corrective message before the single retry round. */
+  correctiveInstruction: string;
+  appendUserMessage: (messages: TMessages, text: string) => TMessages;
+}
+
 export interface RunConversationLoopParams<TMessages> {
   initialMessages: TMessages;
   callModel: (messages: TMessages) => Promise<LoopModelResponse>;
@@ -54,6 +70,8 @@ export interface RunConversationLoopParams<TMessages> {
     messages: TMessages,
     results: Array<{ toolUseId: string; content: string; isError: boolean }>,
   ) => TMessages;
+  /** Omitted entirely for turns that don't need it — existing callers/tests are unaffected. */
+  textAcceptanceGuard?: TextAcceptanceGuard<TMessages>;
 }
 
 export interface RunConversationLoopResult {
@@ -63,6 +81,8 @@ export interface RunConversationLoopResult {
   toolOutcomes: LoopToolOutcome[];
   /** True when the model declined to respond (stop_reason "refusal") — the caller must show a safe decline message, never treat `finalText` as a real reply. */
   refused: boolean;
+  /** True when textAcceptanceGuard rejected the reply twice in a row (the one bounded retry didn't help) — the caller must show its own safe fallback, `finalText` is empty. */
+  guardCorrectionExhausted: boolean;
 }
 
 export async function runConversationLoop<TMessages>(
@@ -83,6 +103,11 @@ export async function runConversationLoop<TMessages>(
   // spin this loop forever.
   const absoluteIterationCeiling = params.maxToolCalls * 2 + 10;
   let iterations = 0;
+  // The menu-factuality guard's one bounded corrective round — separate
+  // from `maxToolCalls`/`absoluteIterationCeiling` since it's not a tool
+  // call, but still hard-capped at exactly one retry so a model that keeps
+  // refusing to call a menu tool can never spin this loop.
+  let guardRetryUsed = false;
 
   while (true) {
     iterations += 1;
@@ -93,6 +118,7 @@ export async function runConversationLoop<TMessages>(
         toolLimitExceeded: true,
         toolOutcomes,
         refused: false,
+        guardCorrectionExhausted: false,
       };
     }
 
@@ -105,6 +131,7 @@ export async function runConversationLoop<TMessages>(
         toolLimitExceeded: false,
         toolOutcomes,
         refused: true,
+        guardCorrectionExhausted: false,
       };
     }
 
@@ -130,12 +157,39 @@ export async function runConversationLoop<TMessages>(
         .map((block) => block.text)
         .join("\n")
         .trim();
+
+      const guard = params.textAcceptanceGuard;
+      if (guard && !guard.shouldAccept(toolOutcomes)) {
+        if (!guardRetryUsed) {
+          // One bounded corrective round: nudge the model, then let the
+          // while loop run again — this does NOT consume the tool-call
+          // budget, matching how "pause_turn" also loops without doing so.
+          guardRetryUsed = true;
+          messages = guard.appendUserMessage(
+            messages,
+            guard.correctiveInstruction,
+          );
+          continue;
+        }
+        // The retry didn't help — fail safely rather than looping or
+        // calling the model a third time for this condition.
+        return {
+          finalText: "",
+          toolCallCount,
+          toolLimitExceeded: false,
+          toolOutcomes,
+          refused: false,
+          guardCorrectionExhausted: true,
+        };
+      }
+
       return {
         finalText,
         toolCallCount,
         toolLimitExceeded: false,
         toolOutcomes,
         refused: false,
+        guardCorrectionExhausted: false,
       };
     }
 
@@ -146,6 +200,7 @@ export async function runConversationLoop<TMessages>(
         toolLimitExceeded: true,
         toolOutcomes,
         refused: false,
+        guardCorrectionExhausted: false,
       };
     }
 

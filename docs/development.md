@@ -7,8 +7,10 @@
 - A Supabase project (free tier is fine for local development), with **Anonymous Auth enabled**
   (Authentication → Providers → Anonymous Sign-Ins) — required for the entire customer-facing flow
   (QR scan → menu → cart → order → AI waiter), and not something a migration can turn on for you.
-- Optionally, an `ANTHROPIC_API_KEY` to exercise the AI waiter — everything else (menu, cart,
-  checkout, order tracking, the kitchen display) works identically without one; see
+- Optionally, `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`, or `AI_PROVIDER=openrouter` +
+  `OPENROUTER_API_KEY` (free, no cost for local development), to exercise the AI waiter —
+  everything else (menu, cart, checkout, order tracking, the kitchen display) works identically
+  without either configured; see
   [`docs/ai.md`](./ai.md#failure-fallback--the-ai-is-purely-additive).
 
 ## Setup
@@ -82,8 +84,10 @@ real Supabase project at all.
 `kitchen-flow.spec.ts` all need real Auth and Postgres round trips, so each is skipped unless
 `NEXT_PUBLIC_SUPABASE_URL` in `.env.local` points at an actual project (and isn't the placeholder
 value from `.env.example`). `tests/e2e/ai-waiter-flow.spec.ts`'s full conversational flow
-additionally needs a real `ANTHROPIC_API_KEY`; its second test (ordering still works with the AI
-unconfigured) only needs the real Supabase project. To run any of them:
+additionally needs a real credential for whichever `AI_PROVIDER` is configured
+(`ANTHROPIC_API_KEY` for `anthropic`, `OPENROUTER_API_KEY` for `openrouter` — see
+`tests/e2e/ai-provider-gate.ts`); its second test (ordering still works with the AI unconfigured)
+only needs the real Supabase project. To run any of them:
 
 1. Point `.env.local` at a **disposable test** Supabase project — never production.
 2. If that project requires email confirmation, either disable it for testing (Auth settings) or

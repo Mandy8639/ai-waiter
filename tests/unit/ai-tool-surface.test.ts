@@ -77,6 +77,7 @@ describe("AI tool surface (spec section 4)", () => {
         "get_order_status",
         "get_restaurant_info",
         "remove_cart_item",
+        "request_order_confirmation",
         "search_menu",
         "submit_order",
         "update_cart_item",

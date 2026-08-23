@@ -23,6 +23,8 @@ export interface AiConversationTurn {
   maxToolCalls: number;
   /** Executes one tool call — always the same executeTool()-backed closure the orchestrator builds; a provider never sees tool implementation details. */
   callTool: (name: string, args: unknown) => Promise<LoopToolOutcome>;
+  /** True when the customer's current message asks about restaurant-specific facts (menu/price/dietary/availability) — see tools/menu-fact-detection.ts. When true, each provider wires loop.ts's textAcceptanceGuard so a text-only reply is rejected (with one bounded corrective retry) unless an authoritative menu tool succeeded this turn. */
+  requiresAuthoritativeMenuSource?: boolean;
 }
 
 export interface AiProvider {

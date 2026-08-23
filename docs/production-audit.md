@@ -1,5 +1,13 @@
 # Production audit (Batch 8)
 
+> **This document's original body (below) is a historical snapshot from Batch 8, written when no
+> real Supabase project existed and every "confirmed pending" item was genuinely untested. A real
+> Supabase project has since been provisioned and extensively live-validated, and a real
+> OpenRouter-based AI provider has been configured. See
+> ["Current status (Production Hardening pass)"](#current-status-production-hardening-pass) at the
+> bottom of this file for what's actually true today — do not rely on the "Confirmed pending"
+> section below as current.**
+
 Full-system audit performed before any Batch 8 code changes, per the batch's own instruction to
 inspect everything rather than assume Batches 1–7 are correct because their tests pass. Findings
 below are grouped by outcome: **fixed this batch**, **reviewed and confirmed safe** (no change
@@ -206,3 +214,60 @@ Wi-Fi, so IP address both over-blocks (many legitimate diners, one IP) and under
 proxies, mobile carriers). `table_id` (for session creation) and `customer_session_id` (for order
 submission) are both meaningful, already-authenticated-or-derived identity boundaries specific to
 this application's actual usage pattern, not a generic network-layer proxy for identity.
+
+## Current status (Production Hardening pass)
+
+Everything in this section reflects real validation against the live Supabase project (ref
+`dqypmprjcyxoeywsumxr`) and the real OpenRouter provider — it supersedes the "Confirmed pending"
+list above, which was written before any of this existed.
+
+**Resolved / validated for real:**
+
+- Dashboard login/data, all dashboard sub-pages, table QR generation, the full customer QR → menu
+  → modifiers → cart flow, and Supabase Anonymous Auth are all validated against the real project.
+- A real order was submitted, verified end to end (order number, pricing, item/modifier snapshots,
+  audit trail, cart clearing, idempotency on retry) directly against the live database.
+- The full kitchen/staff status-transition permission matrix (pending → confirmed → preparing →
+  ready → served, plus the role-boundary rejections) was validated with real staff logins.
+- Cross-tenant/cross-customer security checks (can't read another session's cart/order, can't
+  modify totals/status, can't access another restaurant) were validated live where a real check was
+  possible, and otherwise rest on the existing PGlite integration-test suite per the standing
+  instruction not to manufacture unnecessary cross-tenant test data.
+- Realtime `UPDATE` delivery (both the customer order page and the kitchen board) is validated live.
+- `AI_PROVIDER=openrouter` + a real `OPENROUTER_API_KEY` is confirmed correctly wired end to end
+  (`/api/health`, provider resolution, model selection) with zero dependency on `ANTHROPIC_API_KEY`.
+- The e2e suite's real-AI gating (`tests/e2e/ai-waiter-flow.spec.ts`) now derives the required
+  credential from `AI_PROVIDER` generically instead of hardcoding `ANTHROPIC_API_KEY` — see
+  `tests/e2e/ai-provider-gate.ts` and its unit tests.
+
+**Still genuinely open:**
+
+1. **Realtime `INSERT` delivery to anonymous-auth connections** — a platform-side issue,
+   independently reproduced with direct evidence (publication/`REPLICA IDENTITY`/trigger
+   configuration all confirmed correct; the identical JWT's `UPDATE` delivery and REST `SELECT`
+   both work; a `claims_role: anon` anomaly was observed for the anonymous connection despite its
+   JWT's `role` claim being `authenticated`). Supabase support ticket **SU-452145** is open. Has
+   zero functional impact on any customer-facing code (which never subscribes to `INSERT`); the
+   kitchen board depends on it but has a working non-Realtime fallback. No code, RLS, or migration
+   change has been made or is currently justified by the evidence.
+2. **No live AI conversation has completed successfully.** The provider is correctly configured and
+   wired (confirmed by inspection and by `/api/health`), but every real attempt against the
+   configured free model (`google/gemma-4-26b-a4b-it:free`) has returned `429 Too Many Requests`
+   from OpenRouter — an external rate limit, not an application defect. **Do not treat the AI
+   waiter as production-validated** until a real conversational turn actually succeeds end to end.
+3. **6 of 7 real-credential E2E specs are blocked by the real project's "Confirm email" Auth
+   setting**, not by missing credentials: `dashboard-flow.spec.ts`, `customer-flow.spec.ts`,
+   `order-flow.spec.ts`, `kitchen-flow.spec.ts` (both tests), and `ai-waiter-flow.spec.ts` (both
+   tests) all start a fresh `/signup`, which the real project can't complete without a human
+   clicking a confirmation email. The already-seeded dev users (`owner@nashta-demo.aiwaiter.test`
+   etc.) can't substitute for this today — `scripts/seed-dev-users.ts` deliberately never persists
+   their passwords anywhere, so no automated test currently holds a usable credential for them.
+   Two real options exist, neither of which is a pure code change: (a) a dedicated, disposable
+   Supabase test project with email confirmation off _only there_, or (b) explicitly provisioning
+   one new dedicated e2e-login user (Admin API, stored password) in this project — a production
+   Auth data mutation that needs an explicit decision, not a default. `dashboard-flow.spec.ts`
+   specifically tests the signup flow itself, so it can only ever be unblocked by option (a).
+
+**Regression baseline as of this pass**: lint/typecheck/format all clean, 376/376 unit+integration
+tests pass (371 baseline + 5 new for the E2E provider-gating logic), production build succeeds,
+e2e is 9 PASS / 7 SKIP (all 7 skips accounted for above) / 0 FAIL.

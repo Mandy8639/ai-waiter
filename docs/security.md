@@ -570,10 +570,26 @@ missed event, a duplicate event, or two events for the same order in quick succe
 on the same correct state (keyed by order id) rather than accumulating duplicate cards or stale
 data.
 
-**Real Supabase validation still pending**: RLS-based Realtime authorization, actual reconnect
-timing/behavior, and event delivery under real network conditions can only be confirmed against a
-live Supabase project — this sandbox's PGlite test harness has no Realtime layer to exercise at
-all (see the Batch 6 final report's "Real Supabase validation" section).
+**Real Supabase validation — partially complete, one open platform issue.** Against the real
+Supabase project (ref `dqypmprjcyxoeywsumxr`): RLS-based Realtime authorization for `UPDATE` events
+is confirmed working for both consumers — a real anonymous customer's own order-status page updates
+live, and the kitchen board (a real, password-authenticated staff session) receives live order
+updates and previously validated live new-order arrival as well. A genuine, independently-reproduced
+platform-side issue was found and is still open: `postgres_changes` **`INSERT`** events are not
+delivered to a Realtime connection authenticated as an **anonymous** Supabase Auth user, even though
+the identical JWT's REST `SELECT` of its own row succeeds and the identical connection's `UPDATE`
+delivery works. This was isolated with direct evidence (a standalone Realtime client using the
+customer's real JWT, independent of this app's own subscription code) to be unrelated to RLS policy
+logic, publication configuration (`INSERT` is enabled), `REPLICA IDENTITY` (confirmed `FULL`), or any
+trigger on `orders` (none exist for `INSERT`) — Supabase support ticket **SU-452145** is open on it.
+Critically, **this has zero functional impact on any customer-facing code**: the customer order page
+(`order-status-sync.tsx`) only ever subscribes to `UPDATE`, never `INSERT`, by design — a customer
+only watches an order they already know the ID of. The only consumer that depends on `INSERT`
+delivery is the kitchen board, which is driven by staff sessions (a different Auth path, not
+anonymous), and which also has a working non-Realtime fallback (resync on reconnect/tab-visible/
+network-online/local action) so a missed `INSERT` degrades to "not instantly live" rather than a
+silent failure. No application, RLS, or migration change has been made or is currently believed to
+be warranted — see `docs/production-audit.md` for the full investigation trail.
 
 ## QR security — (implemented in Batch 4)
 
@@ -686,8 +702,11 @@ a real Postgres engine, not just RLS policies or a SECURITY DEFINER function rev
 AI conversation rate limiting and prompt injection protection are now implemented, as described
 above — the AI waiter shipped in Batch 7. Rate limiting for customer session creation and order
 submission (as distinct, unauthenticated-adjacent surfaces) remains a design commitment for a
-later batch. Realtime's RLS-based authorization model is implemented and reasoned about above,
-but — like every other "real Supabase"/"real AI provider" claim in this document — has not been
-exercised against an actual live Realtime service or a live Anthropic API key in this sandbox; see
-the Batch 6 final report's "Real Supabase validation" section and the Batch 7 final report's
-equivalent section for exactly what remains pending and why.
+later batch. Realtime's RLS-based authorization model is implemented and has now been exercised
+against the real Supabase project for `UPDATE` delivery (see above) — the one open item is the
+`INSERT`-to-anonymous-connections platform issue tracked as Supabase ticket SU-452145, which does
+not affect any customer-facing path. A live conversational AI turn against a real model provider
+remains unvalidated: `AI_PROVIDER=openrouter` with a real `OPENROUTER_API_KEY` is correctly wired
+end to end (confirmed via `/api/health` and a real customer session), but the configured free model
+(`google/gemma-4-26b-a4b-it:free`) returned `429 Too Many Requests` on every live attempt so far —
+an external rate limit, not an application defect (see `docs/ai.md#current-live-validation-status`).
