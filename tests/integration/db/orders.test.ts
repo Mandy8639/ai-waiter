@@ -14,14 +14,20 @@
 // to make two transactions genuinely overlap from this test file. What IS
 // tested: (1) the *logical* idempotency guarantee — two sequential calls
 // with the same key produce one order, not two — which is what actually
-// matters for the "double-tap" scenario the spec describes, and (2) that
-// the underlying `orders_unique_idempotency_per_session` /
+// matters for the "double-tap" scenario the spec describes, (2) that the
+// underlying `orders_unique_idempotency_per_session` /
 // `orders_unique_order_number_per_restaurant` unique constraints exist and
-// reject a duplicate even via a raw admin-level insert, independent of
-// submit_order()'s own idempotency handling — that constraint is the real
-// backstop under true concurrent load on a real Postgres server, which
-// Postgres's row-level locking guarantees regardless of what this
-// single-connection harness can directly exercise.
+// reject a duplicate even via a raw admin-level insert, and (3), since
+// 20260826100000_submit_order_cart_lock.sql, the sequential decision
+// points a losing concurrent caller would hit after submit_order() locks
+// the cart row (for update) before deciding it's non-empty — a second,
+// different-key submission against an already-emptied cart, and that the
+// lock releases correctly on a failed/rolled-back attempt. The actual
+// concurrent-overlap guarantee itself — that two truly simultaneous
+// different-key calls against the SAME cart serialize on that lock rather
+// than both succeeding — is Postgres's own row-locking behavior on a real
+// server, and is verified live, separately, not by this single-connection
+// harness.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb, type TestDb } from "./setup";
 import {
@@ -508,6 +514,62 @@ describe("submit_order() idempotency", () => {
     const orderB = await submitOrder(db, b.userId, "shared-key");
 
     expect(orderA.id).not.toBe(orderB.id);
+  });
+
+  // Genuine concurrent overlap isn't reproducible from this single-
+  // connection harness (see the file header comment) — these two tests
+  // exercise, sequentially, the exact decision points a losing concurrent
+  // caller would hit after the cart-row lock added in
+  // 20260826100000_submit_order_cart_lock.sql: a second submission that
+  // reaches the (now-emptied) cart after a first one has already
+  // succeeded, and a submission that fails after the lock is acquired.
+  // The real concurrent-race guarantee is verified live, separately, not
+  // by this suite.
+  it("a second submission with a DIFFERENT idempotency key, made after the cart is already emptied by a first submission, is rejected as ORDER_CART_EMPTY (not silently accepted or double-charged)", async () => {
+    const fx = await fullCustomerFixture(db);
+    await addCartItem(db, fx.userId, fx.cartId, fx.restaurantId, fx.menuItemId);
+
+    const first = await submitOrder(db, fx.userId, "race-key-a");
+
+    await expect(submitOrder(db, fx.userId, "race-key-b")).rejects.toThrow(
+      /ORDER_CART_EMPTY/,
+    );
+
+    const { rows: orders } = await db.admin.query<{ id: string }>(
+      "select id from public.orders where customer_session_id = $1;",
+      [fx.sessionId],
+    );
+    expect(orders).toHaveLength(1);
+    expect(orders[0].id).toBe(first.id);
+  });
+
+  it("the cart lock is released on a failed submission — a subsequent submission with a new key on the same cart still succeeds normally", async () => {
+    const fx = await fullCustomerFixture(db);
+    await addCartItem(db, fx.userId, fx.cartId, fx.restaurantId, fx.menuItemId);
+    await db.admin.query(
+      "update public.menu_items set is_available = false where id = $1;",
+      [fx.menuItemId],
+    );
+
+    await expect(submitOrder(db, fx.userId, "lock-then-fail")).rejects.toThrow(
+      /ORDER_ITEM_UNAVAILABLE/,
+    );
+
+    // Make the item available again and retry with a fresh key — if the
+    // failed attempt's `for update` lock somehow outlived its own rolled-
+    // back transaction, this call would hang instead of completing.
+    await db.admin.query(
+      "update public.menu_items set is_available = true where id = $1;",
+      [fx.menuItemId],
+    );
+    const retried = await submitOrder(db, fx.userId, "lock-then-retry");
+    expect(retried.id).toBeTruthy();
+
+    const { rows: orders } = await db.admin.query(
+      "select id from public.orders where customer_session_id = $1;",
+      [fx.sessionId],
+    );
+    expect(orders).toHaveLength(1);
   });
 });
 
