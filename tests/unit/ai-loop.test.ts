@@ -183,6 +183,64 @@ describe("runConversationLoop", () => {
     expect(result.finalText).toBe("That item isn't available.");
   });
 
+  it("recovers from a failed tool call: the model tries a different tool call next and succeeds, within the same turn", async () => {
+    // Mirrors a real live pattern observed during Phase 2A: a first
+    // get_menu_item call fails (stale/wrong id), the model re-searches,
+    // then succeeds — recovery to success, not just "doesn't crash."
+    const callModel = vi
+      .fn<() => Promise<LoopModelResponse>>()
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "tool_use",
+            id: "call-1",
+            name: "get_menu_item",
+            input: { menuItemId: "stale-id" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "tool_use",
+            id: "call-2",
+            name: "search_menu",
+            input: { query: "Paneer Dosa" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "Found it — Paneer Dosa is $9.50." }],
+      });
+    const callTool = vi
+      .fn<() => Promise<LoopToolOutcome>>()
+      .mockResolvedValueOnce({
+        toolName: "get_menu_item",
+        result: {
+          ok: false,
+          error: "That item isn't on the menu (or isn't currently available).",
+        },
+      })
+      .mockResolvedValueOnce({
+        toolName: "search_menu",
+        result: {
+          ok: true,
+          data: { items: [{ id: "real-id", name: "Paneer Dosa" }] },
+        },
+      });
+
+    const result = await runConversationLoop(
+      fakeParams({ callModel, callTool }),
+    );
+
+    expect(result.toolOutcomes).toHaveLength(2);
+    expect(result.toolOutcomes[0].result.ok).toBe(false);
+    expect(result.toolOutcomes[1].result.ok).toBe(true);
+    expect(result.toolCallCount).toBe(2);
+    expect(result.finalText).toBe("Found it — Paneer Dosa is $9.50.");
+    expect(callModel).toHaveBeenCalledTimes(3);
+  });
+
   it("passes accumulated messages through appendAssistantMessage/appendToolResultMessage in order", async () => {
     const callModel = vi
       .fn<() => Promise<LoopModelResponse>>()
