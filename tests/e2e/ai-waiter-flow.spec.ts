@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { resolveAiProviderGate } from "./ai-provider-gate";
+import { createConfirmedTestUser } from "./test-auth-helpers";
 
 /**
  * Batch 7's conversational AI waiter, end to end (spec section 45):
@@ -47,20 +48,34 @@ test.describe("AI waiter: full conversational order flow", () => {
   test("QR scan -> ask about vegetarian dishes -> add an item with a required modifier -> review cart -> place order -> check status", async ({
     page,
   }) => {
+    // Localized to this test only (not playwright.config.ts's global
+    // timeout, not any other spec). The full flow chains several
+    // real openrouter/free model turns; live evidence (Phase 2A dispatch
+    // diagnostic) showed a single turn legitimately taking ~31.6s against
+    // the default 30s Playwright test timeout — this budget accommodates
+    // several such turns in sequence without masking a genuine hang.
+    test.setTimeout(240_000);
+
     const testId = Date.now();
     const email = `e2e-ai-waiter-${testId}@example.com`;
     const password = "TestPassword123!";
 
-    // --- Staff: sign up, create a restaurant with AI enabled (the default) ---
-    await page.goto("/signup");
+    // --- Staff: create a pre-confirmed account (Admin API — this test only
+    // needs a working login, not the signup/email-confirmation flow itself;
+    // see dashboard-flow.spec.ts for that), create a restaurant with AI
+    // enabled (the default) ---
+    await createConfirmedTestUser(email, password);
+    await page.goto("/login");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Create account" }).click();
-
-    await page.waitForURL(/\/(onboarding|signup)/);
-    if (page.url().includes("/signup")) {
-      test.skip(true, "Project requires email confirmation.");
-    }
+    await page.getByRole("button", { name: "Sign in" }).click();
+    // signIn() (unlike signUp()) redirects to /dashboard, not straight to
+    // /onboarding — a fresh user with zero restaurants lands on
+    // DashboardLayout's own "Create your restaurant" prompt there and must
+    // click through, matching the real user journey (see dashboard/layout.tsx).
+    await page.waitForURL("/dashboard");
+    await page.getByRole("link", { name: "Create your restaurant" }).click();
+    await page.waitForURL("/onboarding");
 
     const slug = `e2e-ai-waiter-${testId}`;
     await page.getByLabel("Restaurant name").fill("AI Waiter Test Restaurant");
@@ -79,14 +94,24 @@ test.describe("AI waiter: full conversational order flow", () => {
     await page.getByLabel("Slug").fill("paneer-dosa");
     await page.getByLabel("Category").selectOption({ label: "Mains" });
     await page.getByLabel("Price ($)").fill("9.50");
-    await page.getByLabel("Vegetarian").check();
+    // getByLabel("Vegetarian") is ambiguous: Base UI's Checkbox.Root renders
+    // a visible role="checkbox" element plus a hidden (aria-hidden) native
+    // <input> for form compatibility, both sharing the label. The role
+    // locator correctly excludes the aria-hidden one.
+    await page.getByRole("checkbox", { name: "Vegetarian" }).check();
     await page.getByRole("button", { name: "Create menu item" }).click();
     await page.waitForURL("/dashboard/menu");
 
     await page.goto("/dashboard/modifiers/new");
     await page.getByLabel("Menu item").selectOption({ label: "Paneer Dosa" });
     await page.getByLabel("Group name").fill("Spice level");
-    await page.getByLabel("Required").check();
+    // getByLabel("Required") is ambiguous for the same reason as the
+    // "Vegetarian" checkbox above: Base UI's Checkbox.Root renders a
+    // visible role="checkbox" element plus a hidden aria-hidden native
+    // <input>, both sharing the label ("Required (customer must choose an
+    // option)" — see modifier-group-form.tsx). The role locator correctly
+    // excludes the aria-hidden one.
+    await page.getByRole("checkbox", { name: "Required" }).check();
     await page.getByRole("button", { name: "Create group" }).click();
     await page.waitForURL(/\/dashboard\/modifiers\/.+/);
     await page.getByLabel("Option name").fill("Medium");
@@ -97,8 +122,11 @@ test.describe("AI waiter: full conversational order flow", () => {
     await page.getByLabel("Table number").fill("5");
     await page.getByRole("button", { name: "Create table" }).click();
     await page.waitForURL("/dashboard/tables");
+    // /dashboard/tables renders a card grid (data-slot="card"), not a
+    // <table>, so getByRole("row", ...) never matches — filter cards by text.
     await page
-      .getByRole("row", { name: /Table 5/ })
+      .locator('[data-slot="card"]')
+      .filter({ hasText: "Table 5" })
       .getByRole("link", { name: "QR code" })
       .click();
     await page.waitForURL(/\/dashboard\/tables\/.+\/qr/);
@@ -109,8 +137,13 @@ test.describe("AI waiter: full conversational order flow", () => {
     await page.waitForURL(new RegExp(`/r/${slug}/menu`));
 
     await page.getByRole("button", { name: "Open AI waiter chat" }).click();
+    // Scoped to the AI chat dialog (Base UI Dialog.Popup, role="dialog",
+    // named via Dialog.Title — see ai-waiter-panel.tsx) — reused below so
+    // Turn-1's own assertion can't be satisfied by the customer menu page
+    // rendered behind it, which also lists "Paneer Dosa" as a menu item.
+    const aiDialog = page.getByRole("dialog", { name: "AI Waiter" });
     await expect(
-      page.getByRole("heading", { name: "AI Waiter" }),
+      aiDialog.getByRole("heading", { name: "AI Waiter" }),
     ).toBeVisible();
 
     const chatInput = page.getByLabel("Message the AI waiter");
@@ -118,21 +151,40 @@ test.describe("AI waiter: full conversational order flow", () => {
     // --- "What vegetarian dishes do you have?" -> AI searches the real menu ---
     await chatInput.fill("What vegetarian dishes do you have?");
     await page.getByRole("button", { name: "Send" }).click();
-    await expect(page.getByText("Paneer Dosa")).toBeVisible({
-      timeout: 30_000,
+    // Scoped to the dialog (not a bare page-wide getByText) — the
+    // customer's own menu page, rendered behind this dialog, also shows
+    // "Paneer Dosa" as a menu item, so an unscoped text match can be
+    // satisfied without the AI ever actually replying (confirmed live:
+    // ai_conversation_messages showed only the user's own message, no
+    // assistant/tool row, while this assertion still passed).
+    await expect(aiDialog.getByText("Paneer Dosa")).toBeVisible({
+      timeout: 60_000,
     });
 
     // --- Ask for it; the item has a required modifier, so the AI must ask ---
     await chatInput.fill("I'll have the Paneer Dosa");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByText(/spice|medium/i).last()).toBeVisible({
-      timeout: 30_000,
+      timeout: 60_000,
     });
 
     // --- Answer the required modifier ---
     await chatInput.fill("Medium please");
     await page.getByRole("button", { name: "Send" }).click();
-    await page.waitForTimeout(1000);
+    // Deterministic, content-independent completion signal instead of a
+    // fixed sleep: the app's own "AI waiter is typing" status
+    // (role="status", tied 1:1 to useTransition's isPending — see
+    // ai-waiter-panel.tsx) is visible only while this Server Action call
+    // is in flight and disappears the instant it settles. Waiting for it
+    // to appear then disappear proves the "Medium please" turn actually
+    // finished, without guessing the model's exact reply wording — and
+    // avoids navigating away (which appeared to abort the in-flight call
+    // in the previous run) before the server-side work is done.
+    const typingIndicator = aiDialog.getByRole("status", {
+      name: "AI waiter is typing",
+    });
+    await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
+    await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
 
     // --- Verify the AI actually used the real cart tool, not just talk —
     // check the ordinary, non-AI cart page independently. ---
@@ -145,7 +197,7 @@ test.describe("AI waiter: full conversational order flow", () => {
     await chatInput.fill("What's in my cart?");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByText(/paneer dosa/i).last()).toBeVisible({
-      timeout: 30_000,
+      timeout: 60_000,
     });
 
     await chatInput.fill("Please place the order");
@@ -172,7 +224,7 @@ test.describe("AI waiter: full conversational order flow", () => {
     await expect(
       page.getByText(/received|confirmed|preparing|ready/i).last(),
     ).toBeVisible({
-      timeout: 30_000,
+      timeout: 60_000,
     });
   });
 });
@@ -187,14 +239,20 @@ test.describe("AI waiter: never blocks normal ordering", () => {
     const email = `e2e-ai-fallback-${testId}@example.com`;
     const password = "TestPassword123!";
 
-    await page.goto("/signup");
+    // Admin API pre-confirmed account (see the header comment on the first
+    // test in this file) + sign in — not the signup UI itself.
+    await createConfirmedTestUser(email, password);
+    await page.goto("/login");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Create account" }).click();
-    await page.waitForURL(/\/(onboarding|signup)/);
-    if (page.url().includes("/signup")) {
-      test.skip(true, "Project requires email confirmation.");
-    }
+    await page.getByRole("button", { name: "Sign in" }).click();
+    // signIn() (unlike signUp()) redirects to /dashboard, not straight to
+    // /onboarding — a fresh user with zero restaurants lands on
+    // DashboardLayout's own "Create your restaurant" prompt there and must
+    // click through, matching the real user journey (see dashboard/layout.tsx).
+    await page.waitForURL("/dashboard");
+    await page.getByRole("link", { name: "Create your restaurant" }).click();
+    await page.waitForURL("/onboarding");
 
     const slug = `e2e-ai-fallback-${testId}`;
     await page
@@ -219,8 +277,11 @@ test.describe("AI waiter: never blocks normal ordering", () => {
     await page.getByLabel("Table number").fill("6");
     await page.getByRole("button", { name: "Create table" }).click();
     await page.waitForURL("/dashboard/tables");
+    // /dashboard/tables renders a card grid (data-slot="card"), not a
+    // <table>, so getByRole("row", ...) never matches — filter cards by text.
     await page
-      .getByRole("row", { name: /Table 6/ })
+      .locator('[data-slot="card"]')
+      .filter({ hasText: "Table 6" })
       .getByRole("link", { name: "QR code" })
       .click();
     await page.waitForURL(/\/dashboard\/tables\/.+\/qr/);
@@ -239,6 +300,11 @@ test.describe("AI waiter: never blocks normal ordering", () => {
     await page.waitForURL(/\/cart/);
     await page.getByRole("button", { name: "Place order" }).click();
     await page.waitForURL(/\/order\/.+/);
-    await expect(page.getByText(/Order #\d+/)).toBeVisible();
+    // Scoped to the heading, not plain getByText: this page's <title> is
+    // also "Order #N" (see generateMetadata in order/[orderId]/page.tsx),
+    // which makes an unscoped text match ambiguous once fully rendered.
+    await expect(
+      page.getByRole("heading", { name: /Order #\d+/ }),
+    ).toBeVisible();
   });
 });

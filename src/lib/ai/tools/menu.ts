@@ -76,7 +76,7 @@ async function getMenuItem(
   // same "not found" a customer browsing that restaurant's own menu would
   // get for a bad id. There is no way for this tool to leak another
   // restaurant's item, no matter what id the model supplies.
-  const { data: item } = await supabase
+  const { data: item, error } = await supabase
     .from("menu_items")
     .select(
       "id, name, description, price, is_available, category_id, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time",
@@ -85,6 +85,18 @@ async function getMenuItem(
     .eq("restaurant_id", context.restaurantId)
     .eq("is_available", true)
     .maybeSingle();
+
+  // A genuine query failure (network/DB error) is distinct from a clean
+  // zero-row result — never surface the raw Postgres/Supabase error (which
+  // could include schema/column details) to the model or customer; this
+  // is deliberately a different message from the "not found" one below so
+  // the model can tell "try again" apart from "this ID is wrong."
+  if (error) {
+    return {
+      ok: false,
+      error: "Couldn't look up that item right now — please try again.",
+    };
+  }
 
   if (!item) {
     return {

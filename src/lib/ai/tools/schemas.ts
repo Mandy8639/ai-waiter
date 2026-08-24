@@ -21,9 +21,16 @@ export const searchMenuSchema = z
   })
   .strict();
 
+const menuItemIdField = z
+  .uuid()
+  .trim()
+  .describe(
+    "The exact menu item ID returned by a previous search_menu or get_menu_item result. Never use the item's name, description, or a guessed ID.",
+  );
+
 export const getMenuItemSchema = z
   .object({
-    menuItemId: z.string().trim().min(1).max(100),
+    menuItemId: menuItemIdField,
   })
   .strict();
 
@@ -33,7 +40,7 @@ export const getCartSchema = z.object({}).strict();
 
 export const addItemToCartSchema = z
   .object({
-    menuItemId: z.string().trim().min(1).max(100),
+    menuItemId: menuItemIdField,
     quantity: z.number().int().min(1).max(99),
     selectedOptionIds: z
       .array(z.string().trim().min(1).max(100))

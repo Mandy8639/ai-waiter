@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   searchMenuSchema,
   getMenuItemSchema,
@@ -17,13 +18,21 @@ import {
 describe("AI tool schemas — reject unknown/tenant-scoping fields (spec section 5)", () => {
   it.each([
     ["search_menu", searchMenuSchema, {}],
-    ["get_menu_item", getMenuItemSchema, { menuItemId: "abc" }],
+    [
+      "get_menu_item",
+      getMenuItemSchema,
+      { menuItemId: "11111111-1111-4111-8111-111111111111" },
+    ],
     ["get_restaurant_info", getRestaurantInfoSchema, {}],
     ["get_cart", getCartSchema, {}],
     [
       "add_item_to_cart",
       addItemToCartSchema,
-      { menuItemId: "abc", quantity: 1, selectedOptionIds: [] },
+      {
+        menuItemId: "11111111-1111-4111-8111-111111111111",
+        quantity: 1,
+        selectedOptionIds: [],
+      },
     ],
     [
       "update_cart_item",
@@ -59,9 +68,12 @@ describe("AI tool schemas — reject unknown/tenant-scoping fields (spec section
 
   it.each([
     [searchMenuSchema, {}],
-    [getMenuItemSchema, { menuItemId: "abc" }],
+    [getMenuItemSchema, { menuItemId: "11111111-1111-4111-8111-111111111111" }],
     [getCartSchema, {}],
-    [addItemToCartSchema, { menuItemId: "abc", quantity: 1 }],
+    [
+      addItemToCartSchema,
+      { menuItemId: "11111111-1111-4111-8111-111111111111", quantity: 1 },
+    ],
     [updateCartItemSchema, { cartItemId: "abc", quantity: 1 }],
     [removeCartItemSchema, { cartItemId: "abc" }],
     [clearCartSchema, {}],
@@ -81,11 +93,49 @@ describe("AI tool schemas — reject unknown/tenant-scoping fields (spec section
   });
 });
 
+describe("getMenuItemSchema — menuItemId must be a real UUID (Phase 2A identifier-contract hardening)", () => {
+  it("accepts a valid UUID", () => {
+    expect(
+      getMenuItemSchema.safeParse({
+        menuItemId: "11111111-1111-4111-8111-111111111111",
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["the item's name instead of its id", "Paneer Dosa"],
+    ["a non-UUID slug", "paneer-dosa"],
+    ["an empty string", ""],
+    ["a truncated/malformed id", "11111111-1111-1111-1111"],
+  ])("rejects %s", (_label, menuItemId) => {
+    expect(getMenuItemSchema.safeParse({ menuItemId }).success).toBe(false);
+  });
+});
+
 describe("addItemToCartSchema", () => {
+  it("accepts a valid UUID menuItemId", () => {
+    expect(
+      addItemToCartSchema.safeParse({
+        menuItemId: "11111111-1111-4111-8111-111111111111",
+        quantity: 1,
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["the item's name instead of its id", "Paneer Dosa"],
+    ["a non-UUID slug", "paneer-dosa"],
+    ["an empty string", ""],
+  ])("rejects %s as menuItemId", (_label, menuItemId) => {
+    expect(
+      addItemToCartSchema.safeParse({ menuItemId, quantity: 1 }).success,
+    ).toBe(false);
+  });
+
   it("accepts a valid add", () => {
     expect(
       addItemToCartSchema.safeParse({
-        menuItemId: "item-1",
+        menuItemId: "11111111-1111-4111-8111-111111111111",
         quantity: 2,
         selectedOptionIds: ["opt-1"],
       }).success,
@@ -94,7 +144,7 @@ describe("addItemToCartSchema", () => {
 
   it("defaults selectedOptionIds to an empty array", () => {
     const result = addItemToCartSchema.safeParse({
-      menuItemId: "item-1",
+      menuItemId: "11111111-1111-4111-8111-111111111111",
       quantity: 1,
     });
     expect(result.success).toBe(true);
@@ -241,5 +291,29 @@ describe("get_order_status / get_customer_order_history never accept an order id
     expect(
       getCustomerOrderHistorySchema.safeParse({ orderId: "some-id" }).success,
     ).toBe(false);
+  });
+});
+
+describe("model-facing JSON schema carries the menuItemId identifier-provenance guidance (Phase 2A)", () => {
+  // Mirrors exactly how src/lib/ai/tools/index.ts#getToolDefinitions()
+  // exposes each tool's schema to the model — z.toJSONSchema(schema,
+  // { target: "draft-7" }) — so this confirms the description the model
+  // actually sees, not just that .describe() was called somewhere.
+  it("get_menu_item's generated schema describes menuItemId's provenance", () => {
+    const jsonSchema = z.toJSONSchema(getMenuItemSchema, {
+      target: "draft-7",
+    }) as { properties?: { menuItemId?: { description?: string } } };
+    const description = jsonSchema.properties?.menuItemId?.description ?? "";
+    expect(description).toContain("search_menu");
+    expect(description).toContain("guessed");
+  });
+
+  it("add_item_to_cart's generated schema describes menuItemId's provenance", () => {
+    const jsonSchema = z.toJSONSchema(addItemToCartSchema, {
+      target: "draft-7",
+    }) as { properties?: { menuItemId?: { description?: string } } };
+    const description = jsonSchema.properties?.menuItemId?.description ?? "";
+    expect(description).toContain("search_menu");
+    expect(description).toContain("guessed");
   });
 });

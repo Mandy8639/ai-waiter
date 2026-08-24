@@ -5,6 +5,7 @@ import { aiConfig } from "./config";
 import { buildSystemPrompt } from "./system-prompt";
 import { executeTool } from "./tools/index";
 import { getRecentMessages, insertMessage } from "./conversation";
+import { buildHistoryMessages, buildRecentToolContext } from "./history";
 import { isRateLimited } from "./rate-limit";
 import { logAiTurn, logAiToolCall, logAiError } from "./logging";
 import {
@@ -95,19 +96,15 @@ export async function sendAiMessage(
     return { ok: false, error: "The AI waiter isn't available right now." };
   }
 
-  await insertMessage(restaurantId, customerSessionId, "user", trimmed);
-
+  // Fetched BEFORE inserting the current message — getRecentMessages()
+  // would otherwise return the message we're about to insert, and it'd
+  // end up in the provider request twice: once via historyMessages, once
+  // via the explicit `userMessage` field below.
   const history = await getRecentMessages(customerSessionId);
-  // Only the conversational (user/assistant) turns are replayed to the
-  // model — 'tool' rows are this codebase's own audit log, not part of
-  // any provider's message structure, and the model doesn't need the
-  // exact mechanics of a past turn's tool calls to remember what was said.
-  const historyMessages = history
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    }));
+  const historyMessages = buildHistoryMessages(history);
+  const recentToolContext = buildRecentToolContext(history);
+
+  await insertMessage(restaurantId, customerSessionId, "user", trimmed);
 
   const context: ToolContext = {
     restaurantId,
@@ -119,6 +116,7 @@ export async function sendAiMessage(
   const system = buildSystemPrompt({
     restaurantName,
     allowUpselling: params.allowUpselling,
+    recentToolContext,
   });
 
   try {

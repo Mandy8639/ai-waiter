@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { createConfirmedTestUser } from "./test-auth-helpers";
 
 /**
  * Batch 5's order engine, end to end (spec section 33): QR scan -> menu
@@ -32,19 +33,21 @@ test.describe("customer QR-to-order flow", () => {
     const email = `e2e-order-flow-${testId}@example.com`;
     const password = "TestPassword123!";
 
-    // --- Staff: sign up and create a restaurant ---
-    await page.goto("/signup");
+    // --- Staff: create a pre-confirmed account (Admin API — this test only
+    // needs a working login, not the signup/email-confirmation flow itself;
+    // see dashboard-flow.spec.ts for that) and sign in ---
+    await createConfirmedTestUser(email, password);
+    await page.goto("/login");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Create account" }).click();
-
-    await page.waitForURL(/\/(onboarding|signup)/);
-    if (page.url().includes("/signup")) {
-      test.skip(
-        true,
-        "Project requires email confirmation — can't complete signup in an automated test.",
-      );
-    }
+    await page.getByRole("button", { name: "Sign in" }).click();
+    // signIn() (unlike signUp()) redirects to /dashboard, not straight to
+    // /onboarding — a fresh user with zero restaurants lands on
+    // DashboardLayout's own "Create your restaurant" prompt there and must
+    // click through, matching the real user journey (see dashboard/layout.tsx).
+    await page.waitForURL("/dashboard");
+    await page.getByRole("link", { name: "Create your restaurant" }).click();
+    await page.waitForURL("/onboarding");
 
     const slug = `e2e-order-flow-${testId}`;
     await page.getByLabel("Restaurant name").fill("Order Flow Test Restaurant");
@@ -72,8 +75,11 @@ test.describe("customer QR-to-order flow", () => {
     await page.waitForURL("/dashboard/tables");
 
     // --- Staff: read the table's real customer URL ---
+    // /dashboard/tables renders a card grid (data-slot="card"), not a
+    // <table>, so getByRole("row", ...) never matches — filter cards by text.
     await page
-      .getByRole("row", { name: /Table 3/ })
+      .locator('[data-slot="card"]')
+      .filter({ hasText: "Table 3" })
       .getByRole("link", { name: "QR code" })
       .click();
     await page.waitForURL(/\/dashboard\/tables\/.+\/qr/);
@@ -98,14 +104,22 @@ test.describe("customer QR-to-order flow", () => {
     await page.waitForURL(/\/order\/.+/);
 
     // --- Confirmation page: order number + status shown ---
-    await expect(page.getByText(/Order #\d+/)).toBeVisible();
+    // Scoped to the heading, not plain getByText: this page's <title> is
+    // also "Order #N" (see generateMetadata in order/[orderId]/page.tsx),
+    // so an unscoped text match becomes ambiguous once the page is fully
+    // server-rendered (reliably reproduces after page.reload() below).
+    await expect(
+      page.getByRole("heading", { name: /Order #\d+/ }),
+    ).toBeVisible();
     await expect(page.getByText("Order received")).toBeVisible();
     await expect(page.getByText("Paneer Tikka")).toBeVisible();
     const orderUrl = page.url();
 
     // --- Refresh: the order is still visible (persisted, not client state) ---
     await page.reload();
-    await expect(page.getByText(/Order #\d+/)).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Order #\d+/ }),
+    ).toBeVisible();
     await expect(page.getByText("Paneer Tikka")).toBeVisible();
 
     // --- No duplicate order was created. A double-tap on "Place order"

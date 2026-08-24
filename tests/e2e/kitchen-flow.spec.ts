@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { createConfirmedTestUser } from "./test-auth-helpers";
 
 /**
  * Batch 6's kitchen workflow, end to end (spec section 32): a customer
@@ -37,19 +38,21 @@ test.describe("kitchen display: order lifecycle", () => {
     const email = `e2e-kitchen-flow-${testId}@example.com`;
     const password = "TestPassword123!";
 
-    // --- Staff: sign up and create a restaurant ---
-    await page.goto("/signup");
+    // --- Staff: create a pre-confirmed account (Admin API — this test only
+    // needs a working login, not the signup/email-confirmation flow itself;
+    // see dashboard-flow.spec.ts for that) and sign in ---
+    await createConfirmedTestUser(email, password);
+    await page.goto("/login");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Create account" }).click();
-
-    await page.waitForURL(/\/(onboarding|signup)/);
-    if (page.url().includes("/signup")) {
-      test.skip(
-        true,
-        "Project requires email confirmation — can't complete signup in an automated test.",
-      );
-    }
+    await page.getByRole("button", { name: "Sign in" }).click();
+    // signIn() (unlike signUp()) redirects to /dashboard, not straight to
+    // /onboarding — a fresh user with zero restaurants lands on
+    // DashboardLayout's own "Create your restaurant" prompt there and must
+    // click through, matching the real user journey (see dashboard/layout.tsx).
+    await page.waitForURL("/dashboard");
+    await page.getByRole("link", { name: "Create your restaurant" }).click();
+    await page.waitForURL("/onboarding");
 
     const slug = `e2e-kitchen-flow-${testId}`;
     await page
@@ -78,8 +81,11 @@ test.describe("kitchen display: order lifecycle", () => {
     await page.getByRole("button", { name: "Create table" }).click();
     await page.waitForURL("/dashboard/tables");
 
+    // /dashboard/tables renders a card grid (data-slot="card"), not a
+    // <table>, so getByRole("row", ...) never matches — filter cards by text.
     await page
-      .getByRole("row", { name: /Table 9/ })
+      .locator('[data-slot="card"]')
+      .filter({ hasText: "Table 9" })
       .getByRole("link", { name: "QR code" })
       .click();
     await page.waitForURL(/\/dashboard\/tables\/.+\/qr/);
@@ -87,7 +93,12 @@ test.describe("kitchen display: order lifecycle", () => {
 
     // --- Staff opens the kitchen display and stays there watching ---
     await page.goto("/dashboard/kitchen");
-    await expect(page.getByText("Kitchen")).toBeVisible();
+    // Plain getByText("Kitchen") is ambiguous — it also matches the "Kitchen"
+    // nav link, the restaurant name badge, and the staff email substring.
+    // The page's own <h1>Kitchen</h1> (kitchen-board.tsx) is the unique target.
+    await expect(
+      page.getByRole("heading", { name: "Kitchen", exact: true }),
+    ).toBeVisible();
 
     // --- Customer (separate browser context/identity): scan QR, order ---
     const customerContext = await context.browser()!.newContext();
@@ -104,7 +115,12 @@ test.describe("kitchen display: order lifecycle", () => {
     await customerPage.waitForURL(/\/cart/);
     await customerPage.getByRole("button", { name: "Place order" }).click();
     await customerPage.waitForURL(/\/order\/.+/);
-    await expect(customerPage.getByText(/Order #\d+/)).toBeVisible();
+    // Scoped to the heading, not plain getByText: this page's <title> is
+    // also "Order #N" (see generateMetadata in order/[orderId]/page.tsx),
+    // which makes an unscoped text match ambiguous once fully rendered.
+    await expect(
+      customerPage.getByRole("heading", { name: /Order #\d+/ }),
+    ).toBeVisible();
 
     // --- The customer page never offers any status-change control ---
     for (const label of [
@@ -177,14 +193,18 @@ test.describe("kitchen display: order lifecycle", () => {
     async function signUpAndCreateRestaurant(p: typeof page, suffix: string) {
       const email = `e2e-kitchen-tenant-${testId}-${suffix}@example.com`;
       const password = "TestPassword123!";
-      await p.goto("/signup");
+      // Admin API pre-confirmed account (see the header comment on the
+      // first test above) + sign in — not the signup UI itself.
+      await createConfirmedTestUser(email, password);
+      await p.goto("/login");
       await p.getByLabel("Email").fill(email);
       await p.getByLabel("Password").fill(password);
-      await p.getByRole("button", { name: "Create account" }).click();
-      await p.waitForURL(/\/(onboarding|signup)/);
-      if (p.url().includes("/signup")) {
-        test.skip(true, "Project requires email confirmation.");
-      }
+      await p.getByRole("button", { name: "Sign in" }).click();
+      // signIn() redirects to /dashboard; click through the layout's
+      // "Create your restaurant" prompt (see dashboard/layout.tsx).
+      await p.waitForURL("/dashboard");
+      await p.getByRole("link", { name: "Create your restaurant" }).click();
+      await p.waitForURL("/onboarding");
       const slug = `e2e-kitchen-tenant-${testId}-${suffix}`;
       await p.getByLabel("Restaurant name").fill(`Tenant ${suffix} Restaurant`);
       await p.getByLabel("Slug").fill(slug);
@@ -210,8 +230,11 @@ test.describe("kitchen display: order lifecycle", () => {
     await page.getByLabel("Table number").fill("2");
     await page.getByRole("button", { name: "Create table" }).click();
     await page.waitForURL("/dashboard/tables");
+    // /dashboard/tables renders a card grid (data-slot="card"), not a
+    // <table>, so getByRole("row", ...) never matches — filter cards by text.
     await page
-      .getByRole("row", { name: /Table 2/ })
+      .locator('[data-slot="card"]')
+      .filter({ hasText: "Table 2" })
       .getByRole("link", { name: "QR code" })
       .click();
     await page.waitForURL(/\/dashboard\/tables\/.+\/qr/);
