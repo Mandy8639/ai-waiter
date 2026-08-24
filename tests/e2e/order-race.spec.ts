@@ -141,6 +141,15 @@ test.describe("submit_order() concurrent-race protection (live)", () => {
       loser.getByText("Your cart is empty — add something before ordering."),
     ).toBeVisible();
 
+    // The winner is already on the order confirmation page
+    // (PlaceOrderForm's router.push on success) — this is where the item
+    // name/line actually renders (order/[orderId]/page.tsx), unlike the
+    // orders LIST page, which shows only order number/date/total/status.
+    // The winning order actually contains the item (one line, correct
+    // item) — not zero, not a duplicate line from a lost-then-recovered
+    // race.
+    await expect(winner.getByText("Race Test Dish")).toHaveCount(1);
+
     // --- Verify actual database state independently of what the UI claims ---
     await winner.goto(`/r/${slug}/orders`);
     await expect(winner.getByText(/Order #\d+/)).toBeVisible({
@@ -148,11 +157,6 @@ test.describe("submit_order() concurrent-race protection (live)", () => {
     });
     const orderCount = await winner.getByText(/Order #\d+/).count();
     expect(orderCount).toBe(1);
-
-    // The winning order actually contains the item (one line, correct
-    // item) — not zero, not a duplicate line from a lost-then-recovered
-    // race.
-    await expect(winner.getByText("Race Test Dish")).toHaveCount(1);
 
     // Cart is empty afterward, matching the winner's own submission.
     await winner.goto(`/r/${slug}/cart`);
