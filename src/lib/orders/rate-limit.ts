@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { envInt } from "@/lib/env-helpers";
+import { isOrderSubmissionRateLimited as isOrderSubmissionRateLimitedCore } from "./rate-limit-core";
 
 /**
  * Throttles distinct order-submission *attempts* per customer session
@@ -16,6 +17,9 @@ import { envInt } from "@/lib/env-helpers";
  * The default (10 orders per 10-minute window) is far above any real
  * dining session's order count (a couple of rounds during a meal), so no
  * legitimate customer should ever observe this.
+ *
+ * Production entry point — the actual logic lives in rate-limit-core.ts
+ * (no `server-only` import there) so it stays directly unit-testable.
  */
 export const ORDER_SUBMISSION_RATE_LIMIT = {
   maxPerWindow: envInt("ORDER_SUBMISSION_RATE_LIMIT_MAX", 10),
@@ -26,17 +30,9 @@ export async function isOrderSubmissionRateLimited(
   customerSessionId: string,
 ): Promise<boolean> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc(
-    "count_recent_orders_for_session",
-    {
-      p_customer_session_id: customerSessionId,
-      p_window_seconds: ORDER_SUBMISSION_RATE_LIMIT.windowSeconds,
-    },
+  return isOrderSubmissionRateLimitedCore(
+    supabase,
+    customerSessionId,
+    ORDER_SUBMISSION_RATE_LIMIT,
   );
-
-  // Fails open on an RPC error, same reasoning as session-creation
-  // throttling: this is an abuse throttle, not the idempotency guarantee,
-  // and a transient failure here must never block a real order.
-  if (error) return false;
-  return (data ?? 0) >= ORDER_SUBMISSION_RATE_LIMIT.maxPerWindow;
 }

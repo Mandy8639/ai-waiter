@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { envInt } from "@/lib/env-helpers";
 import type { Database } from "@/lib/supabase/database.types";
+import { isSessionCreationRateLimited as isSessionCreationRateLimitedCore } from "./rate-limit-core";
 
 /**
  * Throttles new customer session creation per table (Batch 8 — flagged as
@@ -19,6 +20,9 @@ import type { Database } from "@/lib/supabase/database.types";
  * This check only ever runs before creating a NEW session (the QR route
  * handler's reuse path for an already-active session never reaches it),
  * so a returning customer re-scanning or refreshing is never throttled.
+ *
+ * Production entry point — the actual logic lives in rate-limit-core.ts
+ * (no `server-only` import there) so it stays directly unit-testable.
  */
 export const SESSION_CREATION_RATE_LIMIT = {
   maxPerWindow: envInt("CUSTOMER_SESSION_RATE_LIMIT_MAX", 30),
@@ -29,18 +33,9 @@ export async function isSessionCreationRateLimited(
   supabase: SupabaseClient<Database>,
   tableId: string,
 ): Promise<boolean> {
-  const { data, error } = await supabase.rpc(
-    "count_recent_sessions_for_table",
-    {
-      p_table_id: tableId,
-      p_window_seconds: SESSION_CREATION_RATE_LIMIT.windowSeconds,
-    },
+  return isSessionCreationRateLimitedCore(
+    supabase,
+    tableId,
+    SESSION_CREATION_RATE_LIMIT,
   );
-
-  // Fails open on an RPC error: this is an abuse throttle, not a security
-  // boundary, and a transient failure here should never be the reason a
-  // real customer can't get seated — see the "failure behavior" note in
-  // docs/security.md#customer-session-creation-rate-limiting.
-  if (error) return false;
-  return (data ?? 0) >= SESSION_CREATION_RATE_LIMIT.maxPerWindow;
 }
