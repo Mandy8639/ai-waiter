@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
+import type { AiErrorCategory } from "./provider-error";
 
 /**
  * Structured, PII-minimal observability for the AI layer (spec section
@@ -83,7 +84,7 @@ export function logAiToolCall(fields: AiToolLogFields): void {
 export function logAiError(fields: {
   restaurantId?: string;
   customerSessionId?: string;
-  category: string;
+  category: AiErrorCategory;
   message: string;
 }): void {
   console.error(

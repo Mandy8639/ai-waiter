@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { aiConfig } from "../config";
 import { runConversationLoop } from "../loop";
 import { getToolDefinitions } from "../tools/index";
+import { AiProviderError, categorizeAnthropicError } from "../provider-error";
 import {
   toAnthropicTools,
   toAnthropicMessages,
@@ -71,18 +72,25 @@ export function createAnthropicProvider(): AiProvider {
         initialMessages,
         maxToolCalls: turn.maxToolCalls,
         callModel: async (messages) => {
-          const response = await client.beta.messages.create({
-            model: aiConfig.model,
-            max_tokens: aiConfig.maxOutputTokens,
-            system: turn.system,
-            tools,
-            messages,
-            thinking: { type: "adaptive" },
-            output_config: { effort: aiConfig.effort },
-            betas: ["server-side-fallback-2026-07-01"],
-            fallbacks: "default",
-          });
-          return parseAnthropicResponse(response);
+          try {
+            const response = await client.beta.messages.create({
+              model: aiConfig.model,
+              max_tokens: aiConfig.maxOutputTokens,
+              system: turn.system,
+              tools,
+              messages,
+              thinking: { type: "adaptive" },
+              output_config: { effort: aiConfig.effort },
+              betas: ["server-side-fallback-2026-07-01"],
+              fallbacks: "default",
+            });
+            return parseAnthropicResponse(response);
+          } catch (error) {
+            throw new AiProviderError(
+              `Anthropic request failed: ${error instanceof Error ? error.message : "unknown error"}`,
+              categorizeAnthropicError(error),
+            );
+          }
         },
         callTool: turn.callTool,
         appendAssistantMessage,

@@ -8,6 +8,7 @@ import { getRecentMessages, insertMessage } from "./conversation";
 import { buildHistoryMessages, buildRecentToolContext } from "./history";
 import { isRateLimited } from "./rate-limit";
 import { logAiTurn, logAiToolCall, logAiError } from "./logging";
+import { categorizeAiError } from "./provider-error";
 import {
   looksLikeMenuFactQuestion,
   MENU_FACT_GUARD_FALLBACK_TEXT,
@@ -234,7 +235,7 @@ export async function sendAiMessage(
     logAiError({
       restaurantId,
       customerSessionId,
-      category: "provider_error",
+      category: categorizeAiError(error),
       message: error instanceof Error ? error.message : "unknown error",
     });
     logAiTurn({
