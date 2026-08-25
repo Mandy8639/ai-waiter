@@ -494,4 +494,19 @@ describe("role-based authorization", () => {
       ).rejects.toThrow(/foreign key/i);
     });
   });
+
+  describe("restaurant_users: cross-tenant read denial (Item-6 audit finding)", () => {
+    it("Restaurant A staff cannot read Restaurant B's staff list", async () => {
+      const a = await fullRestaurantFixture(db, "owner");
+      const b = await fullRestaurantFixture(db, "owner");
+
+      const { rows } = await db.asUser(a.userId, (c) =>
+        c.query(
+          "select id from public.restaurant_users where restaurant_id = $1;",
+          [b.restaurantId],
+        ),
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
 });

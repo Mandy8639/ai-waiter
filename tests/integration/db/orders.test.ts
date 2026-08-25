@@ -816,6 +816,87 @@ describe("order access: customers", () => {
     );
     expect(rows).toHaveLength(0);
   });
+
+  // order_items/order_item_modifiers mirror orders' own
+  // orders_select_own_or_staff policy shape (order_belongs_to_caller OR
+  // is_restaurant_member) — the tests above only ever verify this
+  // indirectly, by checking the parent `orders` row. These two directly
+  // select from the child tables themselves (Item-6 audit finding).
+  it("a DIFFERENT customer (even at the same restaurant/table) cannot read someone else's order_items", async () => {
+    const restaurantId = await createRestaurant(db);
+    const tableId = await createTable(db, restaurantId);
+    const categoryId = await createCategory(db, restaurantId);
+    const menuItemId = await createMenuItem(db, restaurantId, categoryId);
+    const session1 = await createCustomerSession(db, restaurantId, tableId);
+    const cart1 = await createCart(db, restaurantId, session1.sessionId);
+    await addCartItem(db, session1.userId, cart1, restaurantId, menuItemId);
+    const order = await submitOrder(
+      db,
+      session1.userId,
+      "order-items-shared-table",
+    );
+
+    const session2 = await createCustomerSession(db, restaurantId, tableId);
+
+    const { rows } = await db.asUser(session2.userId, (c) =>
+      c.query("select id from public.order_items where order_id = $1;", [
+        order.id,
+      ]),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("Restaurant A's customer cannot read Restaurant B's order_items or order_item_modifiers (cross-tenant)", async () => {
+    const a = await fullCustomerFixture(db);
+    const b = await fullCustomerFixture(db);
+    const modifierId = await createModifier(
+      db,
+      b.restaurantId,
+      b.menuItemId,
+      "Size",
+    );
+    const optionId = await createModifierOption(db, modifierId, {
+      name: "Large",
+      priceAdjustment: 2.5,
+    });
+    const cartItemId = await addCartItem(
+      db,
+      b.userId,
+      b.cartId,
+      b.restaurantId,
+      b.menuItemId,
+      { unitPrice: 9.99, modifiersPrice: 2.5 },
+    );
+    await addCartItemModifier(
+      db,
+      b.userId,
+      cartItemId,
+      b.restaurantId,
+      modifierId,
+      optionId,
+      { name: "Large", priceAdjustment: 2.5 },
+    );
+    const orderB = await submitOrder(db, b.userId, "cross-tenant-items");
+
+    const { rows: items } = await db.asUser(a.userId, (c) =>
+      c.query("select id from public.order_items where order_id = $1;", [
+        orderB.id,
+      ]),
+    );
+    expect(items).toHaveLength(0);
+
+    const { rows: bItems } = await db.admin.query<{ id: string }>(
+      "select id from public.order_items where order_id = $1;",
+      [orderB.id],
+    );
+    const { rows: modifiers } = await db.asUser(a.userId, (c) =>
+      c.query(
+        "select id from public.order_item_modifiers where order_item_id = $1;",
+        [bItems[0].id],
+      ),
+    );
+    expect(modifiers).toHaveLength(0);
+  });
 });
 
 describe("order access: restaurant staff", () => {
