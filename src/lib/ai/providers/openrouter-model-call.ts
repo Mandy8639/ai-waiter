@@ -1,0 +1,85 @@
+import type { LoopModelResponse } from "../loop";
+import { AiProviderError } from "../provider-error";
+import {
+  parseOpenRouterResponse,
+  type OpenRouterChatResponse,
+  type OpenRouterMessage,
+  type OpenRouterTool,
+} from "./openrouter-mapping";
+
+export interface OpenRouterModelCallParams {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  maxOutputTokens: number;
+  requestTimeoutMs: number;
+  messages: OpenRouterMessage[];
+  tools: OpenRouterTool[];
+}
+
+/**
+ * Extracted from providers/openrouter.ts (no `server-only` import here,
+ * and `endpoint` is a parameter rather than the hardcoded production
+ * constant) so this — including the real `fetch` call and real
+ * `AbortSignal.timeout` — is directly, empirically testable: point
+ * `endpoint` at a local HTTP server that hangs/errors/responds slowly and
+ * observe the real timeout/error classification fire, rather than only
+ * unit-testing the classification logic against a mocked error object.
+ * See tests/unit/ai-provider-openrouter-model-call.test.ts.
+ */
+export async function callOpenRouterModel(
+  params: OpenRouterModelCallParams,
+): Promise<LoopModelResponse> {
+  let response: Response;
+  try {
+    response = await fetch(params.endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://ai-waiter.local",
+        "X-Title": "AI Waiter",
+      },
+      body: JSON.stringify({
+        model: params.model,
+        max_tokens: params.maxOutputTokens,
+        messages: params.messages,
+        tools: params.tools,
+      }),
+      signal: AbortSignal.timeout(params.requestTimeoutMs),
+    });
+  } catch (error) {
+    // AbortSignal.timeout() firing rejects fetch with a DOMException named
+    // "TimeoutError" — anything else here is a genuine network-level
+    // failure (DNS, connection refused), never an HTTP error (those reach
+    // the response.ok check below instead, with the real status code).
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new AiProviderError(
+        `OpenRouter request timed out after ${params.requestTimeoutMs}ms`,
+        "timeout",
+      );
+    }
+    throw new AiProviderError(
+      `OpenRouter request failed: ${error instanceof Error ? error.message : "network error"}`,
+      "network_error",
+    );
+  }
+
+  if (!response.ok) {
+    throw new AiProviderError(
+      `OpenRouter request failed: ${response.status} ${response.statusText}`,
+      response.status === 429 ? "rate_limited" : "http_error",
+    );
+  }
+
+  let json: OpenRouterChatResponse;
+  try {
+    json = (await response.json()) as OpenRouterChatResponse;
+  } catch (error) {
+    throw new AiProviderError(
+      `OpenRouter returned a malformed response: ${error instanceof Error ? error.message : "parse error"}`,
+      "unknown",
+    );
+  }
+  return parseOpenRouterResponse(json);
+}

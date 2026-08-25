@@ -2,15 +2,13 @@ import "server-only";
 import { aiConfig } from "../config";
 import { runConversationLoop } from "../loop";
 import { getToolDefinitions } from "../tools/index";
-import { AiProviderError } from "../provider-error";
+import { callOpenRouterModel } from "./openrouter-model-call";
 import {
   toOpenRouterTools,
   toOpenRouterMessages,
   appendAssistantMessage,
   appendToolResultMessage,
   appendUserMessage,
-  parseOpenRouterResponse,
-  type OpenRouterChatResponse,
   type OpenRouterMessage,
 } from "./openrouter-mapping";
 import {
@@ -59,61 +57,16 @@ export function createOpenRouterProvider(): AiProvider {
       return runConversationLoop<OpenRouterMessage[]>({
         initialMessages,
         maxToolCalls: turn.maxToolCalls,
-        callModel: async (messages) => {
-          let response: Response;
-          try {
-            response = await fetch(OPENROUTER_ENDPOINT, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://ai-waiter.local",
-                "X-Title": "AI Waiter",
-              },
-              body: JSON.stringify({
-                model: aiConfig.model,
-                max_tokens: aiConfig.maxOutputTokens,
-                messages,
-                tools,
-              }),
-              signal: AbortSignal.timeout(aiConfig.requestTimeoutMs),
-            });
-          } catch (error) {
-            // AbortSignal.timeout() firing rejects fetch with a
-            // DOMException named "TimeoutError" — anything else here is a
-            // genuine network-level failure (DNS, connection refused),
-            // never an HTTP error (those reach the response.ok check below
-            // instead, with the real status code).
-            if (error instanceof Error && error.name === "TimeoutError") {
-              throw new AiProviderError(
-                `OpenRouter request timed out after ${aiConfig.requestTimeoutMs}ms`,
-                "timeout",
-              );
-            }
-            throw new AiProviderError(
-              `OpenRouter request failed: ${error instanceof Error ? error.message : "network error"}`,
-              "network_error",
-            );
-          }
-
-          if (!response.ok) {
-            throw new AiProviderError(
-              `OpenRouter request failed: ${response.status} ${response.statusText}`,
-              response.status === 429 ? "rate_limited" : "http_error",
-            );
-          }
-
-          let json: OpenRouterChatResponse;
-          try {
-            json = (await response.json()) as OpenRouterChatResponse;
-          } catch (error) {
-            throw new AiProviderError(
-              `OpenRouter returned a malformed response: ${error instanceof Error ? error.message : "parse error"}`,
-              "unknown",
-            );
-          }
-          return parseOpenRouterResponse(json);
-        },
+        callModel: (messages) =>
+          callOpenRouterModel({
+            endpoint: OPENROUTER_ENDPOINT,
+            apiKey,
+            model: aiConfig.model,
+            maxOutputTokens: aiConfig.maxOutputTokens,
+            requestTimeoutMs: aiConfig.requestTimeoutMs,
+            messages,
+            tools,
+          }),
         callTool: turn.callTool,
         appendAssistantMessage,
         appendToolResultMessage,
