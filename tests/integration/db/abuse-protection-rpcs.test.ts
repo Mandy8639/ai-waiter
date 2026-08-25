@@ -82,12 +82,26 @@ describe("count_recent_sessions_for_table()", () => {
   it("respects the window — a session outside it is not counted", async () => {
     const restaurantId = await createRestaurant(db);
     const tableId = await createTable(db, restaurantId);
-    await createCustomerSession(db, restaurantId, tableId);
+    const { sessionId } = await createCustomerSession(
+      db,
+      restaurantId,
+      tableId,
+    );
+    // Backdate started_at explicitly rather than using a 0-second window:
+    // PGlite's now()/clock_timestamp() only has millisecond resolution (real
+    // Postgres has microsecond resolution plus real network latency between
+    // statements), so two back-to-back statements can land in the exact same
+    // millisecond, making a 0-second window's >= boundary a coin flip here
+    // even though it's never ambiguous in production.
+    await db.admin.query(
+      "update public.customer_sessions set started_at = now() - interval '1 hour' where id = $1;",
+      [sessionId],
+    );
 
     const { rows } = await db.asAnon((c) =>
       c.query<{ count_recent_sessions_for_table: string }>(
         "select public.count_recent_sessions_for_table($1, $2);",
-        [tableId, 0],
+        [tableId, 300],
       ),
     );
     expect(Number(rows[0].count_recent_sessions_for_table)).toBe(0);
