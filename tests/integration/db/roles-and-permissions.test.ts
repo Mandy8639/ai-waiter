@@ -5,6 +5,8 @@ import {
   addMember,
   createCategory,
   createIngredient,
+  createModifier,
+  createTable,
   fullRestaurantFixture,
   type Role,
 } from "./helpers";
@@ -55,6 +57,91 @@ describe("role-based authorization", () => {
         const result = await db.asUser(fx.userId, (c) =>
           c.query("delete from public.categories where id = $1;", [
             extraCategoryId,
+          ]),
+        );
+
+        expect(result.affectedRows).toBe(1);
+      });
+
+      it(`${role} can insert a table`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query(
+            "insert into public.tables (restaurant_id, table_number) values ($1, 'New Table');",
+            [fx.restaurantId],
+          ),
+        );
+
+        expect(result.affectedRows).toBe(1);
+      });
+
+      it(`${role} can update a table`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+        const tableId = await createTable(db, fx.restaurantId);
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query("update public.tables set is_active = false where id = $1;", [
+            tableId,
+          ]),
+        );
+
+        expect(result.affectedRows).toBe(1);
+      });
+
+      it(`${role} can delete a table`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+        const tableId = await createTable(db, fx.restaurantId);
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query("delete from public.tables where id = $1;", [tableId]),
+        );
+
+        expect(result.affectedRows).toBe(1);
+      });
+
+      it(`${role} can insert a modifier group`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query(
+            "insert into public.menu_item_modifiers (restaurant_id, menu_item_id, name) values ($1, $2, 'New Group');",
+            [fx.restaurantId, fx.menuItemId],
+          ),
+        );
+
+        expect(result.affectedRows).toBe(1);
+      });
+
+      it(`${role} can update a modifier group`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+        const modifierId = await createModifier(
+          db,
+          fx.restaurantId,
+          fx.menuItemId,
+        );
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query(
+            "update public.menu_item_modifiers set is_required = true where id = $1;",
+            [modifierId],
+          ),
+        );
+
+        expect(result.affectedRows).toBe(1);
+      });
+
+      it(`${role} can delete a modifier group`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+        const modifierId = await createModifier(
+          db,
+          fx.restaurantId,
+          fx.menuItemId,
+        );
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query("delete from public.menu_item_modifiers where id = $1;", [
+            modifierId,
           ]),
         );
 
@@ -142,6 +229,101 @@ describe("role-based authorization", () => {
         const { rows } = await db.admin.query(
           "select id from public.menu_items where id = $1;",
           [fx.menuItemId],
+        );
+        expect(rows).toHaveLength(1);
+      });
+
+      it(`${role} cannot insert a table`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+
+        await expect(
+          db.asUser(fx.userId, (c) =>
+            c.query(
+              "insert into public.tables (restaurant_id, table_number) values ($1, 'Nope');",
+              [fx.restaurantId],
+            ),
+          ),
+        ).rejects.toThrow(/row-level security/i);
+      });
+
+      it(`${role} cannot update a table`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+        const tableId = await createTable(db, fx.restaurantId);
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query("update public.tables set is_active = false where id = $1;", [
+            tableId,
+          ]),
+        );
+
+        expect(result.affectedRows ?? 0).toBe(0);
+      });
+
+      it(`${role} cannot delete a table`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+        const tableId = await createTable(db, fx.restaurantId);
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query("delete from public.tables where id = $1;", [tableId]),
+        );
+        expect(result.affectedRows ?? 0).toBe(0);
+
+        const { rows } = await db.admin.query(
+          "select id from public.tables where id = $1;",
+          [tableId],
+        );
+        expect(rows).toHaveLength(1);
+      });
+
+      it(`${role} cannot insert a modifier group`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+
+        await expect(
+          db.asUser(fx.userId, (c) =>
+            c.query(
+              "insert into public.menu_item_modifiers (restaurant_id, menu_item_id, name) values ($1, $2, 'Nope');",
+              [fx.restaurantId, fx.menuItemId],
+            ),
+          ),
+        ).rejects.toThrow(/row-level security/i);
+      });
+
+      it(`${role} cannot update a modifier group`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+        const modifierId = await createModifier(
+          db,
+          fx.restaurantId,
+          fx.menuItemId,
+        );
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query(
+            "update public.menu_item_modifiers set is_required = true where id = $1;",
+            [modifierId],
+          ),
+        );
+
+        expect(result.affectedRows ?? 0).toBe(0);
+      });
+
+      it(`${role} cannot delete a modifier group`, async () => {
+        const fx = await fullRestaurantFixture(db, role);
+        const modifierId = await createModifier(
+          db,
+          fx.restaurantId,
+          fx.menuItemId,
+        );
+
+        const result = await db.asUser(fx.userId, (c) =>
+          c.query("delete from public.menu_item_modifiers where id = $1;", [
+            modifierId,
+          ]),
+        );
+        expect(result.affectedRows ?? 0).toBe(0);
+
+        const { rows } = await db.admin.query(
+          "select id from public.menu_item_modifiers where id = $1;",
+          [modifierId],
         );
         expect(rows).toHaveLength(1);
       });

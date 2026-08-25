@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb, type TestDb } from "./setup";
 import {
   createIngredient,
+  createModifier,
   createTable,
   fullRestaurantFixture,
 } from "./helpers";
@@ -190,6 +191,85 @@ describe("RLS: tenant isolation", () => {
     );
 
     expect(rows).toHaveLength(0);
+  });
+
+  it("Restaurant A user cannot insert a table for Restaurant B", async () => {
+    const a = await fullRestaurantFixture(db);
+    const b = await fullRestaurantFixture(db);
+
+    await expect(
+      db.asUser(a.userId, (c) =>
+        c.query(
+          "insert into public.tables (restaurant_id, table_number) values ($1, 'Nope');",
+          [b.restaurantId],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it("Restaurant A user cannot modify or delete Restaurant B's table", async () => {
+    const a = await fullRestaurantFixture(db);
+    const b = await fullRestaurantFixture(db);
+    const bTableId = await createTable(db, b.restaurantId);
+
+    const updateResult = await db.asUser(a.userId, (c) =>
+      c.query("update public.tables set is_active = false where id = $1;", [
+        bTableId,
+      ]),
+    );
+    expect(updateResult.affectedRows ?? 0).toBe(0);
+
+    const deleteResult = await db.asUser(a.userId, (c) =>
+      c.query("delete from public.tables where id = $1;", [bTableId]),
+    );
+    expect(deleteResult.affectedRows ?? 0).toBe(0);
+
+    const { rows } = await db.admin.query(
+      "select id from public.tables where id = $1;",
+      [bTableId],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("Restaurant A user cannot insert a modifier group for Restaurant B's menu item", async () => {
+    const a = await fullRestaurantFixture(db);
+    const b = await fullRestaurantFixture(db);
+
+    await expect(
+      db.asUser(a.userId, (c) =>
+        c.query(
+          "insert into public.menu_item_modifiers (restaurant_id, menu_item_id, name) values ($1, $2, 'Nope');",
+          [b.restaurantId, b.menuItemId],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it("Restaurant A user cannot modify or delete Restaurant B's modifier group", async () => {
+    const a = await fullRestaurantFixture(db);
+    const b = await fullRestaurantFixture(db);
+    const bModifierId = await createModifier(db, b.restaurantId, b.menuItemId);
+
+    const updateResult = await db.asUser(a.userId, (c) =>
+      c.query(
+        "update public.menu_item_modifiers set is_required = true where id = $1;",
+        [bModifierId],
+      ),
+    );
+    expect(updateResult.affectedRows ?? 0).toBe(0);
+
+    const deleteResult = await db.asUser(a.userId, (c) =>
+      c.query("delete from public.menu_item_modifiers where id = $1;", [
+        bModifierId,
+      ]),
+    );
+    expect(deleteResult.affectedRows ?? 0).toBe(0);
+
+    const { rows } = await db.admin.query(
+      "select id from public.menu_item_modifiers where id = $1;",
+      [bModifierId],
+    );
+    expect(rows).toHaveLength(1);
   });
 
   it("Restaurant A user cannot access Restaurant B settings", async () => {
