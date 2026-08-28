@@ -15,9 +15,26 @@ import { z } from "zod";
 
 export const searchMenuSchema = z
   .object({
-    query: z.string().trim().max(200).optional(),
-    dietary: z.enum(["vegetarian", "vegan"]).optional(),
-    spicyOnly: z.boolean().optional(),
+    query: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .describe(
+        "Free-text keyword search over item name/description only (e.g. a dish name, ingredient, or cuisine) — this is a plain substring match, not a semantic search. Leave this empty when the customer's request is already fully covered by `dietary`/`spicyOnly` (e.g. for 'what vegetarian dishes do you have', set dietary: 'vegetarian' and leave query empty — do NOT also pass query: 'vegetarian' or 'vegetarian dishes', since that text won't literally appear in most item names/descriptions and combining it with the filter can incorrectly return zero results even when matching items exist).",
+      ),
+    dietary: z
+      .enum(["vegetarian", "vegan"])
+      .optional()
+      .describe(
+        "Filter to only vegetarian or vegan items. Use this for dietary requests instead of putting 'vegetarian'/'vegan' into `query`.",
+      ),
+    spicyOnly: z
+      .boolean()
+      .optional()
+      .describe(
+        "Filter to only items flagged spicy. Use this for spice-related requests instead of putting a spice-related word into `query`.",
+      ),
   })
   .strict();
 
