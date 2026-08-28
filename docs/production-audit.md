@@ -262,19 +262,35 @@ list above, which was written before any of this existed.
    zero functional impact on any customer-facing code (which never subscribes to `INSERT`); the
    kitchen board depends on it but has a working non-Realtime fallback. No code, RLS, or migration
    change has been made or is currently justified by the evidence.
-2. **6 of 7 real-credential E2E specs are blocked by the real project's "Confirm email" Auth
-   setting**, not by missing credentials: `dashboard-flow.spec.ts`, `customer-flow.spec.ts`,
-   `order-flow.spec.ts`, `kitchen-flow.spec.ts` (both tests), and `ai-waiter-flow.spec.ts` (both
-   tests) all start a fresh `/signup`, which the real project can't complete without a human
-   clicking a confirmation email. The already-seeded dev users (`owner@nashta-demo.aiwaiter.test`
-   etc.) can't substitute for this today — `scripts/seed-dev-users.ts` deliberately never persists
-   their passwords anywhere, so no automated test currently holds a usable credential for them.
-   Two real options exist, neither of which is a pure code change: (a) a dedicated, disposable
-   Supabase test project with email confirmation off _only there_, or (b) explicitly provisioning
-   one new dedicated e2e-login user (Admin API, stored password) in this project — a production
-   Auth data mutation that needs an explicit decision, not a default. `dashboard-flow.spec.ts`
-   specifically tests the signup flow itself, so it can only ever be unblocked by option (a).
+2. **`dashboard-flow.spec.ts` is genuinely blocked by the real project's "Confirm email" Auth
+   setting** — it specifically tests the `/signup` flow itself, which the real project can't
+   complete without a human clicking a confirmation email. Unblocking it needs a dedicated,
+   disposable Supabase test project with email confirmation off _only there_ — not something this
+   environment can provision.
 
-**Regression baseline as of this pass**: lint/typecheck/format all clean, 376/376 unit+integration
-tests pass (371 baseline + 5 new for the E2E provider-gating logic), production build succeeds,
-e2e is 9 PASS / 7 SKIP (all 7 skips accounted for above) / 0 FAIL.
+   **The other 5 real-credential specs (`customer-flow.spec.ts`, `order-flow.spec.ts`,
+   `kitchen-flow.spec.ts` [both tests], `ai-waiter-flow.spec.ts` [both tests]) are NOT blocked by
+   this** — this was previously misdiagnosed here. They already use `test-auth-helpers.ts`'s
+   `createConfirmedTestUser()` (Admin API, pre-confirmed, built in an earlier phase), never
+   `/signup`. Running all 5 live against the real project (2026-08-28) surfaced 3 real, unrelated
+   issues, 2 fixed and verified, 1 left open:
+   - `order-flow.spec.ts` asserted a cross-session order URL returns HTTP `404`. Not a security
+     bug — verified directly (a real second anonymous session) that RLS correctly serves the real
+     "Page not found" UI and never leaks order data; this Next.js version's own docs confirm a
+     streamed `notFound()` legitimately keeps a `200` status. Fixed to check rendered content.
+   - `kitchen-flow.spec.ts`'s customer-side Realtime status updates occasionally missed a 15s
+     window — a real occasional Realtime miss correctly falling back to the 12s poll interval,
+     just without enough margin. Fixed by widening the margin; verified passing twice in a row.
+   - `ai-waiter-flow.spec.ts` failed at a different point on nearly every run. Two were real test
+     bugs (a hardcoded `waitForTimeout` racing a live model call; a strict-mode-violating
+     assertion) — fixed. One run surfaced something more concerning: the AI reported empty search
+     results for a real vegetarian item that existed. Likely cause: `search_menu`'s Zod schema
+     gives the model no guidance on its `query` field, so a weaker free model can pass a redundant
+     text query alongside a `dietary` filter, self-defeating both. Not yet fixed — a production
+     AI-behavior change, not a test fix, needs its own decision.
+
+**Regression baseline as of this pass**: lint/typecheck/format all clean, production build
+succeeds. `dashboard-flow.spec.ts` remains the one spec that needs a disposable test project to
+ever run; every other real-credential spec runs and passes against the live project as of this
+pass (`ai-waiter-flow.spec.ts`'s full-conversation test remains sensitive to the configured free
+model's run-to-run variance — see the `search_menu` schema gap above).
