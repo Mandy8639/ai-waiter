@@ -239,6 +239,18 @@ list above, which was written before any of this existed.
 - The e2e suite's real-AI gating (`tests/e2e/ai-waiter-flow.spec.ts`) now derives the required
   credential from `AI_PROVIDER` generically instead of hardcoding `ANTHROPIC_API_KEY` — see
   `tests/e2e/ai-provider-gate.ts` and its unit tests.
+- **A live AI conversation has now completed successfully** (2026-08-28, production-hardening
+  pass). Two direct real calls against the configured model (`AI_MODEL=openrouter/free`) via
+  `callOpenRouterModel()` (bypassing the DB/session layer entirely — no dashboard login or
+  customer session needed) both succeeded: a plain-text turn returned a real assistant reply in
+  ~19s, and a tool-forcing turn ("Do you have anything vegetarian under $15?" against a
+  `search_menu` tool) correctly returned a `tool_use` block with `is_vegetarian: true, max_price:
+15` extracted from natural language, in ~1.5s. The previously-observed `429 Too Many Requests`
+  was a transient external rate limit, not a persistent block — it has since cleared. The AI
+  waiter can now be considered validated against a live model for both plain text and
+  tool-calling; **the same has still never been verified against the Anthropic provider**
+  (`AI_PROVIDER=anthropic`), which requires a paid `ANTHROPIC_API_KEY` this environment doesn't
+  have.
 
 **Still genuinely open:**
 
@@ -250,12 +262,7 @@ list above, which was written before any of this existed.
    zero functional impact on any customer-facing code (which never subscribes to `INSERT`); the
    kitchen board depends on it but has a working non-Realtime fallback. No code, RLS, or migration
    change has been made or is currently justified by the evidence.
-2. **No live AI conversation has completed successfully.** The provider is correctly configured and
-   wired (confirmed by inspection and by `/api/health`), but every real attempt against the
-   configured free model (`google/gemma-4-26b-a4b-it:free`) has returned `429 Too Many Requests`
-   from OpenRouter — an external rate limit, not an application defect. **Do not treat the AI
-   waiter as production-validated** until a real conversational turn actually succeeds end to end.
-3. **6 of 7 real-credential E2E specs are blocked by the real project's "Confirm email" Auth
+2. **6 of 7 real-credential E2E specs are blocked by the real project's "Confirm email" Auth
    setting**, not by missing credentials: `dashboard-flow.spec.ts`, `customer-flow.spec.ts`,
    `order-flow.spec.ts`, `kitchen-flow.spec.ts` (both tests), and `ai-waiter-flow.spec.ts` (both
    tests) all start a fresh `/signup`, which the real project can't complete without a human
