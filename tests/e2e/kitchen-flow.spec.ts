@@ -34,6 +34,15 @@ test.describe("kitchen display: order lifecycle", () => {
     page,
     context,
   }) => {
+    // Four sequential live-Realtime-or-polling-fallback waits below, each
+    // needing enough margin to survive a missed Realtime event and fall
+    // back to KDS_NORMAL_POLL_INTERVAL_MS (12s) — the default 30s test
+    // timeout was observed to fail intermittently at different steps each
+    // run (reproduced directly against the live project), consistent with
+    // Realtime UPDATE delivery occasionally missing an event under real
+    // network conditions and correctly recovering via polling, just not
+    // within the previous margin.
+    test.setTimeout(90_000);
     const testId = Date.now();
     const email = `e2e-kitchen-flow-${testId}@example.com`;
     const password = "TestPassword123!";
@@ -143,25 +152,25 @@ test.describe("kitchen display: order lifecycle", () => {
     // --- Staff confirms; customer sees it live ---
     await card.getByRole("button", { name: "Confirm" }).click();
     await expect(customerPage.getByText("Confirmed")).toBeVisible({
-      timeout: 15_000,
+      timeout: 20_000,
     });
 
     // --- Staff starts preparing; customer sees it live ---
     await card.getByRole("button", { name: "Start preparing" }).click();
     await expect(customerPage.getByText("Preparing")).toBeVisible({
-      timeout: 15_000,
+      timeout: 20_000,
     });
 
     // --- Staff marks ready; customer sees it live ---
     await card.getByRole("button", { name: "Mark ready" }).click();
     await expect(customerPage.getByText("Ready", { exact: true })).toBeVisible({
-      timeout: 15_000,
+      timeout: 20_000,
     });
 
     // --- Staff marks served (owner has full operational access); customer sees it live ---
     await card.getByRole("button", { name: "Mark served" }).click();
     await expect(customerPage.getByText("Served")).toBeVisible({
-      timeout: 15_000,
+      timeout: 20_000,
     });
 
     // --- A served order has no further action button on the board ---

@@ -133,13 +133,25 @@ test.describe("customer QR-to-order flow", () => {
 
     // --- A different customer session (different anonymous identity, same
     // table) cannot open this order by URL — RLS-scoped, not just hidden
-    // in the UI. ---
+    // in the UI. Checked via rendered content, not response.status(): this
+    // page streams (OrderStatusSync + async data), and per this project's
+    // own Next.js version's documented behavior (node_modules/next/dist/docs/
+    // .../not-found.md — "Next.js will return a 200 HTTP status code for
+    // streamed responses, and 404 for non-streamed responses"), a
+    // notFound() thrown deep in a streamed response legitimately keeps the
+    // initial 200 status even though the correct not-found UI renders —
+    // confirmed directly against this exact route before writing this
+    // assertion. Checking status() would fail this test even when RLS is
+    // working correctly, testing an HTTP-status implementation detail
+    // instead of the actual security property (no order data ever reaches
+    // the second session).
     const otherContext = await context.browser()!.newContext();
     const otherPage = await otherContext.newPage();
     await otherPage.goto(customerUrl); // starts a brand-new anonymous session
     await otherPage.waitForURL(new RegExp(`/r/${slug}/menu`));
-    const response = await otherPage.goto(orderUrl);
-    expect(response?.status()).toBe(404);
+    await otherPage.goto(orderUrl);
+    await expect(otherPage.getByText(/page not found/i)).toBeVisible();
+    await expect(otherPage.getByText("Paneer Tikka")).not.toBeVisible();
     await otherContext.close();
   });
 });
