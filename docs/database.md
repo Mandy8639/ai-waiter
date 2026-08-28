@@ -589,6 +589,24 @@ See [`docs/security.md`](./security.md#customer-session-creation-rate-limiting--
 for the full design and [`docs/production-audit.md`](./production-audit.md) for why these were
 added. Verified in `tests/integration/db/abuse-protection-rpcs.test.ts`.
 
+## audit_log (production-hardening addition)
+
+An append-only "who changed what" trail for admin-side CRUD — `restaurant_users`, `categories`,
+`restaurant_settings`, `menu_items`, `modifier_options`, `menu_item_modifiers`, `allergens`,
+`ingredients`, and `tables` each had only `updated_at` (when, never who or what it used to be)
+before this addition. One generic table + a single `record_audit_log()` `SECURITY DEFINER` trigger
+function attached to all nine, rather than nine bespoke history tables: each row records a
+strictly monotonic `seq` (independent of `created_at`, whose resolution isn't fine enough to
+unambiguously order two writes to the same row within the same millisecond), `table_name`,
+`row_id`, `operation`, `actor_id`/`actor_role` (role captured at write time, not joined later), and
+the full `old_data`/`new_data` row as JSON. `modifier_options` has no
+`restaurant_id` column of its own (see below), so the trigger resolves it via the row's owning
+`menu_item_modifiers.restaurant_id`. Append-only, same philosophy as `order_status_history`: no
+client-facing `INSERT`/`UPDATE`/`DELETE` policy for any role, read scoped to
+`is_restaurant_manager_or_owner()`. See
+[`docs/security.md#admin-crud-audit-log--production-hardening-addition`](./security.md#admin-crud-audit-log--production-hardening-addition)
+for the full design and verified in `tests/integration/db/admin-audit-log.test.ts`.
+
 ## AI readiness (schema support, unchanged reasoning since Batch 2)
 
 Beyond the AI-specific table above, the core menu schema exposes the structured data the AI tool

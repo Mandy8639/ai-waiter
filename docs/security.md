@@ -523,6 +523,37 @@ including that a history row can never point at a different restaurant's order (
 composite-FK tenant-integrity mechanism used throughout this schema, unchanged since Batch 5) and
 that a distinct actor confirming vs. a distinct actor cancelling both show up correctly attributed.
 
+## Admin CRUD audit log — (production-hardening addition)
+
+Batch 6's `order_status_history` covers order lifecycle, and Batch 7's `ai_conversation_messages`
+covers AI-driven cart/order mutations, but neither covers admin-side CRUD: before this addition,
+`menu_items`, `categories`, `modifier_options`, `menu_item_modifiers`, `tables`,
+`restaurant_settings`, `restaurant_users`, `allergens`, and `ingredients` had only `updated_at` —
+answering "when," never "who" or "what it used to be." Not a security hole (RLS on the write itself
+was already correct) — a missing "who did what" record, flagged during a production-reliability
+audit as the one remaining gap in this project's auditability story.
+
+`public.audit_log` (`supabase/migrations/20260828090000_admin_audit_log.sql`) is one generic,
+append-only table populated by a single `record_audit_log()` `SECURITY DEFINER` trigger function
+attached to all nine tables above, rather than nine bespoke history tables. Each row records the
+table name, row id, operation (`INSERT`/`UPDATE`/`DELETE`), the acting user, their restaurant role
+**at the time of the write** (captured via `current_restaurant_role()`, not joined at read time — a
+later role change or removal never rewrites what an earlier entry says the actor's role was), and
+the full before/after row as JSON. `modifier_options` has no `restaurant_id` column of its own (see
+`docs/database.md#modifier_options`), so the trigger resolves it one hop away via the row's owning
+`menu_item_modifiers.restaurant_id`.
+
+Like `order_status_history`, there is no client-facing `INSERT`/`UPDATE`/`DELETE` policy for any
+role — only the trigger function (which bypasses RLS via `SECURITY DEFINER`, the same escalation
+`submit_order()` and `order_belongs_to_caller()` already use) ever writes here. Read access is
+scoped to `is_restaurant_manager_or_owner()`, deliberately narrower than `order_status_history`'s
+"any restaurant member" — this is oversight data ("who changed the menu/settings/staff"), not
+something kitchen/service staff need for day-to-day operation. Verified in
+`tests/integration/db/admin-audit-log.test.ts`: correct attribution and before/after data for
+INSERT/UPDATE/DELETE across every audited table (including the `modifier_options` restaurant_id
+resolution), owner/manager-only read access, cross-tenant read denial, and that no role — including
+an owner — has any direct write path to the table itself.
+
 ## Kitchen display access — (implemented in Batch 6)
 
 `/dashboard/kitchen` is protected exactly like every other `/dashboard/*` route — `src/proxy.ts`'s

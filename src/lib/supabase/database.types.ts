@@ -660,6 +660,36 @@ export interface Database {
         >;
         Relationships: [];
       };
+      audit_log: {
+        Row: {
+          id: string;
+          seq: number;
+          restaurant_id: string;
+          table_name: string;
+          row_id: string;
+          operation: "INSERT" | "UPDATE" | "DELETE";
+          actor_id: string | null;
+          actor_role: string | null;
+          old_data: Json | null;
+          new_data: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          seq?: number;
+          restaurant_id: string;
+          table_name: string;
+          row_id: string;
+          operation: "INSERT" | "UPDATE" | "DELETE";
+          actor_id?: string | null;
+          actor_role?: string | null;
+          old_data?: Json | null;
+          new_data?: Json | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
