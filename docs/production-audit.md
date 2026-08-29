@@ -262,35 +262,42 @@ list above, which was written before any of this existed.
    zero functional impact on any customer-facing code (which never subscribes to `INSERT`); the
    kitchen board depends on it but has a working non-Realtime fallback. No code, RLS, or migration
    change has been made or is currently justified by the evidence.
-2. **`dashboard-flow.spec.ts` is genuinely blocked by the real project's "Confirm email" Auth
-   setting** — it specifically tests the `/signup` flow itself, which the real project can't
-   complete without a human clicking a confirmation email. Unblocking it needs a dedicated,
-   disposable Supabase test project with email confirmation off _only there_ — not something this
-   environment can provision.
 
-   **The other 5 real-credential specs (`customer-flow.spec.ts`, `order-flow.spec.ts`,
-   `kitchen-flow.spec.ts` [both tests], `ai-waiter-flow.spec.ts` [both tests]) are NOT blocked by
-   this** — this was previously misdiagnosed here. They already use `test-auth-helpers.ts`'s
-   `createConfirmedTestUser()` (Admin API, pre-confirmed, built in an earlier phase), never
-   `/signup`. Running all 5 live against the real project (2026-08-28) surfaced 3 real, unrelated
-   issues, 2 fixed and verified, 1 left open:
-   - `order-flow.spec.ts` asserted a cross-session order URL returns HTTP `404`. Not a security
-     bug — verified directly (a real second anonymous session) that RLS correctly serves the real
-     "Page not found" UI and never leaks order data; this Next.js version's own docs confirm a
-     streamed `notFound()` legitimately keeps a `200` status. Fixed to check rendered content.
-   - `kitchen-flow.spec.ts`'s customer-side Realtime status updates occasionally missed a 15s
-     window — a real occasional Realtime miss correctly falling back to the 12s poll interval,
-     just without enough margin. Fixed by widening the margin; verified passing twice in a row.
-   - `ai-waiter-flow.spec.ts` failed at a different point on nearly every run. Two were real test
-     bugs (a hardcoded `waitForTimeout` racing a live model call; a strict-mode-violating
-     assertion) — fixed. One run surfaced something more concerning: the AI reported empty search
-     results for a real vegetarian item that existed. Likely cause: `search_menu`'s Zod schema
-     gives the model no guidance on its `query` field, so a weaker free model can pass a redundant
-     text query alongside a `dietary` filter, self-defeating both. Not yet fixed — a production
-     AI-behavior change, not a test fix, needs its own decision.
+This is the only item still open as of 2026-08-28 — everything below was resolved this pass.
 
-**Regression baseline as of this pass**: lint/typecheck/format all clean, production build
-succeeds. `dashboard-flow.spec.ts` remains the one spec that needs a disposable test project to
-ever run; every other real-credential spec runs and passes against the live project as of this
-pass (`ai-waiter-flow.spec.ts`'s full-conversation test remains sensitive to the configured free
-model's run-to-run variance — see the `search_menu` schema gap above).
+**All 6 previously-"blocked" real-credential E2E specs now run and pass (2026-08-28).** This
+document previously (and, before that, incorrectly a second time) misdiagnosed all 6 as blocked by
+the live project's "Confirm email" Auth setting. In fact only `dashboard-flow.spec.ts` — the one
+spec that tests `/signup` itself — was ever genuinely blocked by it; the other 5 already used
+`test-auth-helpers.ts`'s `createConfirmedTestUser()` (Admin API, pre-confirmed, built in an earlier
+phase) and never touched `/signup`. Getting all 6 actually running live surfaced 5 real,
+previously-undiscoverable bugs — undiscoverable because these code paths had never actually
+executed against a real project before now:
+
+- `order-flow.spec.ts` asserted a cross-session order URL returns HTTP `404`. Not a security bug —
+  verified directly (a real second anonymous session) that RLS correctly serves the real "Page not
+  found" UI and never leaks order data; this Next.js version's own docs confirm a streamed
+  `notFound()` legitimately keeps a `200` status. Fixed to check rendered content instead.
+- `kitchen-flow.spec.ts`'s customer-side Realtime status updates occasionally missed a 15s window —
+  a real occasional Realtime miss correctly falling back to the 12s poll interval, just without
+  enough margin. Fixed by widening the margin; verified passing twice in a row.
+- `ai-waiter-flow.spec.ts` failed at a different point on nearly every run: a hardcoded
+  `waitForTimeout` racing a live model call, and a strict-mode-violating cart assertion — both
+  fixed by loosening to what the flow actually needs to prove, tolerating a live free model's
+  run-to-run variance rather than pinning exact wording or call counts.
+- `search_menu`'s Zod schema gave the model no guidance on its `query` field, so a weaker free
+  model observed passing a redundant text query alongside a `dietary` filter, self-defeating both
+  ("my searches are coming up empty" for a real vegetarian item). Fixed with `.describe()`
+  guidance; live-verified 3/3 fresh runs correctly using the dedicated filter instead.
+- `dashboard-flow.spec.ts` itself, once a disposable Supabase project actually existed to run it
+  against (see `docs/development.md#e2e-disposable`), turned up two more: a `waitForURL` race that
+  matched the already-current `/signup` URL before the real async signup/redirect ever completed
+  (misreporting "confirmation required" even when confirmation was genuinely off — confirmed by a
+  manual signup against the identical build succeeding), and a strict-mode-violating locator on the
+  categories page (a fresh restaurant legitimately renders "New category" as both a header link and
+  an empty-state CTA). Both fixed; verified 3 clean runs in a row.
+
+**Regression baseline as of this pass**: lint/typecheck/format all clean, `npm test` 574/574,
+production build succeeds, and all 6 real-credential E2E specs run and pass against their
+respective projects (`dashboard-flow.spec.ts` against the new disposable project via
+`npm run test:e2e:disposable`; the other 5 against the live project via `npm run test:e2e`).
