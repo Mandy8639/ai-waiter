@@ -105,6 +105,37 @@ forever even with correct credentials configured exactly as above. See
 `tests/e2e/route-protection.spec.ts` and `home.spec.ts` (including the health-check test) always
 run — they don't need a real project.
 
+## Running `dashboard-flow.spec.ts` (needs a disposable project) {#e2e-disposable}
+
+`dashboard-flow.spec.ts` specifically tests the real `/signup` flow (unlike every other
+real-credential spec, which uses `test-auth-helpers.ts`'s Admin-API-created, pre-confirmed users
+instead — see above). A project with email confirmation required can never complete it, and this
+project's actual live/dev project should never have that setting disabled just to make a test
+pass. It needs its own separate, disposable Supabase project instead — one-time setup:
+
+1. Create a new Supabase project (any name, free tier).
+2. **Authentication → Sign In / Providers → Anonymous Sign-Ins** → enable.
+3. **Authentication → Sign In / Providers → Email** → disable "Confirm email".
+4. `npx supabase link --project-ref <new-project-ref>` (from this repo), then `npx supabase db
+push` to apply every migration to it.
+5. Create `.env.e2e-disposable.local` (gitignored, same shape as `.env.local` — see
+   `.env.example`) with that project's `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY`.
+
+Then:
+
+```bash
+npm run test:e2e:disposable
+```
+
+This runs against `playwright.e2e-disposable.config.ts` — a separate config from
+`playwright.config.ts` on purpose, so it never shares a port or an already-running server with the
+main `npm run test:e2e` run (which stays pointed at whatever `.env.local` has configured, per
+above). `dashboard-flow.spec.ts` still runs as part of the main `npm run test:e2e` too (it isn't
+excluded from that config's `testDir`) — there it just self-skips again with the same "Project
+requires email confirmation" reason as before, since `.env.local` still points at a project where
+confirmation is required. `npm run test:e2e:disposable` is the one that actually exercises it.
+
 ## Branching
 
 Small, reviewable commits. Run the full check list above before pushing. This repo does not yet

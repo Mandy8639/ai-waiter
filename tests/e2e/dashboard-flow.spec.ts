@@ -36,8 +36,21 @@ test.describe("full dashboard flow", () => {
     await page.getByRole("button", { name: "Create account" }).click();
 
     // Either lands on /onboarding directly (auto-confirmed dev project) or
-    // shows a "check your email" message (confirmation required).
-    await page.waitForURL(/\/(onboarding|signup)/);
+    // shows a "check your email" message and stays on /signup
+    // (confirmation required). Waits for one of these two REAL outcomes
+    // rather than polling page.url() right after click(): the page is
+    // already on /signup at this point, so a naive
+    // `waitForURL(/\/(onboarding|signup)/)` matches the CURRENT,
+    // unchanged URL instantly — resolving before the async signup/
+    // redirect has even started, which made this always misreport
+    // "confirmation required" even on a project with confirmation
+    // genuinely off (confirmed directly: a manual signup against this
+    // same build succeeded and redirected correctly, while this test's
+    // original check still reported the URL as unchanged).
+    await Promise.race([
+      page.waitForURL("/onboarding"),
+      page.getByText(/check your email/i).waitFor({ state: "visible" }),
+    ]);
     if (page.url().includes("/signup")) {
       test.skip(
         true,
@@ -61,7 +74,12 @@ test.describe("full dashboard flow", () => {
 
     // Create category
     await page.goto("/dashboard/categories");
-    await page.getByRole("link", { name: "New category" }).click();
+    // .first(): a fresh restaurant has zero categories, so both the header
+    // toolbar's "New category" link and the empty-state CTA's "New
+    // category" link render at once — both go to the same
+    // /dashboard/categories/new destination, so which one is clicked
+    // doesn't matter (see categories/page.tsx).
+    await page.getByRole("link", { name: "New category" }).first().click();
     await page.getByLabel("Name").fill("Starters");
     await page.getByRole("button", { name: "Create category" }).click();
     await page.waitForURL("/dashboard/categories");
