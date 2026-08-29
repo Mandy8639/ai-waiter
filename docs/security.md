@@ -492,6 +492,50 @@ authorization: a stale or tampered client render can show the wrong button, but 
 unauthorized transition succeed, because the server independently re-derives the caller's real
 role and re-checks it every time.
 
+## Order splitting and merging — (production-hardening addition)
+
+Kitchen-workflow organization only — order pricing, totals, order numbers, and the customer-facing
+bill are never touched by any of this. Two operations, both scoped to `owner`/`manager`/`kitchen`
+(the same roles `role_can_transition_order` already grants kitchen-workflow transitions to — `staff`
+cannot split, merge, or transition a ticket group):
+
+- **Split**: `split_order_into_tickets()` partitions one order's items into 2+
+  `order_ticket_groups` rows (e.g. "Appetizers" fires now, "Mains" later). Every item must end up
+  in exactly one group — no item left out, none assigned twice, none from a different order.
+  Re-running it on an already-split order replaces the previous grouping rather than layering on
+  top (the old, now-orphaned groups are deleted — unless still shared with another order via a
+  merge, in which case they're correctly left alone).
+- **Merge**: `merge_orders_into_ticket()` points two or more orders' items at one shared ticket
+  group — used when tables are physically combined and the kitchen wants one ticket. Each order
+  keeps its own row, total, and order number; only the shared group's status exists. v1
+  limitations (explicit product decisions, not oversights): orders must currently share the exact
+  same status (merging a `confirmed` order with a `pending` one has no clean resolution — would it
+  regress the confirmed one, or skip the pending one ahead?), and neither order may already be
+  split.
+
+Each ticket group progresses through the identical `pending -> confirmed -> preparing -> ready ->
+served` vocabulary and role matrix as orders themselves (`transition_ticket_group_status()` calls
+`is_valid_order_status_transition()`/`role_can_transition_order()` directly — no separate rule
+table to keep in sync). No per-group cancellation exists in v1; cancelling remains a whole-order
+action via the existing `transition_order_status()`, unchanged.
+
+**The customer-facing order status is never allowed to get ahead of reality.** An order's own
+`status` — what `OrderStatusSync`/the customer's order page shows — is derived
+(`recompute_order_status_from_groups()`) as the **least advanced** ticket group covering its items,
+recomputed on every ticket-group transition. Appetizers can be "ready" while mains are still
+"preparing"; the order itself stays at "preparing" until both catch up. For a merged group spanning
+two orders, both orders are derived from the exact same group by construction, so they always move
+in lockstep — advancing the shared ticket advances both orders' status identically, in the same
+transaction. The derivation reuses `transition_order_status()` itself (not a raw `UPDATE`), so the
+existing role/audit-trail machinery (`order_status_history`) records these derived changes exactly
+like a direct staff transition, attributed to whoever actually triggered the underlying ticket
+transition — no separate, harder-to-audit write path exists.
+
+Verified in `tests/integration/db/order-ticket-groups.test.ts`: split coverage validation
+(every item covered exactly once, none from another order), the finalized/already-split/role
+rejections on both operations, the least-advanced-group order-status derivation across a full
+split lifecycle, and a merged group driving both underlying orders' status in lockstep.
+
 ## Order transition concurrency — (implemented in Batch 6)
 
 "Two kitchen employees confirm the same order at once" and "two employees both try to move

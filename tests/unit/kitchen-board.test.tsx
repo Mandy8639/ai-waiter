@@ -59,6 +59,12 @@ vi.mock("@/lib/orders/transition", () => ({
   transitionOrderStatus: vi.fn(),
 }));
 
+vi.mock("@/lib/orders/ticket-groups", () => ({
+  transitionTicketGroupStatus: vi.fn(),
+  splitOrderIntoTickets: vi.fn(),
+  mergeOrdersIntoTicket: vi.fn(),
+}));
+
 function makeOrder(overrides: Partial<KitchenOrder> = {}): KitchenOrder {
   return {
     id: "order-1",
@@ -68,6 +74,8 @@ function makeOrder(overrides: Partial<KitchenOrder> = {}): KitchenOrder {
     customerNote: null,
     createdAt: new Date().toISOString(),
     items: [],
+    ticketGroups: [],
+    mergedWithOrderIds: [],
     ...overrides,
   };
 }

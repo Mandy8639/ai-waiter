@@ -1,15 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { fetchActiveOrders } from "@/lib/orders/kitchen-actions";
 import { transitionOrderStatus } from "@/lib/orders/transition";
+import {
+  transitionTicketGroupStatus,
+  splitOrderIntoTickets,
+  mergeOrdersIntoTicket,
+} from "@/lib/orders/ticket-groups";
 import type { KitchenOrder } from "@/lib/orders/kitchen";
 import { STATUS_LABELS, type OrderStatus } from "@/lib/orders/status";
 import { OrderCard } from "./order-card";
 import { OrderDetailDialog } from "./order-detail-dialog";
+import { SplitOrderDialog } from "./split-order-dialog";
+import { MergeOrderDialog } from "./merge-order-dialog";
 import { useNotificationSound } from "./use-notification-sound";
 import {
   resolvePollIntervalMs,
@@ -75,6 +89,8 @@ export function KitchenBoard({
 }) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [detailOrder, setDetailOrder] = useState<KitchenOrder | null>(null);
+  const [splitOrder, setSplitOrder] = useState<KitchenOrder | null>(null);
+  const [mergeOrder, setMergeOrder] = useState<KitchenOrder | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
@@ -209,6 +225,55 @@ export function KitchenBoard({
     });
   }
 
+  function handleGroupTransition(ticketGroupId: string, target: OrderStatus) {
+    setActionError(null);
+    startTransitionAction(async () => {
+      const result = await transitionTicketGroupStatus(ticketGroupId, target);
+      if (result.error) {
+        setActionError(result.error);
+      } else {
+        void resync(false);
+      }
+    });
+  }
+
+  async function handleSplit(
+    orderId: string,
+    groups: { label?: string; itemIds: string[] }[],
+  ) {
+    const result = await splitOrderIntoTickets(orderId, groups);
+    if (!result.error) void resync(false);
+    return result;
+  }
+
+  async function handleMerge(orderIds: string[], label: string | null) {
+    const result = await mergeOrdersIntoTicket(orderIds, label);
+    if (!result.error) void resync(false);
+    return result;
+  }
+
+  // Eligible per merge_orders_into_ticket()'s own rules (this is a UI
+  // convenience filter, not the security boundary — the RPC re-validates
+  // everything server-side regardless of what this list offers):  same
+  // status as the order being merged, not itself, and not already
+  // split/merged.
+  const mergeCandidates = mergeOrder
+    ? orders.filter(
+        (o) =>
+          o.id !== mergeOrder.id &&
+          o.status === mergeOrder.status &&
+          o.ticketGroups.length === 0,
+      )
+    : [];
+
+  // order.mergedWithOrderIds holds other orders' ids, not their
+  // customer-facing numbers — this map lets OrderCard render "#3" instead
+  // of a raw uuid in the "Merged ticket — moves with order #…" line.
+  const orderNumberById = useMemo(
+    () => new Map(orders.map((o) => [o.id, o.orderNumber])),
+    [orders],
+  );
+
   return (
     <div className="flex flex-1 flex-col gap-4" onClickCapture={unlock}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -258,6 +323,10 @@ export function KitchenBoard({
                       handleTransition(orderId, "cancelled")
                     }
                     onOpenDetail={setDetailOrder}
+                    onGroupTransition={handleGroupTransition}
+                    onOpenSplit={setSplitOrder}
+                    onOpenMerge={setMergeOrder}
+                    orderNumberById={orderNumberById}
                   />
                 ))}
               </div>
@@ -271,6 +340,23 @@ export function KitchenBoard({
         onOpenChange={(open) => {
           if (!open) setDetailOrder(null);
         }}
+      />
+      <SplitOrderDialog
+        order={splitOrder}
+        open={splitOrder !== null}
+        onOpenChange={(open) => {
+          if (!open) setSplitOrder(null);
+        }}
+        onSplit={handleSplit}
+      />
+      <MergeOrderDialog
+        order={mergeOrder}
+        candidates={mergeCandidates}
+        open={mergeOrder !== null}
+        onOpenChange={(open) => {
+          if (!open) setMergeOrder(null);
+        }}
+        onMerge={handleMerge}
       />
     </div>
   );
