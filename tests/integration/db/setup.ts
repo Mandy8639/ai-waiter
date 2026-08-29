@@ -40,8 +40,8 @@ export interface TestDb {
   asUser: <T>(userId: string, fn: (client: PGlite) => Promise<T>) => Promise<T>;
   /** Runs `fn` as `anon` (unauthenticated) — auth.uid() is NULL. */
   asAnon: <T>(fn: (client: PGlite) => Promise<T>) => Promise<T>;
-  /** Inserts a bare row into the auth.users stub and returns its id. */
-  createAuthUser: () => Promise<string>;
+  /** Inserts a row into the auth.users stub and returns its id. Give an explicit email to make that user findable via get_restaurant_staff()/add_restaurant_staff_by_email() — omitted, it gets a unique placeholder. */
+  createAuthUser: (email?: string) => Promise<string>;
   close: () => Promise<void>;
 }
 
@@ -52,7 +52,8 @@ export async function createTestDb(): Promise<TestDb> {
     create schema auth;
 
     create table auth.users (
-      id uuid primary key default gen_random_uuid()
+      id uuid primary key default gen_random_uuid(),
+      email text unique
     );
 
     create function auth.uid() returns uuid
@@ -112,9 +113,10 @@ export async function createTestDb(): Promise<TestDb> {
     admin,
     asUser: (userId, fn) => withRole("authenticated", userId, fn),
     asAnon: (fn) => withRole("anon", null, fn),
-    createAuthUser: async () => {
+    createAuthUser: async (email) => {
       const { rows } = await admin.query<{ id: string }>(
-        "insert into auth.users default values returning id;",
+        "insert into auth.users (email) values ($1) returning id;",
+        [email ?? `${crypto.randomUUID()}@example.com`],
       );
       return rows[0].id;
     },

@@ -762,6 +762,24 @@ export interface Database {
         Args: { p_customer_session_id: string; p_window_seconds: number };
         Returns: number;
       };
+      get_restaurant_staff: {
+        Args: { target_restaurant_id: string };
+        Returns: {
+          id: string;
+          user_id: string;
+          email: string;
+          role: "owner" | "manager" | "kitchen" | "staff";
+          created_at: string;
+        }[];
+      };
+      add_restaurant_staff_by_email: {
+        Args: {
+          target_restaurant_id: string;
+          p_email: string;
+          p_role: string;
+        };
+        Returns: string;
+      };
     };
     Enums: Record<string, never>;
   };
