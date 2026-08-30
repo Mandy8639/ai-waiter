@@ -492,6 +492,45 @@ authorization: a stale or tampered client render can show the wrong button, but 
 unauthorized transition succeed, because the server independently re-derives the caller's real
 role and re-checks it every time.
 
+## Reservations — (production-hardening addition)
+
+Staff-only in v1 — no customer-facing booking page. Every reservation is created by an
+owner/manager/staff member via the dashboard on behalf of a phone-in/walk-in customer;
+`create_reservation()`, `update_reservation_details()`, and `transition_reservation_status()`
+(all `SECURITY DEFINER`) are the only write paths — RLS grants `SELECT` only, no direct client
+`INSERT`/`UPDATE`/`DELETE` at all, mirroring `order_status_history`'s own append-only-via-function
+philosophy. Kitchen role has no access at all (neither read nor write) — this is a front-of-house
+concern, not food prep.
+
+**Double-booking prevention**: `create_reservation()` rejects a booking that would put two
+confirmed/seated reservations on the same table within a 90-minute assumed seating window (a fixed
+v1 constant, not per-restaurant configurable). A `pg_advisory_xact_lock` keyed on the table id
+serializes concurrent booking attempts for the same table so two staff members can't race past the
+conflict check simultaneously. No party-size-vs-table-capacity validation in v1 — staff pick an
+appropriately sized table themselves.
+
+**Status lifecycle**: `confirmed -> seated -> completed`, plus `cancelled`/`no_show` (both reachable
+only from `confirmed`) — enforced twice, independently: `transition_reservation_status()` for role
+authorization and friendly errors, and a `BEFORE UPDATE` trigger
+(`enforce_reservation_status_transition()`) that rejects an illegal status change regardless of
+write path, mirroring `enforce_order_status_transition()`'s own defense-in-depth structure. All
+three terminal states free the table for a new booking at that slot, since the conflict check only
+considers `confirmed`/`seated` reservations.
+
+**v1 explicitly does not support**: editing `table_id` or `reservation_time` after creation (a
+second `BEFORE UPDATE` trigger, `enforce_reservation_immutable_fields()`, blocks this regardless of
+write path — cancel and create a new reservation to reschedule instead), a separate
+reservation-status audit trail, or any Realtime sync on the reservations list — it's a planning
+tool, not a live board like the kitchen display.
+
+Verified in `tests/integration/db/reservations.test.ts`: role/membership rejections on every write
+path, the double-booking conflict and its release once the earlier reservation is cancelled,
+overlapping times on different tables succeeding, the full `confirmed -> seated -> completed` walk,
+every illegal transition (skipping `seated`, moving out of a terminal state) rejected by both the
+function and a raw `UPDATE` that bypasses it, the immutable-fields trigger rejecting a `table_id`/
+`reservation_time` change, and RLS excluding both non-members and the kitchen role from any
+visibility into the table.
+
 ## Order transition concurrency — (implemented in Batch 6)
 
 "Two kitchen employees confirm the same order at once" and "two employees both try to move

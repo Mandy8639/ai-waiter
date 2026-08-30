@@ -552,6 +552,42 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["order_items"]["Insert"]>;
         Relationships: [];
       };
+      reservations: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          table_id: string;
+          customer_name: string;
+          customer_phone: string;
+          customer_email: string | null;
+          party_size: number;
+          reservation_time: string;
+          status:
+            "confirmed" | "seated" | "completed" | "cancelled" | "no_show";
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          restaurant_id: string;
+          table_id: string;
+          customer_name: string;
+          customer_phone: string;
+          customer_email?: string | null;
+          party_size: number;
+          reservation_time: string;
+          status?:
+            "confirmed" | "seated" | "completed" | "cancelled" | "no_show";
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["reservations"]["Insert"]>;
+        Relationships: [];
+      };
       order_item_modifiers: {
         Row: {
           id: string;
@@ -779,6 +815,38 @@ export interface Database {
           p_role: string;
         };
         Returns: string;
+      };
+      is_valid_reservation_status_transition: {
+        Args: { from_status: string; to_status: string };
+        Returns: boolean;
+      };
+      create_reservation: {
+        Args: {
+          p_restaurant_id: string;
+          p_table_id: string;
+          p_customer_name: string;
+          p_customer_phone: string;
+          p_customer_email: string | null;
+          p_party_size: number;
+          p_reservation_time: string;
+          p_notes: string | null;
+        };
+        Returns: Database["public"]["Tables"]["reservations"]["Row"];
+      };
+      update_reservation_details: {
+        Args: {
+          p_reservation_id: string;
+          p_customer_name: string;
+          p_customer_phone: string;
+          p_customer_email: string | null;
+          p_party_size: number;
+          p_notes: string | null;
+        };
+        Returns: Database["public"]["Tables"]["reservations"]["Row"];
+      };
+      transition_reservation_status: {
+        Args: { p_reservation_id: string; p_target_status: string };
+        Returns: Database["public"]["Tables"]["reservations"]["Row"];
       };
     };
     Enums: Record<string, never>;
