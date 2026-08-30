@@ -534,6 +534,7 @@ export interface Database {
           modifier_total: number;
           line_total: number;
           notes: string | null;
+          ticket_group_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -547,9 +548,32 @@ export interface Database {
           modifier_total?: number;
           line_total: number;
           notes?: string | null;
+          ticket_group_id?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["order_items"]["Insert"]>;
+        Relationships: [];
+      };
+      order_ticket_groups: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          label: string | null;
+          status: "pending" | "confirmed" | "preparing" | "ready" | "served";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          restaurant_id: string;
+          label?: string | null;
+          status?: "pending" | "confirmed" | "preparing" | "ready" | "served";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["order_ticket_groups"]["Insert"]
+        >;
         Relationships: [];
       };
       order_item_modifiers: {
@@ -779,6 +803,26 @@ export interface Database {
           p_role: string;
         };
         Returns: string;
+      };
+      order_status_rank: {
+        Args: { p_status: string };
+        Returns: number | null;
+      };
+      recompute_order_status_from_groups: {
+        Args: { p_order_id: string };
+        Returns: undefined;
+      };
+      transition_ticket_group_status: {
+        Args: { p_ticket_group_id: string; p_target_status: string };
+        Returns: Database["public"]["Tables"]["order_ticket_groups"]["Row"];
+      };
+      split_order_into_tickets: {
+        Args: { p_order_id: string; p_groups: Json };
+        Returns: Database["public"]["Tables"]["order_ticket_groups"]["Row"][];
+      };
+      merge_orders_into_ticket: {
+        Args: { p_order_ids: string[]; p_label: string | null };
+        Returns: Database["public"]["Tables"]["order_ticket_groups"]["Row"];
       };
     };
     Enums: Record<string, never>;

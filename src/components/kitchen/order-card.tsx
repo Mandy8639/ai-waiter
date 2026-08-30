@@ -13,15 +13,69 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { KitchenOrder } from "@/lib/orders/kitchen";
+import type { KitchenOrder, KitchenTicketGroup } from "@/lib/orders/kitchen";
 import {
   canCancel,
   nextActionFor,
+  STATUS_LABELS,
   type OrderStatus,
 } from "@/lib/orders/status";
 import { useElapsedLabel } from "./use-elapsed-label";
 
 type Role = "owner" | "manager" | "kitchen" | "staff";
+
+/** owner/manager/kitchen can split/merge (matches role_can_transition_order's own kitchen-workflow roles); staff cannot — see docs/security.md#order-splitting-and-merging. */
+const CAN_ORGANIZE_TICKETS: Role[] = ["owner", "manager", "kitchen"];
+
+function TicketGroupRow({
+  group,
+  order,
+  role,
+  isPending,
+  onTransition,
+}: {
+  group: KitchenTicketGroup;
+  order: KitchenOrder;
+  role: Role;
+  isPending: boolean;
+  onTransition: (ticketGroupId: string, target: OrderStatus) => void;
+}) {
+  const action = nextActionFor(role, group.status);
+  const items = order.items.filter((i) => i.ticketGroupId === group.id);
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium">{group.label || "Ticket"}</span>
+        <Badge variant="outline">{STATUS_LABELS[group.status]}</Badge>
+      </div>
+      <ul className="flex flex-col gap-1 text-sm">
+        {items.map((item) => (
+          <li key={item.id}>
+            <span className="font-medium">
+              {item.quantity}× {item.itemName}
+            </span>
+            {item.modifiers.length > 0 && (
+              <span className="text-muted-foreground block text-xs">
+                {item.modifiers.map((m) => m.optionName).join(", ")}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {action && (
+        <Button
+          type="button"
+          size="sm"
+          disabled={isPending}
+          onClick={() => onTransition(group.id, action.targetStatus)}
+        >
+          {isPending ? "Updating…" : action.label}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 export function OrderCard({
   order,
@@ -30,6 +84,10 @@ export function OrderCard({
   onTransition,
   onCancel,
   onOpenDetail,
+  onGroupTransition,
+  onOpenSplit,
+  onOpenMerge,
+  orderNumberById,
 }: {
   order: KitchenOrder;
   role: Role;
@@ -37,11 +95,19 @@ export function OrderCard({
   onTransition: (orderId: string, target: OrderStatus) => void;
   onCancel: (orderId: string) => void;
   onOpenDetail: (order: KitchenOrder) => void;
+  onGroupTransition: (ticketGroupId: string, target: OrderStatus) => void;
+  onOpenSplit: (order: KitchenOrder) => void;
+  onOpenMerge: (order: KitchenOrder) => void;
+  /** Other orders' ids -> their customer-facing order numbers, for the "Merged ticket" line below. */
+  orderNumberById: Map<string, number>;
 }) {
   const elapsed = useElapsedLabel(order.createdAt);
   const action = nextActionFor(role, order.status);
   const cancellable = canCancel(role, order.status);
   const [cancelOpen, setCancelOpen] = useState(false);
+
+  const isSplitOrMerged = order.ticketGroups.length > 0;
+  const canOrganize = CAN_ORGANIZE_TICKETS.includes(role);
 
   return (
     <div
@@ -72,20 +138,45 @@ export function OrderCard({
         </div>
       </button>
 
-      <ul className="flex flex-col gap-1.5 text-sm">
-        {order.items.map((item) => (
-          <li key={item.id}>
-            <span className="font-medium">
-              {item.quantity}× {item.itemName}
-            </span>
-            {item.modifiers.length > 0 && (
-              <span className="text-muted-foreground block text-xs">
-                {item.modifiers.map((m) => m.optionName).join(", ")}
+      {order.mergedWithOrderIds.length > 0 && (
+        <p className="text-muted-foreground text-xs">
+          Merged ticket — moves with order
+          {order.mergedWithOrderIds.length > 1 ? "s" : ""} #
+          {order.mergedWithOrderIds
+            .map((id) => orderNumberById.get(id) ?? "?")
+            .join(", #")}
+        </p>
+      )}
+
+      {isSplitOrMerged ? (
+        <div className="flex flex-col gap-2">
+          {order.ticketGroups.map((group) => (
+            <TicketGroupRow
+              key={group.id}
+              group={group}
+              order={order}
+              role={role}
+              isPending={isPending}
+              onTransition={onGroupTransition}
+            />
+          ))}
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-1.5 text-sm">
+          {order.items.map((item) => (
+            <li key={item.id}>
+              <span className="font-medium">
+                {item.quantity}× {item.itemName}
               </span>
-            )}
-          </li>
-        ))}
-      </ul>
+              {item.modifiers.length > 0 && (
+                <span className="text-muted-foreground block text-xs">
+                  {item.modifiers.map((m) => m.optionName).join(", ")}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {order.customerNote && (
         <p className="bg-muted rounded-md p-2 text-xs">
@@ -94,8 +185,8 @@ export function OrderCard({
         </p>
       )}
 
-      <div className="mt-auto flex items-center gap-2">
-        {action && (
+      <div className="mt-auto flex flex-wrap items-center gap-2">
+        {!isSplitOrMerged && action && (
           <Button
             type="button"
             className="flex-1"
@@ -145,6 +236,28 @@ export function OrderCard({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        )}
+        {!isSplitOrMerged && canOrganize && order.items.length >= 2 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={() => onOpenSplit(order)}
+          >
+            Split
+          </Button>
+        )}
+        {!isSplitOrMerged && canOrganize && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={() => onOpenMerge(order)}
+          >
+            Merge
+          </Button>
         )}
       </div>
     </div>
