@@ -138,6 +138,14 @@ confirmation is required. `npm run test:e2e:disposable` is the one that actually
 
 ## Branching
 
-Small, reviewable commits. Run the full check list above before pushing. This repo does not yet
-have CI configured — that's expected to land alongside the first deploy-worthy feature, not in
-this foundational batch.
+Small, reviewable commits. Run the full check list above before pushing — and note that CI now
+runs exactly that same list for you on every push and pull request
+(`.github/workflows/ci.yml`), so a slip gets caught either way.
+
+CI needs no secrets. The DB integration tests build their own throwaway Postgres per test file,
+and the build only needs the two `NEXT_PUBLIC_*` variables to be present and well-formed (see
+`src/lib/env.ts`), so the workflow passes deliberately fake placeholder values rather than
+touching a real Supabase project. `npm run test:e2e` is deliberately not part of CI — it needs
+real credentials, see [above](#running-the-full-e2e-flow-against-a-real-supabase-project).
+
+The Node version CI uses comes from `.nvmrc`, so local and CI stay on the same major.
