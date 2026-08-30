@@ -31,7 +31,7 @@ Open http://localhost:3000.
 | `npm run build`         | Production build.                                                             |
 | `npm run start`         | Serve a production build.                                                     |
 | `npm run lint`          | ESLint.                                                                       |
-| `npm run typecheck`     | `tsc --noEmit`.                                                               |
+| `npm run typecheck`     | `next typegen` (route/layout types), then `tsc --noEmit`.                     |
 | `npm run format`        | Prettier, writes changes.                                                     |
 | `npm run format:check`  | Prettier, check only (used in CI).                                            |
 | `npm test`              | Vitest unit + DB/RLS integration tests, single run.                           |
