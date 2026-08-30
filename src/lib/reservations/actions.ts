@@ -11,6 +11,7 @@ import {
   reservationStatusSchema,
 } from "./schema";
 import { parseReservationError } from "./errors";
+import { zonedWallClockToUtc } from "./timezone";
 
 export interface ReservationFormState {
   error?: string;
@@ -56,6 +57,26 @@ export async function createReservation(
   if (!parsed.success)
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
 
+  // Staff type a wall-clock time; the column is a timestamptz. Convert
+  // through the restaurant's own timezone rather than assuming UTC — see
+  // src/lib/reservations/timezone.ts for why that distinction matters to
+  // the double-booking check, not just to display.
+  const { data: restaurant } = await auth.context.supabase
+    .from("restaurants")
+    .select("timezone")
+    .eq("id", restaurantId)
+    .maybeSingle();
+
+  const reservationTimeUtc = zonedWallClockToUtc(
+    parsed.data.reservationTime,
+    restaurant?.timezone ?? "UTC",
+  );
+  if (!reservationTimeUtc) {
+    return {
+      fieldErrors: { reservationTime: ["That's not a valid date/time."] },
+    };
+  }
+
   const { error } = await auth.context.supabase.rpc("create_reservation", {
     p_restaurant_id: restaurantId,
     p_table_id: parsed.data.tableId,
@@ -63,7 +84,7 @@ export async function createReservation(
     p_customer_phone: parsed.data.customerPhone,
     p_customer_email: parsed.data.customerEmail || null,
     p_party_size: parsed.data.partySize,
-    p_reservation_time: parsed.data.reservationTime,
+    p_reservation_time: reservationTimeUtc,
     p_notes: parsed.data.notes ?? null,
   });
 

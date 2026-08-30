@@ -25,11 +25,14 @@ type Action = (
 export function ReservationForm({
   action,
   tables,
+  timeZone,
   defaultValues,
   submitLabel,
 }: {
   action: Action;
   tables?: { id: string; label: string }[];
+  /** The restaurant's IANA zone, shown on the date field so staff know which clock they are entering. */
+  timeZone?: string;
   defaultValues?: {
     customerName?: string;
     customerPhone?: string;
@@ -73,7 +76,7 @@ export function ReservationForm({
           id="reservationTime"
           label="Date & time"
           errors={errors.reservationTime}
-          hint="Rejected if the table already has a reservation within 90 minutes of this time."
+          hint={`Entered in the restaurant's time zone${timeZone ? ` (${timeZone})` : ""}. Rejected if the table already has a reservation within 90 minutes of this time.`}
         >
           <Input
             id="reservationTime"

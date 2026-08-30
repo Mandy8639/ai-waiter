@@ -9,6 +9,8 @@ export interface UserRestaurant {
   id: string;
   name: string;
   slug: string;
+  /** IANA zone from restaurants.timezone — anything rendering a time for staff must format through it, never the viewer's own zone. */
+  timezone: string;
   role: RestaurantRole;
 }
 
@@ -40,7 +42,7 @@ export async function getUserRestaurants(
   const restaurantIds = memberships.map((m) => m.restaurant_id);
   const { data: restaurants, error: restaurantsError } = await supabase
     .from("restaurants")
-    .select("id, name, slug")
+    .select("id, name, slug, timezone")
     .in("id", restaurantIds);
 
   if (restaurantsError) {
@@ -56,6 +58,7 @@ export async function getUserRestaurants(
       id: r.id,
       name: r.name,
       slug: r.slug,
+      timezone: r.timezone,
       role: roleByRestaurantId.get(r.id) ?? "staff",
     }))
     .sort((a, b) => a.name.localeCompare(b.name));

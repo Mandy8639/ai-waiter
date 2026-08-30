@@ -1,32 +1,19 @@
 import { z } from "zod";
+import { WALL_CLOCK_PATTERN } from "./timezone";
 
 /**
- * `reservation_time` comes from a plain `<input type="datetime-local">`
- * (e.g. "2027-01-15T19:00") — no timezone offset. v1 explicit choice:
- * treat that wall-clock value as-is (append "Z", store as UTC) rather
- * than converting through any timezone, since this app doesn't model a
- * restaurant's timezone anywhere yet. What staff type is what's stored
- * and what's displayed back — see src/lib/reservations/format.ts.
+ * Kept as the raw wall-clock string the browser produced (e.g.
+ * "2027-01-15T19:00"), deliberately NOT converted here: turning it into a
+ * real instant needs the restaurant's own timezone, which lives in the
+ * database, so that step belongs in actions.ts via
+ * src/lib/reservations/timezone.ts. Validating only the shape here keeps
+ * this schema pure and the conversion in exactly one place.
  */
 const reservationTimeSchema = z
   .string()
   .trim()
   .min(1, "Choose a reservation date and time.")
-  .transform((value, ctx) => {
-    // "YYYY-MM-DDTHH:mm" (16 chars, most browsers) needs ":00" for
-    // seconds before the "Z"; a browser that already includes seconds
-    // (19 chars) just needs the "Z".
-    const withSeconds = value.length === 16 ? `${value}:00` : value;
-    const date = new Date(`${withSeconds}Z`);
-    if (Number.isNaN(date.getTime())) {
-      ctx.addIssue({
-        code: "custom",
-        message: "That's not a valid date/time.",
-      });
-      return z.NEVER;
-    }
-    return date.toISOString();
-  });
+  .regex(WALL_CLOCK_PATTERN, "That's not a valid date/time.");
 
 export const createReservationSchema = z.object({
   tableId: z.uuid("Choose a table."),

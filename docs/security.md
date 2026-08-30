@@ -553,6 +553,16 @@ serializes concurrent booking attempts for the same table so two staff members c
 conflict check simultaneously. No party-size-vs-table-capacity validation in v1 — staff pick an
 appropriately sized table themselves.
 
+**Times are real instants, not wall-clock strings.** Staff type a local time; `reservation_time` is a
+`timestamptz`. The conversion runs through the restaurant's own `restaurants.timezone`
+(`src/lib/reservations/timezone.ts`) on write, and formats back through it on read. This is a
+correctness property of the double-booking check, not just of display: the 90-minute window compares
+instants, so storing a naive wall-clock value as if it were UTC is self-consistent only until two
+restaurants sit in different zones. DST transitions are handled (the offset is re-derived at the
+corrected instant); gap and ambiguous times resolve deterministically rather than throwing, and an
+unparseable `restaurants.timezone` falls back to UTC rather than failing the page. Covered by
+`tests/unit/reservation-timezone.test.ts`.
+
 **Status lifecycle**: `confirmed -> seated -> completed`, plus `cancelled`/`no_show` (both reachable
 only from `confirmed`) — enforced twice, independently: `transition_reservation_status()` for role
 authorization and friendly errors, and a `BEFORE UPDATE` trigger

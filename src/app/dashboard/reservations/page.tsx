@@ -7,7 +7,7 @@ import { ReservationStatusActions } from "@/components/reservations/reservation-
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { transitionReservationStatus } from "@/lib/reservations/actions";
-import { formatReservationTime } from "@/lib/reservations/format";
+import { formatReservationTime } from "@/lib/reservations/timezone";
 
 export const metadata = {
   title: "Reservations — AI Waiter",
@@ -116,7 +116,11 @@ export default async function ReservationsPage() {
                       </Badge>
                     </div>
                     <p className="text-muted-foreground text-sm">
-                      {formatReservationTime(reservation.reservation_time)} ·{" "}
+                      {formatReservationTime(
+                        reservation.reservation_time,
+                        restaurant.timezone,
+                      )}{" "}
+                      ·{" "}
                       {table?.display_name ||
                         `Table ${table?.table_number ?? "?"}`}{" "}
                       · {reservation.party_size}{" "}

@@ -29,6 +29,7 @@ export default async function NewReservationPage() {
         <CardContent>
           <ReservationForm
             action={createReservation.bind(null, restaurant.id)}
+            timeZone={restaurant.timezone}
             tables={(tables ?? []).map((t) => ({
               id: t.id,
               label: t.display_name || `Table ${t.table_number}`,
