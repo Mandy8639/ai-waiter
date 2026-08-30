@@ -4,8 +4,10 @@ An AI waiter for restaurants — a multi-tenant SaaS platform where an AI talks 
 answers menu questions, recommends food, takes customized orders, confirms them, and sends them
 to the kitchen, alongside dashboards for restaurant owners and kitchen staff.
 
-**Batches 1–8: foundation, database, restaurant management, the full customer QR-to-order flow, a
-live kitchen workflow, a conversational AI waiter, and production hardening.** No payments yet.
+**Foundation, database, restaurant management, the full customer QR-to-order flow, a live kitchen
+workflow, a conversational AI waiter, production hardening, staff management, kitchen ticket
+splitting/merging, and reservations.** No payments yet — that is the one thing standing between
+this and a restaurant using it for real.
 What exists: the Next.js foundation; the full multi-tenant database schema (restaurants, staff
 roles, menu, modifiers, ingredients, allergens, customer sessions, carts, orders, the order state
 machine, and AI conversation transcripts) with Row Level Security; email/password auth, restaurant
@@ -26,7 +28,14 @@ throttling on customer session creation and order submission, a health check end
 audit (see [`docs/production-audit.md`](docs/production-audit.md)); and Batch 9, a provider
 abstraction so the AI waiter can run on either Anthropic (production default) or OpenRouter (a
 cost-free development alternative), selected via `AI_PROVIDER` — see
-[`docs/ai.md`](docs/ai.md#provider-and-configuration). 376 automated tests. See
+[`docs/ai.md`](docs/ai.md#provider-and-configuration). Since then: staff management
+(`/dashboard/staff` — add members by email, change roles, with a trigger that will not let a
+restaurant lose its last owner); kitchen ticket splitting and merging, where one order's items can
+fire as several independent tickets or several orders can share one, and the customer's status is
+derived as the least-advanced ticket so they are never told "served" early; and reservations
+(`/dashboard/reservations` — staff-entered bookings against a specific table, with 90-minute
+double-booking prevention and a confirmed → seated → completed lifecycle). 642 automated tests,
+run by CI on every push. See
 [`docs/architecture.md`](docs/architecture.md) for the target architecture and what's actually
 implemented today versus planned, and [`docs/ai.md`](docs/ai.md) for the AI waiter's design.
 
@@ -34,12 +43,12 @@ implemented today versus planned, and [`docs/ai.md`](docs/ai.md) for the AI wait
 customer QR-to-order flow, kitchen display, real order submission with audit trail, and
 cross-tenant security checks all confirmed against live data — see
 [`docs/production-audit.md`](docs/production-audit.md#current-status-production-hardening-pass)
-for the full breakdown). Two things remain genuinely open there, not application bugs: Supabase
+for the full breakdown), and a live AI conversation has since completed successfully against a real
+model provider. One thing remains genuinely open there, and it is not an application bug: Supabase
 Realtime `postgres_changes` `INSERT` delivery to anonymous-auth connections is a platform-side
-issue under active Supabase support investigation (ticket SU-452145) with no impact on any
-customer-facing code path, and no live AI conversational turn has completed successfully yet (the
-configured free OpenRouter model has returned `429 Too Many Requests` on every attempt so far — an
-external rate limit, not a code defect).
+issue under Supabase support investigation (ticket SU-452145). It has no impact on any
+customer-facing code path — the kitchen display carries a polling fallback for exactly this. The
+AI waiter has still never been exercised against the Anthropic provider, only OpenRouter.
 
 ## Technology stack
 
@@ -52,9 +61,10 @@ external rate limit, not a code defect).
 - **Realtime:** Supabase Realtime — kitchen display + customer order status (implemented, Batch 6)
 - **QR codes:** `qrcode` (local generation, no third-party service)
 - **Validation:** Zod
-- **Testing:** Vitest (unit), Playwright (e2e)
+- **Testing:** Vitest (unit + DB/RLS integration), Playwright (e2e)
 - **Formatting/linting:** Prettier, ESLint
-- **Deployment target:** Vercel
+- **CI:** GitHub Actions — lint, typecheck, format, tests, and build on every push
+- **Hosting:** Vercel — deployed, see [Deployment](#deployment)
 
 ## Local development
 
@@ -122,7 +132,7 @@ See [`docs/database.md`](docs/database.md) for the schema itself and
 | `npm run build`                           | Production build.                                                                            |
 | `npm run start`                           | Serve a production build.                                                                    |
 | `npm run lint`                            | ESLint.                                                                                      |
-| `npm run typecheck`                       | TypeScript, no emit.                                                                         |
+| `npm run typecheck`                       | `next typegen` (route/layout types), then TypeScript with no emit.                           |
 | `npm run format` / `npm run format:check` | Prettier.                                                                                    |
 | `npm test`                                | Vitest unit + DB/RLS integration tests.                                                      |
 | `npm run test:e2e`                        | Playwright end-to-end tests.                                                                 |
@@ -157,8 +167,11 @@ src/
     supabase/           Browser / server / admin Supabase client factories + Database types
     auth/                Session helpers + signIn/signUp/signOut server actions
     restaurants/          create-restaurant.ts, membership/role lookup, authorization helper
-    categories/, menu/, modifiers/, ingredients/, allergens/, tables/, settings/
+    categories/, menu/, modifiers/, ingredients/, allergens/, tables/, settings/, staff/
                         Zod schema + server actions per dashboard entity
+    reservations/        Booking schema/actions plus timezone.ts — the single place a staff
+                        member's wall-clock entry becomes a real instant, via the
+                        restaurant's own timezone (DST-aware)
     customer/            Customer session helpers (active-session lookup, expiry, public
                         restaurant-by-slug lookup, public order settings), plus
                         rate-limit.ts (Batch 8, session-creation throttling)
@@ -178,8 +191,10 @@ supabase/
                         customer sessions, carts, and public storefront RLS (Batch 4), the
                         order engine and submit_order() (Batch 5), the order state machine,
                         transition_order_status(), and Realtime enablement (Batch 6),
-                        ai_conversation_messages and AI settings (Batch 7), and two
-                        abuse-protection count RPCs (Batch 8)
+                        ai_conversation_messages and AI settings (Batch 7), two
+                        abuse-protection count RPCs (Batch 8), an admin audit log, staff
+                        management RPCs, order ticket groups for kitchen split/merge, and
+                        reservations
   seed.sql               Demo restaurant + 20-item menu (no auth users — see docs/database.md)
 scripts/
   seed-dev-users.ts     Creates dev-only logins via the Supabase Admin API
@@ -216,7 +231,7 @@ npm test          # unit tests + DB/RLS integration tests (Vitest)
 npm run test:e2e  # end-to-end smoke test (Playwright)
 ```
 
-`npm test` runs 346 tests: unit tests (including Zod schema validation for every dashboard/cart
+`npm test` runs 642 tests across 47 files: unit tests (including Zod schema validation for every dashboard/cart
 form, the AI tool schemas/surface, and the AI tool-calling loop) plus `tests/integration/db/` —
 tenant isolation, cross-tenant foreign key rejection, role-based authorization, constraint
 enforcement, QR token lifecycle, customer session/cart isolation (cross-restaurant, cross-table,
@@ -226,7 +241,12 @@ cross-tenant order/staff access), the order state machine (every allowed and dis
 transition, the full owner/manager/kitchen/staff permission matrix, customer/unauthenticated/
 cross-tenant denial, append-only audit history, financial immutability under a status change, and
 cancellation policy), the AI conversation transcript's session isolation and append-only guarantee,
-and the two Batch 8 abuse-protection RPCs — against a real Postgres engine
+the two Batch 8 abuse-protection RPCs, staff management (role authorization and the
+last-owner-standing trigger), kitchen ticket splitting/merging (split coverage validation, the
+least-advanced-group status derivation, and a merged ticket driving two orders in lockstep),
+reservations (double-booking prevention, the status state machine enforced both in the function and
+by an independent trigger, and RLS excluding the kitchen role entirely), and reservation timezone
+conversion across DST boundaries — against a real Postgres engine
 (`@electric-sql/pglite`, since no Docker/Postgres was available to run the normal Supabase local
 dev stack — see the header comment in `tests/integration/db/setup.ts`). The e2e suite covers route
 protection, form validation, a full signup → dashboard → CRUD → logout flow, the full QR scan →
@@ -241,24 +261,41 @@ fixed.
 
 ## Deployment
 
-Target platform is Vercel. Not deployed yet. When it happens: import the repo into Vercel, set the
-environment variables from `.env.example` in the project settings (including enabling Anonymous
-Auth on the Supabase project — see "Supabase setup" above), and deploy. `GET /api/health` reports
-high-level readiness (Supabase/AI configured, never a secret) for post-deploy monitoring — see
-[`docs/security.md`](docs/security.md#health-check-endpoint--implemented-in-batch-8). See
-[`docs/production-audit.md`](docs/production-audit.md) for what's been validated locally versus
-what a real deployment must still confirm against live Supabase/Anthropic services.
+Deployed on Vercel at **https://ai-waiter-two.vercel.app**, against the production Supabase
+project. `GET /api/health` reports high-level readiness (Supabase/AI configured, never a secret)
+and currently answers `{"status":"ok","supabaseConfigured":true,"aiConfigured":false}` — see
+[`docs/security.md`](docs/security.md#health-check-endpoint--implemented-in-batch-8).
+
+Three things to know about that deployment as it stands:
+
+- **It is not publicly reachable.** Vercel Deployment Protection is on, so the URL returns a
+  redirect to Vercel SSO for anyone but the project owner. That has to be turned off in Vercel's
+  project settings before a real diner can scan a QR code and order.
+- **Deploys are manual** (`vercel deploy --prod`). Connecting the GitHub repo for automatic
+  deployments needs a GitHub Login Connection on the Vercel account first.
+- **The AI waiter is off in production**, deliberately: only the two public `NEXT_PUBLIC_*`
+  variables are set. `SUPABASE_SECRET_KEY` is not, and does not need to be — nothing in the
+  request path imports the admin client. Set `AI_PROVIDER` and the matching key to enable the AI.
+
+The Node version is pinned in two places for two different readers: `.nvmrc` for CI
+(`actions/setup-node`) and `engines.node` in `package.json` for Vercel, which does not read
+`.nvmrc`.
 
 ## What's not built yet
 
-Payments, POS integration, inventory, reservations, loyalty, delivery, analytics, voice/phone
-ordering, and staff-facing AI — all explicitly out of scope through Batch 8. Everything else is
-built and tested: restaurant management (auth, onboarding, menu/table/QR CRUD), the customer-facing
+Payments, POS integration, inventory, loyalty, delivery, analytics, voice/phone ordering, and
+staff-facing AI. Nearer-term gaps a real restaurant would notice within a week: no order history or
+search (the kitchen board only looks back 12 hours), no email/SMS notifications, no reporting, no
+staff invitation flow (an invitee must already have an account), and menu images are URL-only
+because Supabase Storage is not wired up. Reservations are staff-entry only — there is no
+customer-facing booking page, and rescheduling means cancel-and-rebook. Everything else is built
+and tested: restaurant management (auth, onboarding, menu/table/QR CRUD), the customer-facing
 browse-and-cart flow, real order submission (cart → immutable, server-priced order →
 confirmation), the full kitchen workflow (live order board, role-scoped status transitions,
 Realtime updates for both staff and the customer), a conversational AI waiter that can browse the
 menu, build a cart, and place a confirmed order in natural language through the exact same
-validated boundaries as the deterministic UI, and abuse throttling across every public-facing
-surface. See [`docs/architecture.md`](docs/architecture.md) for the full batch-by-batch history and
-[`docs/production-audit.md`](docs/production-audit.md) for what remains genuinely unvalidated
-(everything requiring a live Supabase project or a live Anthropic API key).
+validated boundaries as the deterministic UI, abuse throttling across every public-facing surface,
+staff management, kitchen ticket splitting/merging, and reservations. See
+[`docs/architecture.md`](docs/architecture.md) for the full batch-by-batch history and
+[`docs/production-audit.md`](docs/production-audit.md) for what remains genuinely unvalidated — now
+mostly the Anthropic provider, which has never served a live conversation.
