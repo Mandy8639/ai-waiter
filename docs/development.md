@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 24 (pinned in `.nvmrc` for CI and `package.json` `engines.node` for Vercel — Vercel reads only the latter)
 - npm
 - A Supabase project (free tier is fine for local development), with **Anonymous Auth enabled**
   (Authentication → Providers → Anonymous Sign-Ins) — required for the entire customer-facing flow
