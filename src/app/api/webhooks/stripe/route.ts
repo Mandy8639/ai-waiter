@@ -1,0 +1,104 @@
+import { NextResponse } from "next/server";
+import type Stripe from "stripe";
+import { getStripe, isStripeConfigured } from "@/lib/payments/stripe";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+/**
+ * Stripe's webhook endpoint.
+ *
+ * THIS IS THE ONLY PLACE IN THE APPLICATION THAT USES THE RLS-BYPASSING
+ * ADMIN CLIENT IN A REQUEST PATH, and it must stay that way. The reason is
+ * structural rather than convenient: a webhook arrives from Stripe, not
+ * from a signed-in person, so there is no `auth.uid()` for RLS to reason
+ * about and no SECURITY DEFINER function that could authorise it. The
+ * request signature is the entire authentication story — which is why the
+ * signature check below happens before anything else touches the database,
+ * and why this handler does exactly two things and nothing else: record
+ * that an event was seen, and mirror Stripe's capability flags.
+ *
+ * See docs/security.md#payments. If a future change needs the admin client
+ * somewhere else, that is a design discussion, not a detail.
+ *
+ * Idempotency is not optional. Stripe retries on any non-2xx and can
+ * deliver the same event more than once even on success, so every event id
+ * is claimed in `stripe_webhook_events` first; the primary key makes a
+ * duplicate a no-op rather than a second effect. Phase 2 depends on this
+ * being right, because a replayed `payment_intent.succeeded` must never
+ * settle an order twice.
+ */
+export const dynamic = "force-dynamic";
+
+export async function POST(request: Request) {
+  if (!isStripeConfigured() || !process.env.STRIPE_WEBHOOK_SECRET) {
+    // Not configured is not an error worth retrying — tell Stripe plainly.
+    return NextResponse.json({ error: "not configured" }, { status: 503 });
+  }
+
+  const signature = request.headers.get("stripe-signature");
+  if (!signature) {
+    return NextResponse.json({ error: "missing signature" }, { status: 400 });
+  }
+
+  // The raw body, unparsed: signature verification is computed over the
+  // exact bytes Stripe sent, so parsing before verifying would break it.
+  const payload = await request.text();
+
+  let event: Stripe.Event;
+  try {
+    event = await getStripe().webhooks.constructEventAsync(
+      payload,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET,
+    );
+  } catch {
+    // Deliberately opaque: a caller who cannot produce a valid signature
+    // learns nothing about why theirs was rejected.
+    return NextResponse.json({ error: "invalid signature" }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+
+  // Claim the event id. A duplicate delivery loses this race against its
+  // own earlier self and is acknowledged without being processed again.
+  const { error: claimError } = await admin
+    .from("stripe_webhook_events")
+    .insert({ stripe_event_id: event.id, event_type: event.type });
+
+  if (claimError) {
+    if (claimError.code === "23505") {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    // Something else went wrong recording it — return non-2xx so Stripe
+    // retries rather than dropping the event on the floor.
+    return NextResponse.json(
+      { error: "could not record event" },
+      { status: 500 },
+    );
+  }
+
+  if (event.type === "account.updated") {
+    const account = event.data.object as Stripe.Account;
+    const { error } = await admin
+      .from("restaurant_payment_accounts")
+      .update({
+        charges_enabled: account.charges_enabled ?? false,
+        payouts_enabled: account.payouts_enabled ?? false,
+        details_submitted: account.details_submitted ?? false,
+      })
+      .eq("stripe_account_id", account.id);
+
+    if (error) {
+      return NextResponse.json(
+        { error: "could not apply event" },
+        { status: 500 },
+      );
+    }
+  }
+
+  await admin
+    .from("stripe_webhook_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("stripe_event_id", event.id);
+
+  return NextResponse.json({ received: true });
+}
