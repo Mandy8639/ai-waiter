@@ -34,16 +34,30 @@ async function appOrigin(): Promise<string> {
 }
 
 /**
- * Creates the restaurant's Stripe Express account if it doesn't have one,
- * then sends the caller to Stripe's hosted onboarding.
+ * Creates the restaurant's Stripe connected account if it doesn't have
+ * one, then sends the caller to Stripe's hosted onboarding.
  *
- * Express accounts specifically: Stripe collects and verifies the
- * restaurant's identity and bank details on its own hosted pages, so this
- * application never sees, stores, or is responsible for any of it.
+ * Uses the Accounts v2 API. Stripe now refuses v1 account creation for new
+ * Connect integrations outright ("Stripe no longer recommends Accounts v1
+ * ... Create connected accounts with POST /v2/core/accounts instead"), so
+ * this is not a preference — v1 returns a 400.
  *
- * Charges in phase 2 will be DIRECT charges on this account — the
- * restaurant is the merchant of record, and money never rests in a
- * platform balance.
+ * The configuration is chosen to match the liability model this feature
+ * was scoped around, and Stripe validates the combination server-side:
+ *
+ *   dashboard: "full"        the restaurant gets a real Stripe account of
+ *                            their own rather than a platform-managed one
+ *   fees_collector: stripe   the restaurant pays its own Stripe fees
+ *   losses_collector: stripe the restaurant, not this platform, carries
+ *                            chargebacks and losses
+ *
+ * That combination makes the restaurant the merchant of record and keeps
+ * this platform out of the money-transmitter position. Stripe rejects the
+ * alternatives that would push fees or losses onto the platform while
+ * still claiming this shape, so the model is enforced at their end too.
+ *
+ * Stripe collects and verifies identity and bank details on its own hosted
+ * pages; none of it passes through this application.
  */
 export async function startPaymentOnboarding(
   restaurantId: string,
@@ -78,13 +92,27 @@ export async function startPaymentOnboarding(
   if (!stripeAccountId) {
     const { data: restaurant } = await auth.context.supabase
       .from("restaurants")
-      .select("name, country")
+      .select("name, country, currency")
       .eq("id", restaurantId)
       .maybeSingle();
 
-    const account = await stripe.accounts.create({
-      type: "express",
-      business_profile: { name: restaurant?.name ?? undefined },
+    const account = await stripe.v2.core.accounts.create({
+      display_name: restaurant?.name ?? undefined,
+      dashboard: "full",
+      // Required before a merchant configuration can be applied. Falls back
+      // to US only because restaurants.country is nullable; a restaurant
+      // that has set its country gets that instead.
+      identity: { country: restaurant?.country ?? "US" },
+      defaults: {
+        currency: (restaurant?.currency ?? "USD").toLowerCase(),
+        responsibilities: {
+          fees_collector: "stripe",
+          losses_collector: "stripe",
+        },
+      },
+      configuration: {
+        merchant: { capabilities: { card_payments: { requested: true } } },
+      },
       metadata: { restaurant_id: restaurantId },
     });
     stripeAccountId = account.id;
@@ -98,14 +126,19 @@ export async function startPaymentOnboarding(
     if (error) return toPaymentError(error);
   }
 
-  const link = await stripe.accountLinks.create({
+  const link = await stripe.v2.core.accountLinks.create({
     account: stripeAccountId,
-    // Stripe sends the user here if the link expired before they finished;
-    // pointing it back at our own page means they simply get a fresh link
-    // rather than a dead end.
-    refresh_url: `${origin}/dashboard/payments?refresh=1`,
-    return_url: returnUrl,
-    type: "account_onboarding",
+    use_case: {
+      type: "account_onboarding",
+      account_onboarding: {
+        configurations: ["merchant"],
+        // Stripe sends the user here if the link expired before they
+        // finished; pointing it back at our own page means they simply get
+        // a fresh link rather than a dead end.
+        refresh_url: `${origin}/dashboard/payments?refresh=1`,
+        return_url: returnUrl,
+      },
+    },
   });
 
   // Outside any try/catch on purpose: redirect() signals by throwing, and
@@ -145,17 +178,35 @@ export async function refreshPaymentAccountStatus(
     return { error: "Connect a Stripe account first." };
   }
 
-  const stripeAccount = await getStripe().accounts.retrieve(
+  // Accounts v2 reports capabilities as a status enum
+  // ('active' | 'pending' | 'restricted' | 'unsupported') rather than the
+  // v1 booleans, and outstanding onboarding items as requirement entries.
+  // The mapping to this app's three flags happens here, at the Stripe
+  // boundary, so the database keeps a stable domain shape rather than
+  // mirroring whatever Stripe's API looks like this year.
+  const stripeAccount = await getStripe().v2.core.accounts.retrieve(
     account.stripe_account_id,
+    { include: ["configuration.merchant", "configuration.recipient", "requirements"] },
   );
+
+  const merchant = stripeAccount.configuration?.merchant;
+  const chargesEnabled =
+    merchant?.capabilities?.card_payments?.status === "active";
+  // Only the merchant configuration is applied in phase 1, so recipient is
+  // normally absent; treated as "not enabled" rather than assumed.
+  const payoutsEnabled =
+    stripeAccount.configuration?.recipient?.capabilities?.stripe_balance
+      ?.payouts?.status === "active";
+  const detailsSubmitted =
+    (stripeAccount.requirements?.entries ?? []).length === 0;
 
   const { error } = await auth.context.supabase.rpc(
     "sync_restaurant_payment_account_status",
     {
       p_restaurant_id: restaurantId,
-      p_charges_enabled: stripeAccount.charges_enabled ?? false,
-      p_payouts_enabled: stripeAccount.payouts_enabled ?? false,
-      p_details_submitted: stripeAccount.details_submitted ?? false,
+      p_charges_enabled: chargesEnabled,
+      p_payouts_enabled: payoutsEnabled,
+      p_details_submitted: detailsSubmitted,
     },
   );
   if (error) return toPaymentError(error);

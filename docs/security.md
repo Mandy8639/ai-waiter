@@ -595,8 +595,21 @@ visibility into the table.
 Money routing is **Stripe Connect with direct charges** onto each restaurant's own connected
 account. The restaurant is the merchant of record and funds never rest in a platform balance —
 chosen specifically so this platform does not act as a money transmitter, holding and forwarding
-other businesses' takings. Stripe Express accounts mean Stripe collects and verifies identity and
-bank details on its own hosted pages; none of it passes through this application.
+other businesses' takings. Stripe collects and verifies identity and bank details on its own hosted
+onboarding pages; none of it passes through this application.
+
+Accounts are created through the **Accounts v2** API. This is not a preference: Stripe now rejects
+v1 account creation for new Connect integrations outright, which we found only by making a live
+call — the request returns a 400 telling you to use `POST /v2/core/accounts`. The configuration is
+`dashboard: full` with both `fees_collector` and `losses_collector` set to `stripe`, which is what
+puts fees and chargeback losses on the restaurant rather than this platform. Stripe validates the
+combination server-side and refuses the variants that would quietly move liability back to the
+platform, so the model is enforced at their end as well as described here.
+
+Because v2 accounts report changes through v2 event destinations rather than the classic
+`account.updated` webhook, **account status is not automatically synced today** — the "Refresh
+status" button on the payments page is what updates the flags. The webhook endpoint itself is real
+and is where phase 2's charge events will arrive.
 
 Phase 1 moves no money. It adds Connect onboarding, the per-restaurant payment settings, and the
 webhook plumbing. Card charging arrives in phase 2, session tabs/cash/refunds in phase 3.

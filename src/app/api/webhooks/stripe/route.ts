@@ -76,6 +76,18 @@ export async function POST(request: Request) {
     );
   }
 
+  // `account.updated` is an Accounts v1 event. Connected accounts are now
+  // created through Accounts v2 (v1 creation is rejected outright — see
+  // src/lib/payments/actions.ts), and v2 accounts report changes through
+  // v2 event destinations rather than this endpoint. So in practice this
+  // branch does not fire today, and the "Refresh status" button on the
+  // payments page — not this webhook — is what keeps the flags current.
+  //
+  // It is kept rather than deleted because it is correct for any v1
+  // account and costs nothing, and because the surrounding endpoint
+  // (signature verification and the replay-proof event ledger) is what
+  // phase 2's charge events will arrive through. Do not describe account
+  // status as automatically synced until a v2 event destination exists.
   if (event.type === "account.updated") {
     const account = event.data.object as Stripe.Account;
     const { error } = await admin

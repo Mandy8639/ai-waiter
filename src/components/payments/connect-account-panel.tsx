@@ -21,10 +21,10 @@ export interface ConnectAccountStatus {
 }
 
 /**
- * Deliberately reports Stripe's three capability flags separately rather
- * than collapsing them to "connected". An account can exist, have its
- * details submitted, and still not be able to take a charge — showing one
- * green tick would hide exactly the state a restaurant needs to act on.
+ * Deliberately reports the capability flags separately rather than
+ * collapsing them to "connected". An account can exist, have its details
+ * submitted, and still not be able to take a charge — showing one green
+ * tick would hide exactly the state a restaurant needs to act on.
  */
 export function ConnectAccountPanel({
   status,
@@ -67,9 +67,16 @@ export function ConnectAccountPanel({
                 ? "Details submitted"
                 : "Details incomplete"}
             </Badge>
-            <Badge variant={status.payoutsEnabled ? "secondary" : "outline"}>
-              {status.payoutsEnabled ? "Payouts enabled" : "Payouts pending"}
-            </Badge>
+            {/*
+              No payouts badge. Phase 1 applies only the `merchant`
+              configuration to the connected account, so Stripe never
+              reports a payouts capability and the badge would read
+              "pending" forever regardless of what the restaurant did — a
+              permanent false alarm is worse than no badge. The restaurant
+              manages payouts in their own Stripe dashboard. The field is
+              still synced and stored, ready for a later phase that
+              requests the recipient configuration.
+            */}
           </>
         )}
       </div>
