@@ -724,6 +724,33 @@ INSERT/UPDATE/DELETE across every audited table (including the `modifier_options
 resolution), owner/manager-only read access, cross-tenant read denial, and that no role — including
 an owner — has any direct write path to the table itself.
 
+### Deleting a restaurant
+
+Two guards written for this schema each, independently, made a restaurant impossible to delete —
+by any route, for anyone. Both were correct about the case they were written for and neither
+accounted for the restaurant itself going away:
+
+- **The audit log's own foreign key.** `audit_log.restaurant_id` references `restaurants`, and the
+  audit trigger fires on every cascaded child `DELETE`. Deleting a restaurant removes the parent
+  row first, so each cascaded delete tried to write an audit row pointing at a restaurant that no
+  longer existed, and the foreign key rolled the whole delete back with `23503`. The audit log had
+  made its own subject undeletable.
+- **The last-owner guard.** `enforce_at_least_one_owner()` refuses to remove a restaurant's final
+  owner, because an owner-less restaurant is permanently unmanageable. The cascade to
+  `restaurant_users` necessarily removes that last owner, so the guard raised `23514` — protecting
+  the manageability of a restaurant that was in the middle of ceasing to exist.
+
+Both now skip when the owning restaurant no longer exists (see
+`20260831120000_allow_restaurant_delete.sql`). Neither rule is weakened for the case it was
+written for: while a restaurant exists, its last owner still cannot be removed or demoted, and
+every ordinary write is still audited. `tests/integration/db/restaurant-deletion.test.ts` asserts
+both halves — that a fully populated restaurant can be deleted, and that the guards still bite
+while it exists.
+
+This mattered beyond clearing test fixtures: restaurant offboarding and any account-deletion
+request were blocked by it too. It went unnoticed for three days because nothing exercised
+deletion; that test file is now the coverage.
+
 ## Kitchen display access — (implemented in Batch 6)
 
 `/dashboard/kitchen` is protected exactly like every other `/dashboard/*` route — `src/proxy.ts`'s
