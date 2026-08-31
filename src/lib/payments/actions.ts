@@ -186,7 +186,13 @@ export async function refreshPaymentAccountStatus(
   // mirroring whatever Stripe's API looks like this year.
   const stripeAccount = await getStripe().v2.core.accounts.retrieve(
     account.stripe_account_id,
-    { include: ["configuration.merchant", "configuration.recipient", "requirements"] },
+    {
+      include: [
+        "configuration.merchant",
+        "configuration.recipient",
+        "requirements",
+      ],
+    },
   );
 
   const merchant = stripeAccount.configuration?.merchant;
