@@ -14,5 +14,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Tables", href: "/dashboard/tables" },
   { label: "Reservations", href: "/dashboard/reservations" },
   { label: "Staff", href: "/dashboard/staff" },
+  { label: "Payments", href: "/dashboard/payments" },
   { label: "Settings", href: "/dashboard/settings" },
 ];

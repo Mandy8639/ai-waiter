@@ -6,8 +6,9 @@ actually implemented (Batches 1–7) versus what's designed for a later batch �
 
 ## Server-only secrets — (implemented in Batch 1, extended in Batches 7 and 9)
 
-`SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY` (Batch 7), `OPENROUTER_API_KEY` (Batch 9), and future
-secrets like `STRIPE_SECRET_KEY`, must never reach the browser bundle.
+`SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY` (Batch 7), `OPENROUTER_API_KEY` (Batch 9),
+`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (payments, phase 1) must never reach the browser
+bundle.
 
 - `src/lib/env.ts` imports the `server-only` package, so any accidental import from a Client
   Component fails at build time rather than shipping a secret to the browser.
@@ -24,6 +25,10 @@ secrets like `STRIPE_SECRET_KEY`, must never reach the browser bundle.
   directly. No AI tool file (`src/lib/ai/tools/*.ts`) or provider file imports the
   admin/service-role Supabase client either — verified by `tests/unit/ai-tool-surface.test.ts` and
   `ai-provider-surface.test.ts`.
+- `src/lib/payments/stripe.ts` is the only file that reads `STRIPE_SECRET_KEY`, and
+  `src/app/api/webhooks/stripe/route.ts` the only one that reads `STRIPE_WEBHOOK_SECRET` — both
+  `server-only`, both validated lazily at the call site, so a deployment with no Stripe keys
+  configured builds and runs exactly as it does today and simply does not offer payments.
 - `.env.example` documents every variable and marks each PUBLIC or SERVER ONLY; `.env.local` is
   gitignored.
 
@@ -584,6 +589,78 @@ every illegal transition (skipping `seated`, moving out of a terminal state) rej
 function and a raw `UPDATE` that bypasses it, the immutable-fields trigger rejecting a `table_id`/
 `reservation_time` change, and RLS excluding both non-members and the kitchen role from any
 visibility into the table.
+
+## Payments — (phase 1 implemented)
+
+Money routing is **Stripe Connect with direct charges** onto each restaurant's own connected
+account. The restaurant is the merchant of record and funds never rest in a platform balance —
+chosen specifically so this platform does not act as a money transmitter, holding and forwarding
+other businesses' takings. Stripe collects and verifies identity and bank details on its own hosted
+onboarding pages; none of it passes through this application.
+
+Accounts are created through the **Accounts v2** API. This is not a preference: Stripe now rejects
+v1 account creation for new Connect integrations outright, which we found only by making a live
+call — the request returns a 400 telling you to use `POST /v2/core/accounts`. The configuration is
+`dashboard: full` with both `fees_collector` and `losses_collector` set to `stripe`, which is what
+puts fees and chargeback losses on the restaurant rather than this platform. Stripe validates the
+combination server-side and refuses the variants that would quietly move liability back to the
+platform, so the model is enforced at their end as well as described here.
+
+Because v2 accounts report changes through v2 event destinations rather than the classic
+`account.updated` webhook, **account status is not automatically synced today** — the "Refresh
+status" button on the payments page is what updates the flags. The webhook endpoint itself is real
+and is where phase 2's charge events will arrive.
+
+Phase 1 moves no money. It adds Connect onboarding, the per-restaurant payment settings, and the
+webhook plumbing. Card charging arrives in phase 2, session tabs/cash/refunds in phase 3.
+
+**The one deliberate exception to "application code never uses the admin client".** Everywhere else
+in this codebase, writes go through the RLS-respecting per-request client or a `SECURITY DEFINER`
+function that re-derives the caller's role; the service-role client appears only in a local seed
+script, and `tests/unit/ai-tool-surface.test.ts` asserts the AI layer never imports it. A Stripe
+webhook breaks that pattern of necessity: it arrives from Stripe, not from a signed-in person, so
+there is no `auth.uid()` for RLS to reason about and no role for a `SECURITY DEFINER` function to
+check. Its request signature is the entire authentication story.
+
+That exception is contained deliberately:
+
+- `src/app/api/webhooks/stripe/route.ts` is the **only** request-path file permitted to use the
+  admin client. Anything else needing it is a design discussion, not a detail.
+- The signature is verified with `STRIPE_WEBHOOK_SECRET` before the handler touches the database at
+  all, and a failed verification returns an opaque 400 — a caller who cannot sign a request learns
+  nothing about why theirs was rejected.
+- The handler does exactly two things: record that an event id was seen, and mirror Stripe's
+  capability flags onto `restaurant_payment_accounts`. It cannot create accounts, change
+  `stripe_account_id`, or touch any other table.
+
+**Everything a person initiates still goes through the normal boundary.** Attaching a Stripe account
+(`link_restaurant_payment_account()`) and refreshing cached capabilities
+(`sync_restaurant_payment_account_status()`) are `SECURITY DEFINER` functions gated on a real
+owner/manager, and `restaurant_payment_accounts` has a `SELECT` policy for owner/manager only with
+no write policy for anyone — it names an external financial account, so kitchen and floor staff have
+no visibility into it at all.
+
+**Webhook replays are treated as inevitable, not exceptional.** Stripe retries on any non-2xx and can
+deliver the same event twice on success. Every event id is claimed in `stripe_webhook_events` — a
+table with RLS enabled and _no policies at all_, so only the webhook can touch it — and the primary
+key makes a duplicate delivery a no-op rather than a second effect. This matters more in phase 2,
+where a replayed `payment_intent.succeeded` must never settle an order twice; building it in phase 1
+means the guarantee exists before there is money to lose.
+
+**Capability flags are a cache, never an authority.** `charges_enabled` and friends mirror Stripe's
+answer asynchronously. Phase 2 re-checks capability with Stripe before attempting a charge, so an
+owner who called the sync RPC directly and claimed a capability they do not have would only cause
+their own charge to be refused — no cross-tenant reach, no money at risk.
+
+**Card data never touches this codebase.** Phase 2 uses Stripe's own elements, so no card number,
+CVC or expiry is ever received, logged or stored here. The AI waiter is structurally incapable of
+collecting payment details — it hands off to the payment step and has no tool that accepts them.
+
+Money conversion between `numeric(10,2)` and Stripe's integer minor units lives in one tested place
+(`src/lib/payments/money.ts`), string-based rather than multiplying floats, and refuses more
+precision than a currency can represent rather than silently rounding a customer's money away.
+
+Verified in `tests/integration/db/payments-phase1.test.ts` and `tests/unit/payments-money.test.ts`.
 
 ## Order transition concurrency — (implemented in Batch 6)
 

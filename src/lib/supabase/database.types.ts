@@ -101,6 +101,10 @@ export interface Database {
           allow_ai_recommendations: boolean;
           allow_upselling: boolean;
           max_order_items: number;
+          payment_timing: "at_order" | "at_end";
+          accept_card: boolean;
+          accept_cash: boolean;
+          tipping_enabled: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -112,6 +116,10 @@ export interface Database {
           allow_ai_recommendations?: boolean;
           allow_upselling?: boolean;
           max_order_items?: number;
+          payment_timing?: "at_order" | "at_end";
+          accept_card?: boolean;
+          accept_cash?: boolean;
+          tipping_enabled?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -612,6 +620,50 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["reservations"]["Insert"]>;
         Relationships: [];
       };
+      restaurant_payment_accounts: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          stripe_account_id: string;
+          charges_enabled: boolean;
+          payouts_enabled: boolean;
+          details_submitted: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          restaurant_id: string;
+          stripe_account_id: string;
+          charges_enabled?: boolean;
+          payouts_enabled?: boolean;
+          details_submitted?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["restaurant_payment_accounts"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      stripe_webhook_events: {
+        Row: {
+          stripe_event_id: string;
+          event_type: string;
+          received_at: string;
+          processed_at: string | null;
+        };
+        Insert: {
+          stripe_event_id: string;
+          event_type: string;
+          received_at?: string;
+          processed_at?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["stripe_webhook_events"]["Insert"]
+        >;
+        Relationships: [];
+      };
       order_item_modifiers: {
         Row: {
           id: string;
@@ -891,6 +943,19 @@ export interface Database {
       transition_reservation_status: {
         Args: { p_reservation_id: string; p_target_status: string };
         Returns: Database["public"]["Tables"]["reservations"]["Row"];
+      };
+      link_restaurant_payment_account: {
+        Args: { p_restaurant_id: string; p_stripe_account_id: string };
+        Returns: Database["public"]["Tables"]["restaurant_payment_accounts"]["Row"];
+      };
+      sync_restaurant_payment_account_status: {
+        Args: {
+          p_restaurant_id: string;
+          p_charges_enabled: boolean;
+          p_payouts_enabled: boolean;
+          p_details_submitted: boolean;
+        };
+        Returns: Database["public"]["Tables"]["restaurant_payment_accounts"]["Row"];
       };
     };
     Enums: Record<string, never>;
