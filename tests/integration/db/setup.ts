@@ -40,6 +40,8 @@ export interface TestDb {
   asUser: <T>(userId: string, fn: (client: PGlite) => Promise<T>) => Promise<T>;
   /** Runs `fn` as `anon` (unauthenticated) — auth.uid() is NULL. */
   asAnon: <T>(fn: (client: PGlite) => Promise<T>) => Promise<T>;
+  /** Runs `fn` as `service_role` — what the Stripe webhook writes as. Bypasses RLS, as on a real project. */
+  asServiceRole: <T>(fn: (client: PGlite) => Promise<T>) => Promise<T>;
   /** Inserts a row into the auth.users stub and returns its id. Give an explicit email to make that user findable via get_restaurant_staff()/add_restaurant_staff_by_email() — omitted, it gets a unique placeholder. */
   createAuthUser: (email?: string) => Promise<string>;
   close: () => Promise<void>;
@@ -63,6 +65,11 @@ export async function createTestDb(): Promise<TestDb> {
 
     create role authenticated nologin;
     create role anon nologin;
+    -- The Stripe webhook writes as service_role, and migrations grant
+    -- execute on the settlement functions to it specifically. Modelled
+    -- here with bypassrls, as on a real Supabase project, so that "only
+    -- the webhook can settle a payment" is testable rather than assumed.
+    create role service_role nologin bypassrls;
   `);
 
   const files = (await readdir(MIGRATIONS_DIR))
@@ -85,12 +92,12 @@ export async function createTestDb(): Promise<TestDb> {
   // pass for the wrong reason: a grant gap this test harness invented,
   // not the RLS policy scoping that's the real protection in production.
   await admin.exec(`
-    grant usage on schema public to authenticated, anon;
-    grant select, insert, update, delete on all tables in schema public to authenticated, anon;
+    grant usage on schema public to authenticated, anon, service_role;
+    grant select, insert, update, delete on all tables in schema public to authenticated, anon, service_role;
   `);
 
   async function withRole<T>(
-    role: "authenticated" | "anon",
+    role: "authenticated" | "anon" | "service_role",
     userId: string | null,
     fn: (client: PGlite) => Promise<T>,
   ): Promise<T> {
@@ -113,6 +120,7 @@ export async function createTestDb(): Promise<TestDb> {
     admin,
     asUser: (userId, fn) => withRole("authenticated", userId, fn),
     asAnon: (fn) => withRole("anon", null, fn),
+    asServiceRole: (fn) => withRole("service_role", null, fn),
     createAuthUser: async (email) => {
       const { rows } = await admin.query<{ id: string }>(
         "insert into auth.users (email) values ($1) returning id;",

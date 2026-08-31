@@ -58,8 +58,19 @@ export function PaymentSettingsForm({
         <div className="flex items-center gap-2">
           {/* Disabled when the connected account cannot charge — a disabled
               checkbox submits nothing, so card acceptance correctly falls
-              back to off rather than claiming a capability Stripe denies. */}
+              back to off rather than claiming a capability Stripe denies.
+
+              Keyed on the values that determine its default. These inputs
+              are uncontrolled, so `defaultChecked` is read once at mount
+              and ignored on every later render — when "Refresh status"
+              flips chargesEnabled, or a save returns new settings, the box
+              would otherwise keep showing the old state while React warns
+              that a default changed after initialisation. The key remounts
+              it so the default is applied afresh, which is what keeps the
+              displayed state honest without making the whole form
+              controlled. */}
           <Checkbox
+            key={`acceptCard:${defaultValues.acceptCard}:${chargesEnabled}`}
             id="acceptCard"
             name="acceptCard"
             defaultChecked={defaultValues.acceptCard && chargesEnabled}
@@ -76,6 +87,7 @@ export function PaymentSettingsForm({
 
         <div className="flex items-center gap-2">
           <Checkbox
+            key={`acceptCash:${defaultValues.acceptCash}`}
             id="acceptCash"
             name="acceptCash"
             defaultChecked={defaultValues.acceptCash}
@@ -86,6 +98,7 @@ export function PaymentSettingsForm({
 
         <div className="flex items-center gap-2">
           <Checkbox
+            key={`tippingEnabled:${defaultValues.tippingEnabled}`}
             id="tippingEnabled"
             name="tippingEnabled"
             defaultChecked={defaultValues.tippingEnabled}

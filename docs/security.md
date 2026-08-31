@@ -611,8 +611,43 @@ Because v2 accounts report changes through v2 event destinations rather than the
 status" button on the payments page is what updates the flags. The webhook endpoint itself is real
 and is where phase 2's charge events will arrive.
 
-Phase 1 moves no money. It adds Connect onboarding, the per-restaurant payment settings, and the
-webhook plumbing. Card charging arrives in phase 2, session tabs/cash/refunds in phase 3.
+Phase 1 moved no money — it added Connect onboarding, the per-restaurant payment settings, and the
+webhook plumbing. **Phase 2 charges cards.** Session tabs, cash recording and refunds remain phase 3.
+
+### Phase 2 — charging a card
+
+Payment is a **separate record**, never columns on `orders`. Every monetary field on an order is
+immutable for its lifetime (`trg_orders_enforce_immutable_fields`, see #order-immutability), and a
+tip is decided long after the order is placed — a tip column would either break that guarantee or
+need an exception carved into it. `order_payments.amount` is copied from `orders.total` when the
+payment starts, for the same reason the order copied its prices from the menu: what was charged
+must never be re-derived from something that could since have changed.
+
+Four properties carry the weight, each enforced where it cannot be skipped:
+
+- **The diner never names the price.** `start_order_payment()` reads the amount from the order
+  itself. The only figure the client supplies is the tip, which that function also validates. No
+  code path accepts an amount from the browser.
+- **An order can never be paid twice.** A partial unique index
+  (`order_payments_one_succeeded_per_order`) makes a second succeeded payment a database error, not
+  a code-review question. It is partial because declines are normal and failed attempts must be
+  able to accumulate so a diner can retry.
+- **Returning from Checkout proves nothing.** `?paid=1` is a URL anyone can visit, share or replay,
+  so it only refreshes the page. `mark_order_payment_succeeded()` is the sole path to
+  `status = 'succeeded'`, it is granted to `service_role` alone, and only the signature-verified
+  webhook calls it. It is idempotent, and returns false rather than raising for an unknown session
+  — raising would make Stripe retry a 500 forever.
+- **Charges are direct on the restaurant's connected account** (`stripeAccount` request option), so
+  funds never rest in a platform balance. There is no application fee.
+
+No client of any role — including an owner — has an INSERT/UPDATE/DELETE policy on `order_payments`.
+The only writers are the `SECURITY DEFINER` functions and the webhook. `get_public_payment_settings()`
+is the one public read path onto payment settings, following
+`get_public_order_settings()`'s rule of returning only the fields a public page needs: it answers
+whether a card can actually be charged (both `accept_card` _and_ `charges_enabled`) without ever
+revealing the connected account.
+
+Verified in `tests/integration/db/payments-phase2.test.ts` and `tests/unit/payments-tip.test.ts`.
 
 **The one deliberate exception to "application code never uses the admin client".** Everywhere else
 in this codebase, writes go through the RLS-respecting per-request client or a `SECURITY DEFINER`

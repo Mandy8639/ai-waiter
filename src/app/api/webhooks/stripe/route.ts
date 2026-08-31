@@ -76,6 +76,66 @@ export async function POST(request: Request) {
     );
   }
 
+  // Phase 2: a Checkout session that actually completed. THIS IS THE ONLY
+  // PATH IN THE APPLICATION THAT MARKS AN ORDER PAID.
+  //
+  // The diner's browser also comes back from Stripe, to `?paid=1`, but
+  // that is merely a URL — it can be typed, shared or replayed by anyone,
+  // so it only ever refreshes the page. A signed event is the only thing
+  // this system treats as evidence that money moved.
+  //
+  // `mark_order_payment_succeeded` is idempotent and returns false for a
+  // session this database has never seen, rather than raising: an unknown
+  // session must not produce a 500, because Stripe would then retry it
+  // forever. A genuinely unknown session is far more likely to be another
+  // integration on the same account than a lost payment.
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+
+    // `complete` alone does not mean funds are captured — an async method
+    // can complete the session while still unpaid. Only `paid` settles.
+    if (session.payment_status === "paid") {
+      const { error } = await admin.rpc("mark_order_payment_succeeded", {
+        p_checkout_session_id: session.id,
+        p_payment_intent_id:
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : (session.payment_intent?.id ?? null),
+      });
+
+      if (error) {
+        return NextResponse.json(
+          { error: "could not apply event" },
+          { status: 500 },
+        );
+      }
+    }
+  }
+
+  // An abandoned or failed checkout. Recorded so "has this order been
+  // paid?" has an answer other than "still pending, forever", and so the
+  // diner is offered a retry rather than a stuck screen. The function
+  // only ever touches a payment that is still pending, so one of these
+  // arriving late can never undo a payment that already succeeded.
+  if (
+    event.type === "checkout.session.expired" ||
+    event.type === "checkout.session.async_payment_failed"
+  ) {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const { error } = await admin.rpc("mark_order_payment_failed", {
+      p_checkout_session_id: session.id,
+      p_status:
+        event.type === "checkout.session.expired" ? "cancelled" : "failed",
+    });
+
+    if (error) {
+      return NextResponse.json(
+        { error: "could not apply event" },
+        { status: 500 },
+      );
+    }
+  }
+
   // `account.updated` is an Accounts v1 event. Connected accounts are now
   // created through Accounts v2 (v1 creation is rejected outright — see
   // src/lib/payments/actions.ts), and v2 accounts report changes through
