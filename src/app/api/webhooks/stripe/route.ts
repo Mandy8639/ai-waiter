@@ -70,19 +70,8 @@ export async function POST(request: Request) {
     }
     // Something else went wrong recording it — return non-2xx so Stripe
     // retries rather than dropping the event on the floor.
-    //
-    // TEMPORARY DIAGNOSTIC (remove once production settlement is verified):
-    // the code/message are echoed so a failing delivery says WHY in Stripe's
-    // own delivery log. Only a request carrying a valid Stripe signature can
-    // reach this line — verification happens above — so this leaks nothing
-    // to an unauthenticated caller. Revert to the opaque message after.
     return NextResponse.json(
-      {
-        error: "could not record event",
-        code: claimError.code,
-        detail: claimError.message,
-        hint: claimError.hint ?? null,
-      },
+      { error: "could not record event" },
       { status: 500 },
     );
   }
