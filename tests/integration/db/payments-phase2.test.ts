@@ -264,6 +264,112 @@ describe("payments phase 2 — order_payments", () => {
     });
   });
 
+  describe("a diner is never charged twice for one order", () => {
+    // The production bug, found by paying for real orders: while a payment
+    // sat 'pending', pressing Pay again created a SECOND payment row, and
+    // each row opens its own Stripe Checkout session. Two sessions is two
+    // charges. Settlement is asynchronous by design, so an unpaid-looking
+    // screen right after paying is normal — a diner pressing Pay again is
+    // behaving reasonably.
+    it("reuses the pending payment instead of opening a second one", async () => {
+      const f = await fullOrderFixture(db);
+      await enableCardPayments(db, f.restaurantId);
+
+      const first = await startPayment(db, f.customerUserId, f.orderId, 2);
+      const second = await startPayment(db, f.customerUserId, f.orderId, 2);
+
+      // Same row — which keeps the server action's Stripe idempotency key
+      // (`checkout:<payment_id>`) stable, so Stripe hands back the SAME
+      // Checkout session rather than opening another chargeable one.
+      expect(second[0].payment_id).toBe(first[0].payment_id);
+
+      const { rows } = await db.admin.query<{ count: string }>(
+        "select count(*)::text as count from public.order_payments where order_id = $1;",
+        [f.orderId],
+      );
+      expect(rows[0].count).toBe("1");
+    });
+
+    it("reuses it even after a Checkout session is attached", async () => {
+      // The realistic shape: the diner is at Stripe, or has paid and the
+      // webhook has not landed. Pressing Pay again must not start a
+      // parallel charge.
+      const f = await fullOrderFixture(db);
+      await enableCardPayments(db, f.restaurantId);
+      const first = await startPayment(db, f.customerUserId, f.orderId);
+      await attachSession(
+        db,
+        f.customerUserId,
+        first[0].payment_id,
+        "cs_in_flight",
+      );
+
+      const second = await startPayment(db, f.customerUserId, f.orderId);
+      expect(second[0].payment_id).toBe(first[0].payment_id);
+
+      const { rows } = await db.admin.query<{ count: string }>(
+        "select count(*)::text as count from public.order_payments where order_id = $1;",
+        [f.orderId],
+      );
+      expect(rows[0].count).toBe("1");
+    });
+
+    it("re-attaching the same session is a no-op, not an error", async () => {
+      // Reuse re-runs the whole action, so attach is called again with the
+      // identical session id. That must not surface as an error.
+      const f = await fullOrderFixture(db);
+      await enableCardPayments(db, f.restaurantId);
+      const p = await startPayment(db, f.customerUserId, f.orderId);
+      await attachSession(db, f.customerUserId, p[0].payment_id, "cs_same");
+
+      await expect(
+        attachSession(db, f.customerUserId, p[0].payment_id, "cs_same"),
+      ).resolves.toBeDefined();
+    });
+
+    it("refuses to repoint a payment at a different session", async () => {
+      // Orphaning the first session is exactly how a charge goes
+      // unrecorded, so this stays an error.
+      const f = await fullOrderFixture(db);
+      await enableCardPayments(db, f.restaurantId);
+      const p = await startPayment(db, f.customerUserId, f.orderId);
+      await attachSession(
+        db,
+        f.customerUserId,
+        p[0].payment_id,
+        "cs_first_one",
+      );
+
+      await expect(
+        attachSession(db, f.customerUserId, p[0].payment_id, "cs_different"),
+      ).rejects.toThrow(/PAYMENT_NOT_PENDING/);
+    });
+
+    it("refuses reuse when the tip changed, rather than charging the old amount", async () => {
+      const f = await fullOrderFixture(db);
+      await enableCardPayments(db, f.restaurantId);
+      await startPayment(db, f.customerUserId, f.orderId, 2);
+
+      await expect(
+        startPayment(db, f.customerUserId, f.orderId, 5),
+      ).rejects.toThrow(/PAYMENT_IN_PROGRESS/);
+    });
+
+    it("starts a fresh payment once the earlier attempt failed", async () => {
+      // A declined card must not leave the diner unable to try again.
+      const f = await fullOrderFixture(db);
+      await enableCardPayments(db, f.restaurantId);
+      const first = await startPayment(db, f.customerUserId, f.orderId);
+      await db.admin.query(
+        "update public.order_payments set status = 'failed' where id = $1;",
+        [first[0].payment_id],
+      );
+
+      const second = await startPayment(db, f.customerUserId, f.orderId);
+      expect(second[0].payment_id).not.toBe(first[0].payment_id);
+    });
+  });
+
   describe("an order can never be paid twice", () => {
     it("rejects a second succeeded payment at the database level", async () => {
       const f = await fullOrderFixture(db);

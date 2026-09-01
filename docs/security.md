@@ -628,10 +628,20 @@ Four properties carry the weight, each enforced where it cannot be skipped:
 - **The diner never names the price.** `start_order_payment()` reads the amount from the order
   itself. The only figure the client supplies is the tip, which that function also validates. No
   code path accepts an amount from the browser.
-- **An order can never be paid twice.** A partial unique index
+- **An order can never be RECORDED as paid twice.** A partial unique index
   (`order_payments_one_succeeded_per_order`) makes a second succeeded payment a database error, not
   a code-review question. It is partial because declines are normal and failed attempts must be
-  able to accumulate so a diner can retry.
+  able to accumulate so a diner can retry. Note the precise claim: this constrains our records, and
+  cannot stop Stripe from _taking_ money twice — recording and charging are different problems.
+  Not charging twice is the separate guarantee below.
+- **A diner is never CHARGED twice for one order.** `start_order_payment()` reuses an existing
+  pending payment rather than creating a second one. Each payment row opens its own Stripe Checkout
+  session, so a second row is a second chargeable session; reusing the row keeps the server action's
+  Stripe idempotency key (`checkout:<payment_id>`) stable, and Stripe returns the same session.
+  This matters because settlement is asynchronous: the order page reads "not paid" until the signed
+  webhook lands, so a diner who pays and presses Pay again is behaving reasonably. Before
+  `20260901200000_reuse_pending_payment.sql` they were charged twice for it — found by paying for
+  real orders in production, not by any test.
 - **Returning from Checkout proves nothing.** `?paid=1` is a URL anyone can visit, share or replay,
   so it only refreshes the page. `mark_order_payment_succeeded()` is the sole path to
   `status = 'succeeded'`, it is granted to `service_role` alone, and only the signature-verified
