@@ -6,6 +6,9 @@ import { OrderStatusSync } from "@/components/customer/order-status-sync";
 import { getOrderById } from "@/lib/orders/queries";
 import { formatMoney } from "@/lib/orders/format";
 import { CUSTOMER_STATUS_LABELS as STATUS_LABELS } from "@/lib/orders/status";
+import { getOrderPaymentState } from "@/lib/payments/queries";
+import { startOrderCheckout } from "@/lib/payments/checkout";
+import { PayOrderPanel } from "@/components/customer/pay-order-panel";
 
 export async function generateMetadata({
   params,
@@ -38,6 +41,19 @@ export default async function OrderConfirmationPage({
   }
 
   const money = (amount: number) => formatMoney(amount, order.currency);
+
+  // Payment is offered only when a card could actually be charged: the
+  // restaurant has switched card payments on AND its Stripe account can
+  // take them. A cancelled order is never payable.
+  const payment = await getOrderPaymentState(order.id, order.restaurantId);
+  const payable =
+    payment.canTakeCard && !payment.paid && order.status !== "cancelled";
+
+  const payForThisOrder = startOrderCheckout.bind(
+    null,
+    order.id,
+    restaurantSlug,
+  );
 
   return (
     <div className="flex flex-1 flex-col gap-5">
@@ -112,6 +128,27 @@ export default async function OrderConfirmationPage({
           <span>{money(order.total)}</span>
         </div>
       </div>
+
+      {payment.paid && (
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <span className="font-medium">Paid</span>
+          <span className="text-muted-foreground text-sm">
+            {money(Number(payment.paid.totalAmount))}
+            {Number(payment.paid.tipAmount) > 0 &&
+              ` (includes ${money(Number(payment.paid.tipAmount))} tip)`}
+          </span>
+        </div>
+      )}
+
+      {payable && (
+        <PayOrderPanel
+          orderTotal={order.total}
+          currency={order.currency}
+          tippingEnabled={payment.tippingEnabled}
+          hasFailedAttempt={payment.hasFailedAttempt}
+          payAction={payForThisOrder}
+        />
+      )}
 
       <p className="text-muted-foreground text-center text-xs">
         Placed {new Date(order.createdAt).toLocaleString()}

@@ -646,6 +646,44 @@ export interface Database {
         >;
         Relationships: [];
       };
+      order_payments: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          order_id: string;
+          status: string;
+          method: string;
+          amount: string;
+          tip_amount: string;
+          /** Generated column (amount + tip_amount) — never written directly. */
+          total_amount: string;
+          currency: string;
+          stripe_checkout_session_id: string | null;
+          stripe_payment_intent_id: string | null;
+          created_at: string;
+          updated_at: string;
+          paid_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          restaurant_id: string;
+          order_id: string;
+          status?: string;
+          method?: string;
+          amount: string | number;
+          tip_amount?: string | number;
+          currency: string;
+          stripe_checkout_session_id?: string | null;
+          stripe_payment_intent_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          paid_at?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["order_payments"]["Insert"]
+        >;
+        Relationships: [];
+      };
       stripe_webhook_events: {
         Row: {
           stripe_event_id: string;
@@ -956,6 +994,45 @@ export interface Database {
           p_details_submitted: boolean;
         };
         Returns: Database["public"]["Tables"]["restaurant_payment_accounts"]["Row"];
+      };
+      get_public_payment_settings: {
+        Args: { target_restaurant_id: string };
+        Returns: { can_take_card: boolean; tipping_enabled: boolean }[];
+      };
+      start_order_payment: {
+        Args: {
+          p_order_id: string;
+          p_tip_amount?: number;
+        };
+        Returns: {
+          payment_id: string;
+          amount: string;
+          tip_amount: string;
+          total_amount: string;
+          currency: string;
+          stripe_account_id: string;
+        }[];
+      };
+      attach_payment_checkout_session: {
+        Args: {
+          p_payment_id: string;
+          p_checkout_session_id: string;
+        };
+        Returns: undefined;
+      };
+      mark_order_payment_succeeded: {
+        Args: {
+          p_checkout_session_id: string;
+          p_payment_intent_id: string | null;
+        };
+        Returns: boolean;
+      };
+      mark_order_payment_failed: {
+        Args: {
+          p_checkout_session_id: string;
+          p_status: string;
+        };
+        Returns: boolean;
       };
     };
     Enums: Record<string, never>;

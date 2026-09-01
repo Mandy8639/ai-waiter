@@ -30,6 +30,7 @@ export interface OrderView {
   customerNote: string | null;
   createdAt: string;
   restaurantName: string;
+  restaurantId: string;
   restaurantSlug: string;
   tableLabel: string;
   items: OrderItemView[];
@@ -122,6 +123,7 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
     customerNote: order.customer_note,
     createdAt: order.created_at,
     restaurantName: restaurant?.name ?? "Restaurant",
+    restaurantId: order.restaurant_id,
     restaurantSlug: restaurant?.slug ?? "",
     tableLabel:
       table?.display_name || (table ? `Table ${table.table_number}` : "—"),
