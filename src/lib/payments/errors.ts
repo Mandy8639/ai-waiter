@@ -26,6 +26,8 @@ const PAYMENT_MESSAGES: Record<string, string> = {
   PAYMENT_ACCOUNT_NOT_READY:
     "Card payments aren't ready here yet. Please ask your server.",
   PAYMENT_NOT_PENDING: "That payment has already been started.",
+  PAYMENT_IN_PROGRESS:
+    "A payment for this order is already open. Finish it, or reload the page to start again.",
 };
 
 export function parsePaymentError(rawMessage: string): string {
