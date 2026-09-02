@@ -4,19 +4,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav-items";
+import type { RestaurantRole } from "@/lib/restaurants/get-user-restaurants";
 
 export function DashboardNav({
+  role,
   onNavigate,
   className,
 }: {
+  role: RestaurantRole;
   onNavigate?: () => void;
   className?: string;
 }) {
   const pathname = usePathname();
+  const items = NAV_ITEMS.filter(
+    (item) => !item.roles || item.roles.includes(role),
+  );
 
   return (
     <nav className={cn("flex flex-col gap-1", className)}>
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const isActive =
           item.href === "/dashboard"
             ? pathname === "/dashboard"

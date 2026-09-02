@@ -1011,6 +1011,75 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["restaurant_payment_accounts"]["Row"];
       };
+      get_takings_summary: {
+        Args: {
+          target_restaurant_id: string;
+          p_from: string;
+          p_to: string;
+        };
+        Returns: {
+          gross: string;
+          refunded: string;
+          refunds_pending: string;
+          net: string;
+          tips: string;
+          payment_count: number;
+          order_count: number;
+          average_order_value: string;
+        }[];
+      };
+      get_takings_by_method: {
+        Args: {
+          target_restaurant_id: string;
+          p_from: string;
+          p_to: string;
+        };
+        Returns: {
+          method: string;
+          payment_count: number;
+          gross: string;
+          refunded: string;
+          net: string;
+        }[];
+      };
+      get_payment_history: {
+        Args: {
+          target_restaurant_id: string;
+          p_from: string;
+          p_to: string;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: {
+          payment_id: string;
+          created_at: string;
+          paid_at: string | null;
+          status: string;
+          method: string;
+          amount: string;
+          tip_amount: string;
+          total_amount: string;
+          refunded: string;
+          currency: string;
+          order_numbers: number[];
+          stripe_payment_intent_id: string | null;
+          reversed_at: string | null;
+        }[];
+      };
+      get_best_selling_items: {
+        Args: {
+          target_restaurant_id: string;
+          p_from: string;
+          p_to: string;
+          p_limit?: number;
+        };
+        Returns: {
+          item_name: string;
+          quantity_sold: string;
+          revenue: string;
+          order_count: number;
+        }[];
+      };
       get_public_payment_settings: {
         Args: { target_restaurant_id: string };
         Returns: { can_take_card: boolean; tipping_enabled: boolean }[];

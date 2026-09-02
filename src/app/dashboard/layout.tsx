@@ -92,7 +92,7 @@ export default async function DashboardLayout({
         >
           AI Waiter
         </Link>
-        <DashboardNav />
+        <DashboardNav role={restaurant.role} />
       </aside>
 
       <div className="flex flex-1 flex-col">
@@ -103,7 +103,7 @@ export default async function DashboardLayout({
                 Menu
               </summary>
               <div className="bg-popover absolute z-10 mt-2 w-56 rounded-md border p-2 shadow-md">
-                <DashboardNav />
+                <DashboardNav role={restaurant.role} />
               </div>
             </details>
             <RestaurantSwitcher
