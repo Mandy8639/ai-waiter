@@ -284,7 +284,7 @@ describe("payments phase 2 — order_payments", () => {
       expect(second[0].payment_id).toBe(first[0].payment_id);
 
       const { rows } = await db.admin.query<{ count: string }>(
-        "select count(*)::text as count from public.order_payments where order_id = $1;",
+        "select count(*)::text as count from public.payment_orders where order_id = $1;",
         [f.orderId],
       );
       expect(rows[0].count).toBe("1");
@@ -308,7 +308,7 @@ describe("payments phase 2 — order_payments", () => {
       expect(second[0].payment_id).toBe(first[0].payment_id);
 
       const { rows } = await db.admin.query<{ count: string }>(
-        "select count(*)::text as count from public.order_payments where order_id = $1;",
+        "select count(*)::text as count from public.payment_orders where order_id = $1;",
         [f.orderId],
       );
       expect(rows[0].count).toBe("1");
@@ -381,18 +381,28 @@ describe("payments phase 2 — order_payments", () => {
         [first[0].payment_id],
       );
 
-      // Bypassing every function and writing directly as the table owner —
-      // the partial unique index must still refuse it.
+      // Coverage lives in payment_orders now, so the guarantee is a
+      // trigger rather than a unique index. Bypass every function: insert
+      // a second payment as the table owner, point it at the same order,
+      // and try to settle it.
+      const { rows: second } = await db.admin.query<{ id: string }>(
+        `insert into public.order_payments
+           (restaurant_id, status, amount, currency)
+         values ($1, 'pending', 10, 'GBP') returning id;`,
+        [f.restaurantId],
+      );
+      await db.admin.query(
+        `insert into public.payment_orders (payment_id, order_id, restaurant_id, amount)
+         values ($1, $2, $3, 10);`,
+        [second[0].id, f.orderId, f.restaurantId],
+      );
+
       await expect(
         db.admin.query(
-          `insert into public.order_payments
-             (restaurant_id, order_id, status, amount, currency, paid_at)
-           values ($1, $2, 'succeeded', 10, 'GBP', now());`,
-          [f.restaurantId, f.orderId],
+          "update public.order_payments set status = 'succeeded', paid_at = now() where id = $1;",
+          [second[0].id],
         ),
-      ).rejects.toThrow(
-        /order_payments_one_succeeded_per_order|duplicate key/i,
-      );
+      ).rejects.toThrow(/PAYMENT_ORDER_ALREADY_SETTLED/);
     });
 
     it("refuses to start a new payment once one has succeeded", async () => {
@@ -485,7 +495,7 @@ describe("payments phase 2 — order_payments", () => {
       expect(stillPaidAt[0].paid_at).toEqual(firstPaidAt[0].paid_at);
 
       const { rows: count } = await db.admin.query<{ count: string }>(
-        "select count(*)::text as count from public.order_payments where order_id = $1;",
+        "select count(*)::text as count from public.payment_orders where order_id = $1;",
         [f.orderId],
       );
       expect(count[0].count).toBe("1");
@@ -646,14 +656,19 @@ describe("payments phase 2 — order_payments", () => {
     it("cannot attach a payment to another restaurant's order", async () => {
       const a = await fullOrderFixture(db);
       const b = await fullOrderFixture(db);
+      const { rows: pay } = await db.admin.query<{ id: string }>(
+        `insert into public.order_payments
+           (restaurant_id, status, amount, currency)
+         values ($1, 'pending', 10, 'GBP') returning id;`,
+        [a.restaurantId],
+      );
       await expect(
         db.admin.query(
-          `insert into public.order_payments
-             (restaurant_id, order_id, amount, currency)
-           values ($1, $2, 10, 'GBP');`,
-          [a.restaurantId, b.orderId],
+          `insert into public.payment_orders (payment_id, order_id, restaurant_id, amount)
+           values ($1, $2, $3, 10);`,
+          [pay[0].id, b.orderId, a.restaurantId],
         ),
-      ).rejects.toThrow(/order_payments_order_same_restaurant/);
+      ).rejects.toThrow(/payment_orders_order_same_restaurant/);
     });
 
     it("rejects two payments sharing a Stripe checkout session", async () => {

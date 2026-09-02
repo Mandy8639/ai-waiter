@@ -33,10 +33,15 @@ export async function getOrderPaymentState(
     supabase.rpc("get_public_payment_settings", {
       target_restaurant_id: restaurantId,
     }),
+    // Coverage lives in payment_orders since phase 3 — one payment may
+    // settle several orders (a tab), so this is an inner join through the
+    // coverage table rather than a column on the payment itself.
     supabase
       .from("order_payments")
-      .select("status, total_amount, tip_amount, paid_at")
-      .eq("order_id", orderId),
+      .select(
+        "status, total_amount, tip_amount, paid_at, payment_orders!inner(order_id)",
+      )
+      .eq("payment_orders.order_id", orderId),
   ]);
 
   if (settingsResult.error) throw settingsResult.error;

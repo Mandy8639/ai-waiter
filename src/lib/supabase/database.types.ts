@@ -646,11 +646,28 @@ export interface Database {
         >;
         Relationships: [];
       };
+      payment_orders: {
+        Row: {
+          payment_id: string;
+          order_id: string;
+          restaurant_id: string;
+          amount: string;
+        };
+        Insert: {
+          payment_id: string;
+          order_id: string;
+          restaurant_id: string;
+          amount: string | number;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["payment_orders"]["Insert"]
+        >;
+        Relationships: [];
+      };
       order_payments: {
         Row: {
           id: string;
           restaurant_id: string;
-          order_id: string;
           status: string;
           method: string;
           amount: string;
@@ -667,7 +684,6 @@ export interface Database {
         Insert: {
           id?: string;
           restaurant_id: string;
-          order_id: string;
           status?: string;
           method?: string;
           amount: string | number;
@@ -1011,6 +1027,20 @@ export interface Database {
           total_amount: string;
           currency: string;
           stripe_account_id: string;
+        }[];
+      };
+      start_tab_payment: {
+        Args: {
+          p_tip_amount?: number;
+        };
+        Returns: {
+          payment_id: string;
+          amount: string;
+          tip_amount: string;
+          total_amount: string;
+          currency: string;
+          stripe_account_id: string;
+          order_count: number;
         }[];
       };
       attach_payment_checkout_session: {
