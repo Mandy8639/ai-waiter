@@ -93,6 +93,33 @@ export async function startOrderCheckout(
     return { error: "Couldn't start this payment. Please try again." };
   }
 
+  // The platform's cut, resolved server-side from the payment's own
+  // restaurant and plan. Deliberately computed on `amount` and NOT
+  // `total_amount`: the tip belongs to the staff, and taking a percentage
+  // of it would be the platform quietly helping itself to money a diner
+  // meant for a waiter. Say so here rather than leaving it implicit in a
+  // variable name.
+  //
+  // A failure to resolve the fee must never fail the checkout — a diner
+  // paying for dinner is not the right person to absorb a billing problem.
+  let applicationFeeMinorUnits = 0;
+  try {
+    const { data: feeData, error: feeError } = await supabase.rpc(
+      "platform_fee_for_payment",
+      {
+        p_payment_id: payment.payment_id,
+        p_amount_minor_units: toMinorUnits(payment.amount, payment.currency),
+      },
+    );
+    if (feeError) throw feeError;
+    applicationFeeMinorUnits = Number(feeData ?? 0);
+  } catch (feeLookupError) {
+    reportError(feeLookupError, {
+      scope: "platform.fee.order",
+      extra: { paymentId: payment.payment_id },
+    });
+  }
+
   const origin = await appOrigin();
   const orderUrl = `${origin}/r/${restaurantSlug}/order/${orderId}`;
 
@@ -130,6 +157,16 @@ export async function startOrderCheckout(
               ]
             : []),
         ],
+        // Stripe ignores a zero here, and omitting it entirely on the
+        // free-tier path keeps the created session identical to what it
+        // was before this feature existed.
+        ...(applicationFeeMinorUnits > 0
+          ? {
+              payment_intent_data: {
+                application_fee_amount: applicationFeeMinorUnits,
+              },
+            }
+          : {}),
         success_url: `${orderUrl}?paid=1`,
         cancel_url: `${orderUrl}?cancelled=1`,
         // Carried back on the webhook event so settlement never has to

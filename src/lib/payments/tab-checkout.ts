@@ -89,6 +89,27 @@ export async function startTabCheckout(
     return { error: "Couldn't start this payment. Please try again." };
   }
 
+  // The platform's cut — same rule as the single-order path: computed on
+  // `amount` and not `total_amount`, because the tip belongs to the staff.
+  // A billing lookup must never fail a diner's checkout.
+  let applicationFeeMinorUnits = 0;
+  try {
+    const { data: feeData, error: feeError } = await supabase.rpc(
+      "platform_fee_for_payment",
+      {
+        p_payment_id: payment.payment_id,
+        p_amount_minor_units: toMinorUnits(payment.amount, payment.currency),
+      },
+    );
+    if (feeError) throw feeError;
+    applicationFeeMinorUnits = Number(feeData ?? 0);
+  } catch (feeLookupError) {
+    reportError(feeLookupError, {
+      scope: "platform.fee.tab",
+      extra: { paymentId: payment.payment_id },
+    });
+  }
+
   const origin = await appOrigin();
   const ordersUrl = `${origin}/r/${restaurantSlug}/orders`;
 
@@ -132,6 +153,13 @@ export async function startTabCheckout(
               ]
             : []),
         ],
+        ...(applicationFeeMinorUnits > 0
+          ? {
+              payment_intent_data: {
+                application_fee_amount: applicationFeeMinorUnits,
+              },
+            }
+          : {}),
         success_url: `${ordersUrl}?paid=1`,
         cancel_url: `${ordersUrl}?cancelled=1`,
         client_reference_id: payment.payment_id,
