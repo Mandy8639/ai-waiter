@@ -8,8 +8,13 @@ export interface OrderPaymentState {
   /** Whether a card could actually be charged right now. */
   canTakeCard: boolean;
   tippingEnabled: boolean;
-  /** The settled payment, if this order has already been paid. */
-  paid: { totalAmount: string; tipAmount: string; paidAt: string } | null;
+  /** The settled payment, if this order has already been paid. The id is carried so the page can link to its receipt. */
+  paid: {
+    paymentId: string;
+    totalAmount: string;
+    tipAmount: string;
+    paidAt: string;
+  } | null;
   /** True if an earlier attempt failed or was abandoned — the diner may retry. */
   hasFailedAttempt: boolean;
 }
@@ -39,7 +44,7 @@ export async function getOrderPaymentState(
     supabase
       .from("order_payments")
       .select(
-        "status, total_amount, tip_amount, paid_at, payment_orders!inner(order_id)",
+        "id, status, total_amount, tip_amount, paid_at, payment_orders!inner(order_id)",
       )
       .eq("payment_orders.order_id", orderId),
   ]);
@@ -56,6 +61,7 @@ export async function getOrderPaymentState(
     tippingEnabled: settings?.tipping_enabled ?? false,
     paid: settled
       ? {
+          paymentId: settled.id,
           totalAmount: settled.total_amount,
           tipAmount: settled.tip_amount,
           paidAt: settled.paid_at as string,
