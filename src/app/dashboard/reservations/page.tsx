@@ -62,13 +62,25 @@ export default async function ReservationsPage() {
     .neq("status", "no_show")
     .order("reservation_time", { ascending: true });
 
+  // Requests first, then everything else by time.
+  //
+  // The nav badge sends staff here specifically to deal with a request, so
+  // burying it below next week's confirmed bookings would waste the trip.
+  // Sorted in memory rather than in the query because "pending first, then
+  // by time" is presentation, and this list is a single service's worth of
+  // rows, not a page of thousands.
+  const ordered = [...(reservations ?? [])].sort((a, b) => {
+    const aPending = a.status === "pending" ? 0 : 1;
+    const bPending = b.status === "pending" ? 0 : 1;
+    if (aPending !== bPending) return aPending - bPending;
+    return a.reservation_time.localeCompare(b.reservation_time);
+  });
+
   // A pending request has no table yet, so this list is filtered rather
   // than mapped straight across.
   const tableIds = [
     ...new Set(
-      (reservations ?? [])
-        .map((r) => r.table_id)
-        .filter((id): id is string => id !== null),
+      ordered.map((r) => r.table_id).filter((id): id is string => id !== null),
     ),
   ];
   const { data: tables } =
@@ -89,7 +101,7 @@ export default async function ReservationsPage() {
   // Every active table, for assigning one to a request. Loaded only when
   // there is actually a request to accept — most of the time this page has
   // none and the query would be pure overhead.
-  const hasRequests = (reservations ?? []).some((r) => r.status === "pending");
+  const hasRequests = ordered.some((r) => r.status === "pending");
   const { data: activeTables } = hasRequests
     ? await supabase
         .from("tables")
@@ -130,7 +142,7 @@ export default async function ReservationsPage() {
         )}
       </div>
 
-      {(reservations ?? []).length === 0 ? (
+      {ordered.length === 0 ? (
         <EmptyState
           title="No upcoming reservations"
           description="Bookings you add will show up here."
@@ -139,7 +151,7 @@ export default async function ReservationsPage() {
         />
       ) : (
         <div className="flex flex-col gap-3">
-          {(reservations ?? []).map((reservation) => {
+          {ordered.map((reservation) => {
             const table = reservation.table_id
               ? tableById.get(reservation.table_id)
               : null;

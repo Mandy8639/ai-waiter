@@ -4,16 +4,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav-items";
+import { PendingRequestsBadge } from "./pending-requests-badge";
 import type { RestaurantRole } from "@/lib/restaurants/get-user-restaurants";
 
 export function DashboardNav({
   role,
   onNavigate,
   className,
+  restaurantId,
+  pendingRequestCount,
 }: {
   role: RestaurantRole;
   onNavigate?: () => void;
   className?: string;
+  /** Present only when this viewer can see reservations at all — see the layout. */
+  restaurantId?: string;
+  pendingRequestCount?: number;
 }) {
   const pathname = usePathname();
   const items = NAV_ITEMS.filter(
@@ -42,6 +48,17 @@ export function DashboardNav({
             )}
           >
             {item.label}
+            {/* Only Reservations carries a count today. Kept as an explicit
+                match rather than a generic slot on NavItem, because one
+                badge does not yet justify a mechanism. */}
+            {item.href === "/dashboard/reservations" &&
+              restaurantId !== undefined &&
+              pendingRequestCount !== undefined && (
+                <PendingRequestsBadge
+                  restaurantId={restaurantId}
+                  initialCount={pendingRequestCount}
+                />
+              )}
           </Link>
         );
       })}

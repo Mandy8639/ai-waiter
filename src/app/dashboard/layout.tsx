@@ -11,6 +11,7 @@ import { DashboardNav } from "@/components/dashboard/dashboard-nav";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { RestaurantSwitcher } from "@/components/dashboard/restaurant-switcher";
 import { getDashboardContext } from "@/lib/restaurants/require-current-restaurant";
+import { countPendingReservationRequests } from "@/lib/notifications/pending-requests";
 import { selectRestaurant } from "@/lib/restaurants/actions";
 
 export default async function DashboardLayout({
@@ -83,6 +84,16 @@ export default async function DashboardLayout({
 
   const { restaurant } = state;
 
+  // Reservations are front-of-house only — a kitchen viewer has no RLS
+  // visibility into the table at all, so counting for them would always
+  // return 0 and the query would be pure waste.
+  const canSeeReservations = ["owner", "manager", "staff"].includes(
+    restaurant.role,
+  );
+  const pendingRequestCount = canSeeReservations
+    ? await countPendingReservationRequests(restaurant.id)
+    : undefined;
+
   return (
     <div className="flex flex-1 flex-col md:flex-row">
       <aside className="hidden w-60 shrink-0 flex-col gap-6 border-r px-4 py-6 md:flex">
@@ -92,7 +103,11 @@ export default async function DashboardLayout({
         >
           AI Waiter
         </Link>
-        <DashboardNav role={restaurant.role} />
+        <DashboardNav
+          role={restaurant.role}
+          restaurantId={canSeeReservations ? restaurant.id : undefined}
+          pendingRequestCount={pendingRequestCount}
+        />
       </aside>
 
       <div className="flex flex-1 flex-col">
@@ -103,7 +118,11 @@ export default async function DashboardLayout({
                 Menu
               </summary>
               <div className="bg-popover absolute z-10 mt-2 w-56 rounded-md border p-2 shadow-md">
-                <DashboardNav role={restaurant.role} />
+                <DashboardNav
+                  role={restaurant.role}
+                  restaurantId={canSeeReservations ? restaurant.id : undefined}
+                  pendingRequestCount={pendingRequestCount}
+                />
               </div>
             </details>
             <RestaurantSwitcher
