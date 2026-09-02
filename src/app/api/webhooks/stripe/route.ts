@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe, isStripeConfigured } from "@/lib/payments/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { reportError } from "@/lib/observability/report";
 
 /**
  * Stripe's webhook endpoint.
@@ -50,9 +51,15 @@ export async function POST(request: Request) {
       signature,
       process.env.STRIPE_WEBHOOK_SECRET,
     );
-  } catch {
-    // Deliberately opaque: a caller who cannot produce a valid signature
-    // learns nothing about why theirs was rejected.
+  } catch (verifyError) {
+    // Reported despite being the one failure here an outsider can trigger
+    // at will, because it is also what a wrong STRIPE_WEBHOOK_SECRET looks
+    // like — and that silently stops every payment from ever settling. A
+    // burst of these is the signal worth waking up for; the occasional
+    // probe is the noise worth tolerating to get it.
+    reportError(verifyError, { scope: "payments.webhook.signature" });
+    // The response stays deliberately opaque: a caller who cannot produce
+    // a valid signature learns nothing about why theirs was rejected.
     return NextResponse.json({ error: "invalid signature" }, { status: 400 });
   }
 
@@ -70,6 +77,10 @@ export async function POST(request: Request) {
     }
     // Something else went wrong recording it — return non-2xx so Stripe
     // retries rather than dropping the event on the floor.
+    reportError(claimError, {
+      scope: "payments.webhook.claim",
+      extra: { eventType: event.type },
+    });
     return NextResponse.json(
       { error: "could not record event" },
       { status: 500 },

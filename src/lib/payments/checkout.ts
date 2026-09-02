@@ -7,6 +7,7 @@ import { getStripe, isStripeConfigured } from "./stripe";
 import { toMinorUnits } from "./money";
 import { parsePaymentError } from "./errors";
 import { parseTip } from "./tip";
+import { reportError } from "@/lib/observability/report";
 
 /**
  * Card payment for an order, via Stripe Checkout (hosted).
@@ -77,6 +78,13 @@ export async function startOrderCheckout(
   });
 
   if (error) {
+    // The database refused. This is the branch that stayed silent when
+    // start_tab_payment() could not run at all — the diner saw a polite
+    // sentence and nothing else was recorded anywhere.
+    reportError(error, {
+      scope: "payments.checkout.start",
+      extra: { orderId, restaurantSlug },
+    });
     return { error: parsePaymentError(error.message) };
   }
 
@@ -154,11 +162,21 @@ export async function startOrderCheckout(
       // The session exists but this database cannot recognise it, so the
       // webhook would have nothing to settle. Better to refuse now than to
       // take a payment we cannot record.
+      reportError(attachError, {
+        scope: "payments.checkout.attach",
+        extra: { orderId, paymentId: payment.payment_id },
+      });
       return {
         error: "Couldn't start this payment safely. Please try again.",
       };
     }
-  } catch {
+  } catch (stripeError) {
+    // Where the Accounts v1 rejection hid: every call failed and the only
+    // symptom was this message.
+    reportError(stripeError, {
+      scope: "payments.checkout.stripe",
+      extra: { orderId, paymentId: payment.payment_id },
+    });
     return { error: "Couldn't reach Stripe. Please try again." };
   }
 

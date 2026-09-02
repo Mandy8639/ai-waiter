@@ -6,6 +6,7 @@ import { formatMoney } from "@/lib/orders/format";
 import { parsePaymentError } from "./errors";
 import { parseOrderIds, parseReversalReason } from "./cash";
 import { parseTip } from "./tip";
+import { reportError } from "@/lib/observability/report";
 
 /**
  * Recording cash, and un-recording it.
@@ -45,7 +46,13 @@ export async function recordCashPayment(
     p_tip_amount: tip.value,
   });
 
-  if (error) return { error: parsePaymentError(error.message) };
+  if (error) {
+    reportError(error, {
+      scope: "payments.cash.record",
+      extra: { orderCount: orderIds.value.length },
+    });
+    return { error: parsePaymentError(error.message) };
+  }
   if (!data)
     return { error: "Couldn't record that payment. Please try again." };
 
@@ -84,7 +91,13 @@ export async function reverseCashPayment(
     p_reason: reason.value,
   });
 
-  if (error) return { error: parsePaymentError(error.message) };
+  if (error) {
+    reportError(error, {
+      scope: "payments.cash.reverse",
+      extra: { paymentId },
+    });
+    return { error: parsePaymentError(error.message) };
+  }
 
   revalidatePath("/dashboard/reports");
   revalidatePath("/dashboard/checkout");
