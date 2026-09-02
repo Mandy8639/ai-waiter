@@ -593,6 +593,8 @@ export interface Database {
           currency: string;
           fee_bps: number;
           is_default: boolean;
+          /** Null for a free plan, and until setup-stripe-prices.ts has run. */
+          stripe_price_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -604,11 +606,40 @@ export interface Database {
           currency?: string;
           fee_bps: number;
           is_default?: boolean;
+          stripe_price_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<
           Database["public"]["Tables"]["platform_plans"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      restaurant_subscriptions: {
+        Row: {
+          restaurant_id: string;
+          plan_id: string;
+          stripe_customer_id: string;
+          stripe_subscription_id: string;
+          status: string;
+          current_period_end: string | null;
+          cancel_at_period_end: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          restaurant_id: string;
+          plan_id: string;
+          stripe_customer_id: string;
+          stripe_subscription_id: string;
+          status: string;
+          current_period_end?: string | null;
+          cancel_at_period_end?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["restaurant_subscriptions"]["Insert"]
         >;
         Relationships: [];
       };
@@ -1261,6 +1292,18 @@ export interface Database {
           p_status: string;
         };
         Returns: boolean;
+      };
+      record_restaurant_subscription: {
+        Args: {
+          p_restaurant_id: string;
+          p_plan_id: string;
+          p_stripe_customer_id: string;
+          p_stripe_subscription_id: string;
+          p_status: string;
+          p_current_period_end: string | null;
+          p_cancel_at_period_end: boolean;
+        };
+        Returns: undefined;
       };
       platform_fee_minor_units: {
         Args: {
