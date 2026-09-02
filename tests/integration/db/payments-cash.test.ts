@@ -38,6 +38,13 @@ async function acceptCash(db: TestDb, restaurantId: string, on = true) {
   );
 }
 
+async function allowTipping(db: TestDb, restaurantId: string, on: boolean) {
+  await db.admin.query(
+    "update public.restaurant_settings set tipping_enabled = $2 where restaurant_id = $1;",
+    [restaurantId, on],
+  );
+}
+
 function recordCash(
   db: TestDb,
   userId: string,
@@ -180,6 +187,44 @@ describe("recording cash", () => {
       await expect(recordCash(db, f.staffUserId, [f.orderId])).rejects.toThrow(
         /PAYMENT_CASH_NOT_ACCEPTED/,
       );
+    });
+
+    // 20260902180000_cash_tip_gate.sql. The card paths always enforced
+    // tipping_enabled; cash silently accepted a tip anyway, so a
+    // restaurant that had switched tipping off could still accumulate
+    // tips against its cash takings.
+    it("refuses a tip when the restaurant has tipping switched off", async () => {
+      const f = await fullOrderFixture(db);
+      await acceptCash(db, f.restaurantId);
+      await allowTipping(db, f.restaurantId, false);
+
+      await expect(
+        recordCash(db, f.staffUserId, [f.orderId], 3),
+      ).rejects.toThrow(/PAYMENT_TIPPING_DISABLED/);
+    });
+
+    it("still records a tipless cash payment when tipping is off", async () => {
+      // The setting refuses tips, not cash. Refusing the whole payment
+      // would leave staff unable to record money already in the till.
+      const f = await fullOrderFixture(db);
+      await acceptCash(db, f.restaurantId);
+      await allowTipping(db, f.restaurantId, false);
+
+      const paymentId = await recordCash(db, f.staffUserId, [f.orderId], 0);
+      expect(paymentId).toBeTruthy();
+    });
+
+    it("accepts a tip once tipping is switched on", async () => {
+      const f = await fullOrderFixture(db);
+      await acceptCash(db, f.restaurantId);
+      await allowTipping(db, f.restaurantId, true);
+
+      const paymentId = await recordCash(db, f.staffUserId, [f.orderId], 3);
+      const { rows } = await db.admin.query<{ tip_amount: string }>(
+        "select tip_amount from public.order_payments where id = $1;",
+        [paymentId],
+      );
+      expect(Number(rows[0].tip_amount)).toBe(3);
     });
 
     it("refuses a cancelled order", async () => {
