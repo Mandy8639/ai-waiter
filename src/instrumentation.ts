@@ -30,6 +30,13 @@ export const onRequestError: Instrumentation.onRequestError = async (
 ) => {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  const { reportRequestError } = await import("./lib/observability/report");
+  const { reportRequestError, flushMonitoring } =
+    await import("./lib/observability/report");
   reportRequestError(err, request, context);
+
+  // Awaited here rather than deferred through after(): Next awaits this
+  // hook, and an error escaping a request is exactly the moment the
+  // invocation is about to end. Waiting a moment for the event to leave is
+  // cheaper than losing the report of a crash.
+  await flushMonitoring();
 };
