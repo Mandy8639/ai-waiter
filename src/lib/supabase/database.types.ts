@@ -1167,6 +1167,21 @@ export interface Database {
         };
         Returns: boolean;
       };
+      record_cash_payment: {
+        Args: {
+          p_order_ids: string[];
+          p_tip_amount?: number;
+        };
+        /** The new payment's id. The amount is summed from the orders, never supplied by the caller. */
+        Returns: string;
+      };
+      reverse_cash_payment: {
+        Args: {
+          p_payment_id: string;
+          p_reason: string;
+        };
+        Returns: undefined;
+      };
     };
     Enums: Record<string, never>;
   };
