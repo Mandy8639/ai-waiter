@@ -400,6 +400,83 @@ describe("refunds", () => {
     });
   });
 
+  describe("releasing a refund Stripe never accepted", () => {
+    it("frees the amount it was holding", async () => {
+      // Pending refunds count as committed, deliberately. If Stripe
+      // refuses, that hold must be released or it blocks a retry forever
+      // for money that never moved.
+      const f = await fullOrderFixture(db);
+      await withAccount(db, f.restaurantId);
+      const pay = await settledCardPayment(db, f.restaurantId, f.orderId, 20);
+      const r = await startRefund(db, f.staffUserId, pay, 20);
+
+      await expect(startRefund(db, f.staffUserId, pay, 20)).rejects.toThrow(
+        /REFUND_NOTHING_LEFT|REFUND_EXCEEDS_PAYMENT/,
+      );
+
+      await db.asUser(f.staffUserId, (c) =>
+        c.query("select public.cancel_pending_refund($1);", [r[0].refund_id]),
+      );
+
+      await expect(
+        startRefund(db, f.staffUserId, pay, 20),
+      ).resolves.toBeDefined();
+    });
+
+    it("cancels rather than deletes, so the failed attempt stays visible", async () => {
+      const f = await fullOrderFixture(db);
+      await withAccount(db, f.restaurantId);
+      const pay = await settledCardPayment(db, f.restaurantId, f.orderId, 20);
+      const r = await startRefund(db, f.staffUserId, pay, 5);
+
+      await db.asUser(f.staffUserId, (c) =>
+        c.query("select public.cancel_pending_refund($1);", [r[0].refund_id]),
+      );
+
+      const { rows } = await db.admin.query<{ status: string }>(
+        "select status from public.payment_refunds where id = $1;",
+        [r[0].refund_id],
+      );
+      expect(rows[0].status).toBe("cancelled");
+    });
+
+    it("refuses once the refund has reached Stripe", async () => {
+      // The money is already moving; saying it was never sent would
+      // contradict the customer's bank.
+      const f = await fullOrderFixture(db);
+      await withAccount(db, f.restaurantId);
+      const pay = await settledCardPayment(db, f.restaurantId, f.orderId, 20);
+      const r = await startRefund(db, f.staffUserId, pay, 5);
+      await db.asUser(f.staffUserId, (c) =>
+        c.query("select public.attach_refund_stripe_id($1, $2, false);", [
+          r[0].refund_id,
+          "re_in_flight",
+        ]),
+      );
+
+      await expect(
+        db.asUser(f.staffUserId, (c) =>
+          c.query("select public.cancel_pending_refund($1);", [r[0].refund_id]),
+        ),
+      ).rejects.toThrow(/REFUND_ALREADY_SENT/);
+    });
+
+    it("is owner/manager only", async () => {
+      const f = await fullOrderFixture(db);
+      await withAccount(db, f.restaurantId);
+      const waiter = await db.createAuthUser();
+      await addMember(db, f.restaurantId, waiter, "staff");
+      const pay = await settledCardPayment(db, f.restaurantId, f.orderId, 20);
+      const r = await startRefund(db, f.staffUserId, pay, 5);
+
+      await expect(
+        db.asUser(waiter, (c) =>
+          c.query("select public.cancel_pending_refund($1);", [r[0].refund_id]),
+        ),
+      ).rejects.toThrow(/REFUND_FORBIDDEN/);
+    });
+  });
+
   describe("visibility", () => {
     it("is staff-only — the diner does not see refund reasons", async () => {
       const f = await fullOrderFixture(db);

@@ -136,6 +136,44 @@ export async function POST(request: Request) {
     }
   }
 
+  // Phase 3: a refund Stripe settled after we asked for it.
+  //
+  // Most card refunds come back 'succeeded' on the API call itself, and
+  // refund-actions.ts records that immediately. These events cover the
+  // ones that do not — a refund can sit pending and settle later, or fail
+  // after appearing to succeed — so the record follows Stripe rather than
+  // freezing at whatever the original call happened to return.
+  //
+  // `mark_refund_settled` never downgrades a succeeded refund and returns
+  // false for an unknown one rather than raising, so a refund belonging to
+  // some other integration on the same account cannot make us 500 into an
+  // endless Stripe retry.
+  if (
+    event.type === "refund.updated" ||
+    event.type === "refund.failed" ||
+    event.type === "charge.refund.updated"
+  ) {
+    const refund = event.data.object as Stripe.Refund;
+    const status =
+      refund.status === "succeeded"
+        ? "succeeded"
+        : refund.status === "canceled"
+          ? "cancelled"
+          : "failed";
+
+    const { error } = await admin.rpc("mark_refund_settled", {
+      p_stripe_refund_id: refund.id,
+      p_status: status,
+    });
+
+    if (error) {
+      return NextResponse.json(
+        { error: "could not apply event" },
+        { status: 500 },
+      );
+    }
+  }
+
   // `account.updated` is an Accounts v1 event. Connected accounts are now
   // created through Accounts v2 (v1 creation is rejected outright — see
   // src/lib/payments/actions.ts), and v2 accounts report changes through

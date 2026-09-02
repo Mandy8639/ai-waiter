@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/orders/format";
+import { RefundDialog } from "@/components/reports/refund-dialog";
+import { refundPayment } from "@/lib/payments/refund-actions";
 import { formatReservationTime } from "@/lib/reservations/timezone";
 import { getReportData } from "@/lib/reports/queries";
 import {
@@ -238,6 +240,9 @@ export default async function ReportsPage({
                   <th className="py-2 font-medium">Method</th>
                   <th className="py-2 font-medium">Status</th>
                   <th className="py-2 text-right font-medium">Amount</th>
+                  <th className="py-2 text-right font-medium">
+                    <span className="sr-only">Refund</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -271,6 +276,29 @@ export default async function ReportsPage({
                           {money(p.refunded)} refunded
                         </span>
                       )}
+                    </td>
+                    <td className="py-2 text-right">
+                      {/* Only a settled card payment with money left can be
+                          refunded. Cash is reversed, not refunded, and an
+                          attempt that never completed took nothing to give
+                          back — start_refund() refuses both anyway, so this
+                          only avoids offering a button that cannot work. */}
+                      {p.status === "succeeded" &&
+                        p.method === "card" &&
+                        Number(p.totalAmount) - Number(p.refunded) > 0 && (
+                          <RefundDialog
+                            refundAction={refundPayment.bind(null, p.paymentId)}
+                            paymentLabel={
+                              p.orderNumbers.length > 0
+                                ? p.orderNumbers.map((n) => `#${n}`).join(", ")
+                                : "this payment"
+                            }
+                            refundableAmount={String(
+                              Number(p.totalAmount) - Number(p.refunded),
+                            )}
+                            currency={p.currency}
+                          />
+                        )}
                     </td>
                   </tr>
                 ))}
