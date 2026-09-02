@@ -130,13 +130,24 @@ export default async function OrderConfirmationPage({
       </div>
 
       {payment.paid && (
-        <div className="flex items-center justify-between rounded-lg border p-4">
-          <span className="font-medium">Paid</span>
-          <span className="text-muted-foreground text-sm">
-            {money(Number(payment.paid.totalAmount))}
-            {Number(payment.paid.tipAmount) > 0 &&
-              ` (includes ${money(Number(payment.paid.tipAmount))} tip)`}
-          </span>
+        <div className="flex flex-col gap-3 rounded-lg border p-4">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">Paid</span>
+            <span className="text-muted-foreground text-sm">
+              {money(Number(payment.paid.totalAmount))}
+              {Number(payment.paid.tipAmount) > 0 &&
+                ` (includes ${money(Number(payment.paid.tipAmount))} tip)`}
+            </span>
+          </div>
+          {/* The receipt outlives this page's usefulness: it stays
+              readable after the four-hour session expires, which is when
+              someone actually goes looking for it. */}
+          <Link
+            href={`/r/${restaurantSlug}/receipt/${payment.paid.paymentId}`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            View receipt
+          </Link>
         </div>
       )}
 

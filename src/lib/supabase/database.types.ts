@@ -680,6 +680,12 @@ export interface Database {
           created_at: string;
           updated_at: string;
           paid_at: string | null;
+          /** Added by 20260902100000_cash_payments.sql. A reversal keeps the row's amount and paid_at — it is a correction with an audit trail, not a deletion. */
+          reversed_at: string | null;
+          reversed_by: string | null;
+          reversal_reason: string | null;
+          /** The staff member who recorded a cash payment. Null for card, where Stripe is the actor rather than a person. */
+          recorded_by: string | null;
         };
         Insert: {
           id?: string;
@@ -694,6 +700,10 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           paid_at?: string | null;
+          reversed_at?: string | null;
+          reversed_by?: string | null;
+          reversal_reason?: string | null;
+          recorded_by?: string | null;
         };
         Update: Partial<
           Database["public"]["Tables"]["order_payments"]["Insert"]
