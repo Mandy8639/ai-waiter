@@ -1,6 +1,7 @@
 import "server-only";
 
 import * as Sentry from "@sentry/node";
+import { after } from "next/server";
 import { scrubHeaders, scrubPath, toError } from "./scrub";
 
 /**
@@ -13,7 +14,16 @@ import { scrubHeaders, scrubPath, toError } from "./scrub";
  * site down when its vendor has an outage is worse than no monitoring, and
  * this one sits directly in the payment paths.
  *
- * SECOND: the interesting failures do not throw. Next's `onRequestError`
+ * SECOND: on Vercel this runs serverless, and a captured event is only
+ * queued — the transport sends it asynchronously. Once the response is
+ * returned the runtime can freeze, dropping whatever had not gone out yet,
+ * so a report can be captured perfectly and still never arrive.
+ * `@sentry/nextjs` handles that automatically; choosing `@sentry/node` to
+ * avoid staking the build on a fork-incompatible plugin means handling it
+ * here instead. `after()` is the framework's own answer — work scheduled
+ * after the response, without blocking it.
+ *
+ * THIRD: the interesting failures do not throw. Next's `onRequestError`
  * only fires for errors that escape, and this codebase deliberately
  * catches its payment failures and returns a sentence for the diner —
  * `parsePaymentError()` exists for exactly that. So the framework hook is
@@ -23,6 +33,31 @@ import { scrubHeaders, scrubPath, toError } from "./scrub";
  * customer is told politely that something went wrong, and nobody is told
  * what.
  */
+
+/** How long to wait for queued events before giving up. Long enough for a normal send, short enough not to hold a serverless invocation open. */
+const FLUSH_TIMEOUT_MS = 2000;
+
+/**
+ * Pushes queued events out before the runtime can freeze.
+ *
+ * Scheduled through `after()` so it never delays the response a diner or
+ * staff member is waiting on. Outside a request — during `register()`, or
+ * in a script — `after()` throws, so that case falls back to a
+ * fire-and-forget flush rather than losing the event or the caller.
+ */
+function scheduleFlush(): void {
+  try {
+    after(async () => {
+      try {
+        await Sentry.flush(FLUSH_TIMEOUT_MS);
+      } catch {
+        // Reporting must never break what it observes.
+      }
+    });
+  } catch {
+    void Sentry.flush(FLUSH_TIMEOUT_MS).catch(() => {});
+  }
+}
 
 /** Sentry is optional. Without a DSN this module is inert — which is what local development and CI want. */
 export function isMonitoringConfigured(): boolean {
@@ -59,6 +94,20 @@ export function initMonitoring(): void {
     started = true;
   } catch {
     // A malformed DSN must not stop the server from booting.
+  }
+}
+
+/**
+ * Awaits the queued events directly, for callers that already sit at the
+ * end of an invocation — instrumentation.ts's onRequestError, which Next
+ * awaits. Inert without a DSN, and never throws.
+ */
+export async function flushMonitoring(): Promise<void> {
+  if (!isMonitoringConfigured()) return;
+  try {
+    await Sentry.flush(FLUSH_TIMEOUT_MS);
+  } catch {
+    // As above: reporting must never break what it observes.
   }
 }
 
@@ -103,6 +152,7 @@ export function reportError(thrown: unknown, context: ErrorContext): void {
       tags: { scope: context.scope },
       extra: context.extra,
     });
+    scheduleFlush();
   } catch {
     // Sentry unreachable or not initialised. See the first rule above.
   }
@@ -167,6 +217,7 @@ export function reportRequestError(
         headers: scrubHeaders(request.headers),
       },
     });
+    scheduleFlush();
   } catch {
     // As above.
   }

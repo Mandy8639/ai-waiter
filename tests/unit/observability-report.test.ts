@@ -6,12 +6,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const captureException = vi.fn();
+const flush = vi.fn(async (_timeout?: number) => true);
 vi.mock("@sentry/node", () => ({
   init: vi.fn(),
   captureException: (...args: unknown[]) => captureException(...args),
+  // Typed to Sentry.flush's real signature rather than a spread of
+  // unknown[], which does not satisfy it.
+  flush: (timeout?: number) => flush(timeout),
 }));
 
-const { reportError, isMonitoringConfigured } =
+// after() throws outside a request, which is the situation every unit test
+// is in — so these exercise the fallback path deliberately, the same one a
+// non-request caller hits in production.
+vi.mock("next/server", () => ({
+  after: () => {
+    throw new Error("after() called outside a request");
+  },
+}));
+
+const { reportError, isMonitoringConfigured, flushMonitoring } =
   await import("@/lib/observability/report");
 
 /**
@@ -103,6 +116,59 @@ describe("reportError", () => {
 
     const logged = JSON.parse(consoleError.mock.calls[0][0] as string);
     expect(logged.name).toBe("PostgresError(21000)");
+  });
+});
+
+describe("flushing on serverless", () => {
+  /**
+   * On Vercel a captured event is only queued; the runtime can freeze once
+   * the response returns, so without a flush a report is captured
+   * perfectly and never arrives.
+   */
+  let consoleError: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    captureException.mockReset();
+    flush.mockReset();
+    flush.mockImplementation(async () => true);
+    consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    process.env.SENTRY_DSN = "https://key@example.test/1";
+  });
+
+  afterEach(() => {
+    consoleError.mockRestore();
+    delete process.env.SENTRY_DSN;
+  });
+
+  it("flushes after capturing, so the event actually leaves", () => {
+    reportError(new Error("boom"), { scope: "payments.test" });
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it("does not flush when there is no DSN, since nothing was queued", () => {
+    delete process.env.SENTRY_DSN;
+    reportError(new Error("boom"), { scope: "payments.test" });
+    expect(flush).not.toHaveBeenCalled();
+  });
+
+  it("does not throw when the flush itself fails", () => {
+    flush.mockImplementation(async () => {
+      throw new Error("network gone");
+    });
+    expect(() =>
+      reportError(new Error("boom"), { scope: "payments.test" }),
+    ).not.toThrow();
+  });
+
+  it("flushMonitoring awaits the queue, for callers already at the end", async () => {
+    await flushMonitoring();
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it("flushMonitoring is inert and safe without a DSN", async () => {
+    delete process.env.SENTRY_DSN;
+    await expect(flushMonitoring()).resolves.toBeUndefined();
+    expect(flush).not.toHaveBeenCalled();
   });
 });
 
