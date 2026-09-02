@@ -7,6 +7,7 @@ import { toMinorUnits } from "./money";
 import { formatMoney } from "@/lib/orders/format";
 import { parsePaymentError } from "./errors";
 import { parseRefundReason, parseRefundAmount } from "./refund-reason";
+import { reportError } from "@/lib/observability/report";
 
 /**
  * Refunding a payment.
@@ -73,6 +74,10 @@ export async function refundPayment(
   });
 
   if (error) {
+    reportError(error, {
+      scope: "payments.refund.start",
+      extra: { paymentId },
+    });
     return { error: parsePaymentError(error.message) };
   }
 
@@ -107,7 +112,11 @@ export async function refundPayment(
 
     stripeRefundId = created.id;
     succeeded = created.status === "succeeded";
-  } catch {
+  } catch (stripeError) {
+    reportError(stripeError, {
+      scope: "payments.refund.stripe",
+      extra: { paymentId, refundId: refund.refund_id },
+    });
     // Stripe refused or was unreachable. Release the amount this pending
     // row was holding against the payment, or it silently blocks a later
     // retry for money that never actually moved.
@@ -127,6 +136,13 @@ export async function refundPayment(
   });
 
   if (attachError) {
+    // Money left the restaurant's account and this database does not know
+    // it. The most consequential failure in the payment code, and until now
+    // the only trace was a sentence on one person's screen.
+    reportError(attachError, {
+      scope: "payments.refund.attach",
+      extra: { paymentId, refundId: refund.refund_id, stripeRefundId },
+    });
     // The money HAS gone back; only our link failed. Say so plainly rather
     // than reporting a failure the customer's bank will contradict.
     return {

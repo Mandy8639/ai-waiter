@@ -136,6 +136,37 @@ excluded from that config's `testDir`) — there it just self-skips again with t
 requires email confirmation" reason as before, since `.env.local` still points at a project where
 confirmation is required. `npm run test:e2e:disposable` is the one that actually exercises it.
 
+## Error monitoring
+
+`SENTRY_DSN` turns it on. Unset — which is what local development and CI want — nothing is sent
+anywhere, and failures are still written to stdout as structured JSON, so a report is never lost
+just because the vendor was not configured.
+
+Two things are worth knowing before changing anything here.
+
+**The framework hook is not where the coverage comes from.** `src/instrumentation.ts` exports
+`onRequestError`, which fires only for errors that _escape_ a request. The payment code
+deliberately catches its own failures and returns a sentence for the diner (`parsePaymentError()`
+exists for that), so those never escape and that hook never sees them. The explicit
+`reportError()` calls at those catch sites are the real coverage — a Stripe refusal or a database
+rule rejection is otherwise invisible, because the customer is told politely that something went
+wrong and nobody is told what. When you add a new payment path, add the capture with it.
+
+**Reporting must never be able to break what it observes.** Every entry point in
+`src/lib/observability/report.ts` swallows its own errors, because these calls sit directly in the
+payment paths and a vendor outage must not take checkout down with it. Tests in
+`tests/unit/observability-report.test.ts` pin that.
+
+Request data is scrubbed before it leaves the process (`src/lib/observability/scrub.ts`). Headers
+are an **allowlist**, not a denylist — headers arrive from the client, so a denylist leaks every
+name nobody thought of — and query strings are dropped whole, since they can carry a table token
+or a Stripe session id. Reporting is a disclosure path as much as a debugging tool.
+
+`@sentry/node` is used rather than `@sentry/nextjs`: the latter hooks the build and is
+version-gated against standard Next, and this project runs a non-standard fork (see `AGENTS.md`).
+It is also Node-only, so both hooks guard on `NEXT_RUNTIME` and import lazily — a top-level import
+would break the Edge bundle rather than simply doing nothing there.
+
 ## Branching
 
 Small, reviewable commits. Run the full check list above before pushing — and note that CI now

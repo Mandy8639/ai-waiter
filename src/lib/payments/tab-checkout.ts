@@ -7,6 +7,7 @@ import { getStripe, isStripeConfigured } from "./stripe";
 import { toMinorUnits } from "./money";
 import { parsePaymentError } from "./errors";
 import { parseTip } from "./tip";
+import { reportError } from "@/lib/observability/report";
 
 /**
  * Paying a whole tab by card — every unpaid order in this diner's session,
@@ -74,6 +75,12 @@ export async function startTabCheckout(
   });
 
   if (error) {
+    // Exactly where the unqualified DELETE surfaced as "21000" and went
+    // no further than the diner's screen.
+    reportError(error, {
+      scope: "payments.tab.start",
+      extra: { restaurantSlug },
+    });
     return { error: parsePaymentError(error.message) };
   }
 
@@ -153,9 +160,17 @@ export async function startTabCheckout(
       { p_payment_id: payment.payment_id, p_checkout_session_id: session.id },
     );
     if (attachError) {
+      reportError(attachError, {
+        scope: "payments.tab.attach",
+        extra: { paymentId: payment.payment_id },
+      });
       return { error: "Couldn't start this payment safely. Please try again." };
     }
-  } catch {
+  } catch (stripeError) {
+    reportError(stripeError, {
+      scope: "payments.tab.stripe",
+      extra: { paymentId: payment.payment_id },
+    });
     return { error: "Couldn't reach Stripe. Please try again." };
   }
 
