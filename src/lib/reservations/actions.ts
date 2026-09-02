@@ -9,6 +9,7 @@ import {
   createReservationSchema,
   updateReservationDetailsSchema,
   reservationStatusSchema,
+  confirmReservationRequestSchema,
 } from "./schema";
 import { parseReservationError } from "./errors";
 import { zonedWallClockToUtc } from "./timezone";
@@ -157,6 +158,46 @@ export async function transitionReservationStatus(
   const { error } = await auth.context.supabase.rpc(
     "transition_reservation_status",
     { p_reservation_id: reservationId, p_target_status: parsed.data },
+  );
+
+  if (error) return toReservationFormError(error);
+
+  revalidatePath("/dashboard/reservations");
+  return {};
+}
+
+/**
+ * Staff accepting a customer's request and choosing the table it happens
+ * at.
+ *
+ * Separate from createReservation() because the shapes genuinely differ:
+ * the customer's details already exist and are not staff's to retype, and
+ * the only new fact is which table. confirm_reservation_request() runs the
+ * same 90-minute conflict check create_reservation() does, so a request
+ * cannot be accepted onto a table that is already spoken for.
+ */
+export async function confirmReservationRequest(
+  restaurantId: string,
+  reservationId: string,
+  _prevState: ReservationFormState,
+  formData: FormData,
+): Promise<ReservationFormState> {
+  const auth = await authorizeRestaurantAction(restaurantId, [
+    "owner",
+    "manager",
+    "staff",
+  ]);
+  if (!auth.ok) return { error: auth.error };
+
+  const parsed = confirmReservationRequestSchema.safeParse({
+    tableId: formData.get("tableId"),
+  });
+  if (!parsed.success)
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
+
+  const { error } = await auth.context.supabase.rpc(
+    "confirm_reservation_request",
+    { p_reservation_id: reservationId, p_table_id: parsed.data.tableId },
   );
 
   if (error) return toReservationFormError(error);
