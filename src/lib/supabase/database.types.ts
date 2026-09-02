@@ -1126,6 +1126,40 @@ export interface Database {
         };
         Returns: boolean;
       };
+      payment_refunded_total: {
+        Args: { p_payment_id: string };
+        Returns: number;
+      };
+      start_refund: {
+        Args: {
+          p_payment_id: string;
+          p_amount: number | null;
+          p_reason: string;
+        };
+        Returns: {
+          refund_id: string;
+          amount: string;
+          currency: string;
+          stripe_payment_intent_id: string;
+          stripe_account_id: string;
+        }[];
+      };
+      attach_refund_stripe_id: {
+        Args: {
+          p_refund_id: string;
+          p_stripe_refund_id: string;
+          p_succeeded: boolean;
+        };
+        Returns: undefined;
+      };
+      mark_refund_settled: {
+        Args: { p_stripe_refund_id: string; p_status: string };
+        Returns: boolean;
+      };
+      cancel_pending_refund: {
+        Args: { p_refund_id: string };
+        Returns: boolean;
+      };
       mark_order_payment_failed: {
         Args: {
           p_checkout_session_id: string;
