@@ -6,7 +6,9 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/orders/format";
 import { RefundDialog } from "@/components/reports/refund-dialog";
+import { ReverseCashDialog } from "@/components/reports/reverse-cash-dialog";
 import { refundPayment } from "@/lib/payments/refund-actions";
+import { reverseCashPayment } from "@/lib/payments/cash-actions";
 import { formatReservationTime } from "@/lib/reservations/timezone";
 import { getReportData } from "@/lib/reports/queries";
 import {
@@ -241,7 +243,7 @@ export default async function ReportsPage({
                   <th className="py-2 font-medium">Status</th>
                   <th className="py-2 text-right font-medium">Amount</th>
                   <th className="py-2 text-right font-medium">
-                    <span className="sr-only">Refund</span>
+                    <span className="sr-only">Refund or reverse</span>
                   </th>
                 </tr>
               </thead>
@@ -279,7 +281,7 @@ export default async function ReportsPage({
                     </td>
                     <td className="py-2 text-right">
                       {/* Only a settled card payment with money left can be
-                          refunded. Cash is reversed, not refunded, and an
+                          refunded. Cash is reversed instead (below), and an
                           attempt that never completed took nothing to give
                           back — start_refund() refuses both anyway, so this
                           only avoids offering a button that cannot work. */}
@@ -299,6 +301,25 @@ export default async function ReportsPage({
                             currency={p.currency}
                           />
                         )}
+                      {/* Cash is reversed, not refunded: no money moves, the
+                          record simply says it was never taken. Only a
+                          settled cash payment qualifies — a reversed one is
+                          already done, and reverse_cash_payment() refuses
+                          both that and any card payment regardless. */}
+                      {p.status === "succeeded" && p.method === "cash" && (
+                        <ReverseCashDialog
+                          reverseAction={reverseCashPayment.bind(
+                            null,
+                            p.paymentId,
+                            { amount: p.totalAmount, currency: p.currency },
+                          )}
+                          paymentLabel={
+                            p.orderNumbers.length > 0
+                              ? p.orderNumbers.map((n) => `#${n}`).join(", ")
+                              : "this payment"
+                          }
+                        />
+                      )}
                     </td>
                   </tr>
                 ))}
