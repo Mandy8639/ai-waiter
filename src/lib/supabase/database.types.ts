@@ -584,6 +584,52 @@ export interface Database {
         >;
         Relationships: [];
       };
+      platform_plans: {
+        Row: {
+          id: string;
+          slug: string;
+          name: string;
+          monthly_price_cents: number;
+          currency: string;
+          fee_bps: number;
+          is_default: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          slug: string;
+          name: string;
+          monthly_price_cents: number;
+          currency?: string;
+          fee_bps: number;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["platform_plans"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      restaurant_plans: {
+        Row: {
+          restaurant_id: string;
+          plan_id: string;
+          assigned_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          restaurant_id: string;
+          plan_id: string;
+          assigned_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["restaurant_plans"]["Insert"]
+        >;
+        Relationships: [];
+      };
       reservations: {
         Row: {
           id: string;
@@ -1215,6 +1261,21 @@ export interface Database {
           p_status: string;
         };
         Returns: boolean;
+      };
+      platform_fee_minor_units: {
+        Args: {
+          p_restaurant_id: string;
+          p_total_minor_units: number;
+        };
+        Returns: number;
+      };
+      platform_fee_for_payment: {
+        Args: {
+          p_payment_id: string;
+          p_amount_minor_units: number;
+        };
+        /** Minor units. 0 for an unknown payment or an unpriced plan. */
+        Returns: number;
       };
       record_cash_payment: {
         Args: {

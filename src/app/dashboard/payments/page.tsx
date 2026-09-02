@@ -9,6 +9,8 @@ import {
   updatePaymentSettings,
 } from "@/lib/payments/actions";
 import { isStripeConfigured } from "@/lib/payments/stripe";
+import { getRestaurantPlan } from "@/lib/billing/plan";
+import { formatFeeBps, formatMonthlyPrice } from "@/lib/billing/format";
 
 export const metadata = {
   title: "Payments — AI Waiter",
@@ -57,6 +59,7 @@ export default async function PaymentsPage() {
   ]);
 
   const stripeConfigured = isStripeConfigured();
+  const plan = await getRestaurantPlan(restaurant.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,6 +69,46 @@ export default async function PaymentsPage() {
           How {restaurant.name} gets paid.
         </p>
       </div>
+
+      {/* Shown before the Stripe panels: what this restaurant pays the
+          platform is a different question from how it takes money from
+          diners, and burying it under the connect flow would read as an
+          afterthought. */}
+      {plan && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your plan</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="font-medium">
+                {plan.name}
+                {plan.isDefault && (
+                  <span className="text-muted-foreground font-normal">
+                    {" "}
+                    (default)
+                  </span>
+                )}
+              </span>
+              <span className="text-muted-foreground">
+                {formatMonthlyPrice(plan.monthlyPriceCents, plan.currency)} per
+                month
+              </span>
+            </div>
+            <p className="text-muted-foreground">
+              {/* Stated exactly: a restaurant reading "1% of card payments"
+                  should not have to wonder whether its staff's tips are
+                  included. They are not. */}
+              The platform takes {formatFeeBps(plan.feeBps)} of each card
+              payment, excluding tips. Cash payments are not charged.
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Monthly billing isn&apos;t switched on yet — only the per-payment
+              share is being collected today.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {!stripeConfigured && (
         <Card>
