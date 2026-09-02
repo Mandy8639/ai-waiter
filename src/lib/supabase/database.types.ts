@@ -588,14 +588,20 @@ export interface Database {
         Row: {
           id: string;
           restaurant_id: string;
-          table_id: string;
+          /** Null only for a pending customer request nobody has accepted yet. */
+          table_id: string | null;
           customer_name: string;
           customer_phone: string;
           customer_email: string | null;
           party_size: number;
           reservation_time: string;
           status:
-            "confirmed" | "seated" | "completed" | "cancelled" | "no_show";
+            | "pending"
+            | "confirmed"
+            | "seated"
+            | "completed"
+            | "cancelled"
+            | "no_show";
           notes: string | null;
           created_by: string | null;
           created_at: string;
@@ -604,14 +610,20 @@ export interface Database {
         Insert: {
           id?: string;
           restaurant_id: string;
-          table_id: string;
+          /** Null only for a pending customer request nobody has accepted yet. */
+          table_id: string | null;
           customer_name: string;
           customer_phone: string;
           customer_email?: string | null;
           party_size: number;
           reservation_time: string;
           status?:
-            "confirmed" | "seated" | "completed" | "cancelled" | "no_show";
+            | "pending"
+            | "confirmed"
+            | "seated"
+            | "completed"
+            | "cancelled"
+            | "no_show";
           notes?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -992,6 +1004,33 @@ export interface Database {
           p_notes: string | null;
         };
         Returns: Database["public"]["Tables"]["reservations"]["Row"];
+      };
+      request_reservation: {
+        Args: {
+          p_restaurant_id: string;
+          p_customer_name: string;
+          p_customer_phone: string;
+          p_customer_email: string | null;
+          p_party_size: number;
+          p_reservation_time: string;
+          p_notes: string | null;
+        };
+        /** A pending request with no table assigned. */
+        Returns: Database["public"]["Tables"]["reservations"]["Row"];
+      };
+      confirm_reservation_request: {
+        Args: {
+          p_reservation_id: string;
+          p_table_id: string;
+        };
+        Returns: Database["public"]["Tables"]["reservations"]["Row"];
+      };
+      count_recent_reservation_requests: {
+        Args: {
+          target_restaurant_id: string;
+          window_minutes?: number;
+        };
+        Returns: number;
       };
       update_reservation_details: {
         Args: {

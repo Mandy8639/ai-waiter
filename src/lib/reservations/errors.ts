@@ -21,6 +21,20 @@ const RESERVATION_MESSAGES: Record<string, string> = {
   RESERVATION_INVALID_STATUS: "That's not a valid reservation status.",
   RESERVATION_INVALID_TRANSITION:
     "That reservation can't move to that status from where it is.",
+
+  // request_reservation()/confirm_reservation_request(), from
+  // 20260902190000_customer_reservation_requests.sql. The first five are
+  // read by a diner rather than by staff, so they say what to do next
+  // instead of naming a rule.
+  RESERVATION_RESTAURANT_NOT_FOUND: "We couldn't find that restaurant.",
+  RESERVATION_TIME_IN_PAST: "Choose a time in the future.",
+  RESERVATION_TIME_TOO_FAR: "Choose a date within the next year.",
+  RESERVATION_PARTY_TOO_LARGE:
+    "That's a large party — please call the restaurant so they can plan for you.",
+  RESERVATION_TOO_MANY_REQUESTS:
+    "You've sent several booking requests already. Please call the restaurant instead.",
+  RESERVATION_NOT_PENDING:
+    "That request has already been dealt with. Reload to see where it stands.",
 };
 
 export function parseReservationError(rawMessage: string): string {

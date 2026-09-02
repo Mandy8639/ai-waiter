@@ -101,6 +101,16 @@ export default async function RestaurantLandingPage({
         View full menu
       </Link>
 
+      {/* Secondary to the menu on purpose: most people reaching this page
+          scanned a code and are already sitting down. Booking is for the
+          ones who are not. */}
+      <Link
+        href={`/r/${restaurantSlug}/reserve`}
+        className={buttonVariants({ variant: "outline" })}
+      >
+        Book a table
+      </Link>
+
       {categories && categories.length > 0 && (
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-medium tracking-tight">Categories</h2>

@@ -443,6 +443,12 @@ describe("transition_reservation_status()", () => {
   });
 
   it("rejects changing table_id or reservation_time after creation (immutable-fields trigger)", async () => {
+    // Two separate branches since
+    // 20260902190000_customer_reservation_requests.sql split them: a table
+    // may be filled in once (a pending request has none) but never moved,
+    // while restaurant and time are immutable outright. The wording
+    // differs per branch, so both are asserted rather than only the one
+    // this test used to reach.
     const fx = await reservationFixture(db, "owner");
     const otherTableId = await createTable(db, fx.restaurantId);
     const reservation = await createReservation(db, fx.staffUserId, {
@@ -455,6 +461,13 @@ describe("transition_reservation_status()", () => {
       db.admin.query(
         "update public.reservations set table_id = $2 where id = $1;",
         [reservation.id, otherTableId],
+      ),
+    ).rejects.toThrow(/table is immutable once assigned/);
+
+    await expect(
+      db.admin.query(
+        "update public.reservations set reservation_time = $2 where id = $1;",
+        [reservation.id, new Date("2027-02-10T19:00:00Z").toISOString()],
       ),
     ).rejects.toThrow(/immutable after creation/);
   });
