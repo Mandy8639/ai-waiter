@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { countPendingRequestsFromBrowser } from "@/lib/notifications/count-pending";
+import {
+  resolvePollIntervalMs,
+  shouldPollNow,
+} from "@/components/kitchen/kds-reconciliation";
 
 /**
  * A live count of booking requests waiting to be accepted, shown in the
@@ -31,6 +35,7 @@ export function PendingRequestsBadge({
   initialCount: number;
 }) {
   const [count, setCount] = useState(initialCount);
+  const [connected, setConnected] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The nav is rendered TWICE — once in the desktop aside, once inside the
@@ -80,7 +85,22 @@ export function PendingRequestsBadge({
         },
         scheduleRefresh,
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Previously `.subscribe()` with no callback, which meant a
+        // subscription that never connected was completely invisible —
+        // the badge simply sat there looking correct. Tracking the status
+        // is what lets the poll below speed up instead.
+        if (status === "SUBSCRIBED") {
+          setConnected(true);
+          scheduleRefresh();
+        } else if (
+          status === "CLOSED" ||
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT"
+        ) {
+          setConnected(false);
+        }
+      });
 
     function handleWake() {
       if (document.visibilityState === "visible") scheduleRefresh();
@@ -95,6 +115,24 @@ export function PendingRequestsBadge({
       void supabase.removeChannel(channel);
     };
   }, [restaurantId, scheduleRefresh, instanceId]);
+
+  // Polling safety net, the same one the kitchen board runs and for the
+  // same documented reason (Supabase ticket SU-452145: postgres_changes
+  // delivery is not always reliable). Without it, a subscription that
+  // silently fails to deliver leaves the badge frozen until the next full
+  // page load — which is exactly what was observed before this was added,
+  // with the table correctly in the publication the whole time.
+  //
+  // A separate effect from the subscription above so that `connected`
+  // flipping restarts only this timer, never the channel itself.
+  useEffect(() => {
+    const intervalMs = resolvePollIntervalMs(connected);
+    const timer = setInterval(() => {
+      if (!shouldPollNow(document.visibilityState)) return;
+      void refresh();
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [connected, refresh]);
 
   if (count === 0) return null;
 
