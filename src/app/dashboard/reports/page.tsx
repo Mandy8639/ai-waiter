@@ -75,7 +75,18 @@ export default async function ReportsPage({
             {restaurant.timezone.replace("_", " ")}.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* A plain link, not a button: the response is a file, so letting
+              the browser handle the navigation is what makes the download
+              work without any client-side code. `preset` rather than the
+              resolved bounds, so the file always matches what is on
+              screen. */}
+          <a
+            href={`/dashboard/reports/export?range=${preset}`}
+            className="text-muted-foreground hover:bg-muted rounded-md border px-3 py-1.5 text-sm"
+          >
+            Export CSV
+          </a>
           {RANGE_PRESETS.map((option) => (
             <Link
               key={option}
