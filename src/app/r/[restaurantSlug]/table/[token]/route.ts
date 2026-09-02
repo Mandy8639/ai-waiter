@@ -44,6 +44,30 @@ export async function GET(
   } = await supabase.auth.getUser();
 
   if (existingUser) {
+    // A signed-in staff member who follows a table QR link must not be
+    // silently logged out of the dashboard.
+    //
+    // Without this, the flow below reached signOut(): a staff account has
+    // no customer_sessions row, so `isReusable` is false and the code fell
+    // straight through to "start fresh". Mid-service, a waiter tapping a
+    // table code would find themselves signed out with no explanation.
+    //
+    // One browser holds one Supabase auth session, so there is no way to
+    // be staff and a diner at once. Refusing and saying why is the honest
+    // option; the alternative — taking the session and hoping they notice
+    // — is the behaviour being fixed.
+    //
+    // `is_anonymous` is optional in the SDK's type, so anything that is
+    // not explicitly anonymous is treated as a real account. That errs
+    // toward preserving a session, which is the safe direction: the cost
+    // of being wrong here is a diner seeing an explanation, not a staff
+    // member losing their place.
+    if (existingUser.is_anonymous !== true) {
+      return NextResponse.redirect(
+        new URL(`/r/${restaurantSlug}/table/${token}/staff`, request.url),
+      );
+    }
+
     const { data: existingSession } = await supabase
       .from("customer_sessions")
       .select("id, restaurant_id, table_id, status, expires_at")
