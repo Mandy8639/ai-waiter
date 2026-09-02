@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { countPendingRequestsFromBrowser } from "@/lib/notifications/count-pending";
 
@@ -33,6 +33,24 @@ export function PendingRequestsBadge({
   const [count, setCount] = useState(initialCount);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // The nav is rendered TWICE — once in the desktop aside, once inside the
+  // mobile dropdown — and both are mounted at the same time, hidden only by
+  // CSS. supabase.channel(topic) returns the EXISTING channel when one with
+  // that topic is already open, so two badges sharing a topic meant the
+  // second called .on() on an already-subscribed channel, which throws:
+  //
+  //   cannot add `postgres_changes` callbacks ... after `subscribe()`
+  //
+  // A per-instance topic keeps the two subscriptions distinct. The cost is
+  // one extra subscription on small viewports; the alternative — lifting
+  // this into a shared provider so the nav subscribes once — is the right
+  // shape if a second badge ever appears, but is more machinery than one
+  // count needs today.
+  //
+  // The topic is display-only: RLS and the filter below are what scope the
+  // data, and neither depends on this string.
+  const instanceId = useId();
+
   const refresh = useCallback(async () => {
     const next = await countPendingRequestsFromBrowser(restaurantId);
     // null means the query failed. Keeping the previous number is better
@@ -51,7 +69,7 @@ export function PendingRequestsBadge({
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel(`reservations:restaurant:${restaurantId}`)
+      .channel(`reservations:restaurant:${restaurantId}:${instanceId}`)
       .on(
         "postgres_changes",
         {
@@ -76,7 +94,7 @@ export function PendingRequestsBadge({
       if (timerRef.current) clearTimeout(timerRef.current);
       void supabase.removeChannel(channel);
     };
-  }, [restaurantId, scheduleRefresh]);
+  }, [restaurantId, scheduleRefresh, instanceId]);
 
   if (count === 0) return null;
 
