@@ -28,7 +28,14 @@ test.describe("customer QR-to-cart flow", () => {
 
   test("dashboard setup -> QR scan -> browse -> modifiers -> cart -> quantity/remove/clear", async ({
     page,
+    context,
   }) => {
+    // A second browser context means a second cold page load on top of the
+    // dashboard setup this test already does, which pushes it past the 30s
+    // default. Raised here rather than globally so every other spec keeps
+    // the tighter budget.
+    test.setTimeout(60_000);
+
     const testId = Date.now();
     const email = `e2e-customer-flow-${testId}@example.com`;
     const password = "TestPassword123!";
@@ -101,55 +108,71 @@ test.describe("customer QR-to-cart flow", () => {
     const customerUrl = await page.locator("p.break-all").innerText();
     expect(customerUrl).toContain(`/r/${slug}/table/`);
 
-    // --- "Scan" the QR: navigating there signs the staff member out and
-    // establishes a fresh anonymous customer session (see src/app/r/[restaurantSlug]/table/[token]/route.ts) ---
-    await page.goto(customerUrl);
-    await page.waitForURL(new RegExp(`/r/${slug}/menu`));
+    // --- "Scan" the QR in a SEPARATE browser context ---
+    //
+    // Scanning while signed in as staff no longer signs them out: the route
+    // now redirects them to an explanation instead, so their dashboard
+    // session survives (see src/app/r/[restaurantSlug]/table/[token]/route.ts).
+    // A diner is a different person on a different device, so the test says
+    // so — the same separation kitchen-flow.spec.ts has always used.
+    // baseURL is NOT inherited by a context created this way, and several
+    // diner steps navigate with a relative path. Without it those gotos
+    // resolve against about:blank and the page never arrives.
+    const customerContext = await context.browser()!.newContext({
+      baseURL: "http://localhost:3000",
+    });
+    const customerPage = await customerContext.newPage();
+    await customerPage.goto(customerUrl);
+    await customerPage.waitForURL(new RegExp(`/r/${slug}/menu`));
     await expect(
-      page
+      customerPage
         .getByRole("heading", { name: "Masala Dosa" })
-        .or(page.getByText("Masala Dosa")),
+        .or(customerPage.getByText("Masala Dosa")),
     ).toBeVisible();
 
     // --- Category filter ---
-    await page.getByRole("link", { name: "Mains" }).click();
-    await expect(page.getByText("Masala Dosa")).toBeVisible();
+    await customerPage.getByRole("link", { name: "Mains" }).click();
+    await expect(customerPage.getByText("Masala Dosa")).toBeVisible();
 
     // --- Item detail + modifier selection ---
-    await page.getByText("Masala Dosa").click();
-    await page.waitForURL(/\/item\//);
-    await page.getByText("Extra Chutney").click();
-    await page.getByRole("button", { name: /Add to cart/ }).click();
-    await expect(page.getByText("Added to cart.")).toBeVisible();
+    await customerPage.getByText("Masala Dosa").click();
+    await customerPage.waitForURL(/\/item\//);
+    await customerPage.getByText("Extra Chutney").click();
+    await customerPage.getByRole("button", { name: /Add to cart/ }).click();
+    await expect(customerPage.getByText("Added to cart.")).toBeVisible();
 
     // --- Cart: view, change quantity, remove, clear ---
-    await page.getByRole("link", { name: "View cart" }).click();
-    await page.waitForURL(/\/cart/);
-    await expect(page.getByText("Masala Dosa")).toBeVisible();
-    await expect(page.getByText("Extra Chutney")).toBeVisible();
+    await customerPage.getByRole("link", { name: "View cart" }).click();
+    await customerPage.waitForURL(/\/cart/);
+    await expect(customerPage.getByText("Masala Dosa")).toBeVisible();
+    await expect(customerPage.getByText("Extra Chutney")).toBeVisible();
 
-    await page.getByRole("button", { name: "Increase quantity" }).click();
+    await customerPage
+      .getByRole("button", { name: "Increase quantity" })
+      .click();
     // "2" alone is ambiguous once the header cart badge also shows the new
     // item count — scope to the cart page's main content.
     await expect(
-      page.getByRole("main").getByText("2", { exact: true }),
+      customerPage.getByRole("main").getByText("2", { exact: true }),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "Remove" }).click();
-    await expect(page.getByText("Your cart is empty.")).toBeVisible();
+    await customerPage.getByRole("button", { name: "Remove" }).click();
+    await expect(customerPage.getByText("Your cart is empty.")).toBeVisible();
 
     // Add it back once more so "Clear cart" has something real to clear.
-    await page.goto(`/r/${slug}/menu`);
-    await page.getByText("Masala Dosa").click();
-    await page.waitForURL(/\/item\//);
-    await page.getByRole("button", { name: /Add to cart/ }).click();
-    await page.getByRole("link", { name: "View cart" }).click();
-    await page.waitForURL(/\/cart/);
+    await customerPage.goto(`/r/${slug}/menu`);
+    await customerPage.getByText("Masala Dosa").click();
+    await customerPage.waitForURL(/\/item\//);
+    await customerPage.getByRole("button", { name: /Add to cart/ }).click();
+    await customerPage.getByRole("link", { name: "View cart" }).click();
+    await customerPage.waitForURL(/\/cart/);
 
     // DeleteButton's trigger reads "Clear cart"; the dialog's confirm button
     // is always labeled "Delete" regardless of the trigger's own label.
-    await page.getByRole("button", { name: "Clear cart" }).click();
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(page.getByText("Your cart is empty.")).toBeVisible();
+    await customerPage.getByRole("button", { name: "Clear cart" }).click();
+    await customerPage
+      .getByRole("button", { name: "Delete", exact: true })
+      .click();
+    await expect(customerPage.getByText("Your cart is empty.")).toBeVisible();
   });
 });

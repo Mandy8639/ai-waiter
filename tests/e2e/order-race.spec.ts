@@ -31,6 +31,12 @@ test.describe("submit_order() concurrent-race protection (live)", () => {
     page,
     context,
   }) => {
+    // A second browser context means a second cold page load on top of the
+    // dashboard setup this test already does, which pushes it past the 30s
+    // default. Raised here rather than globally so every other spec keeps
+    // the tighter budget.
+    test.setTimeout(60_000);
+
     const testId = Date.now();
     const email = `e2e-order-race-${testId}@example.com`;
     const password = "TestPassword123!";
@@ -79,30 +85,39 @@ test.describe("submit_order() concurrent-race protection (live)", () => {
     const customerUrl = await page.locator("p.break-all").innerText();
 
     // --- Customer: scan the QR, establishing the session on `page` ---
-    await page.goto(customerUrl);
-    await page.waitForURL(new RegExp(`/r/${slug}/menu`));
-    await page.getByText("Race Test Dish").click();
-    await page.waitForURL(/\/item\//);
-    await page.getByRole("button", { name: /Add to cart/ }).click();
-    await expect(page.getByText("Added to cart.")).toBeVisible();
+    // baseURL is NOT inherited by a context created this way, and several
+    // diner steps navigate with a relative path. Without it those gotos
+    // resolve against about:blank and the page never arrives.
+    const customerContext = await context.browser()!.newContext({
+      baseURL: "http://localhost:3000",
+    });
+    const customerPage = await customerContext.newPage();
+    await customerPage.goto(customerUrl);
+    await customerPage.waitForURL(new RegExp(`/r/${slug}/menu`));
+    await customerPage.getByText("Race Test Dish").click();
+    await customerPage.waitForURL(/\/item\//);
+    await customerPage.getByRole("button", { name: /Add to cart/ }).click();
+    await expect(customerPage.getByText("Added to cart.")).toBeVisible();
 
-    await page.goto(`/r/${slug}/cart`);
+    await customerPage.goto(`/r/${slug}/cart`);
     await expect(
-      page.getByRole("button", { name: "Place order" }),
+      customerPage.getByRole("button", { name: "Place order" }),
     ).toBeVisible();
 
     // A second page in the SAME context shares the customer session's
     // cookies — a genuinely separate PlaceOrderForm mount, so a genuinely
     // separate client-generated idempotency key, exactly matching two
     // browser tabs open to the same cart.
-    const page2 = await context.newPage();
+    // Same context as the diner: this test is two simultaneous submissions
+    // of ONE cart, which only holds if both pages share that session.
+    const page2 = await customerContext.newPage();
     await page2.goto(`/r/${slug}/cart`);
     await expect(
       page2.getByRole("button", { name: "Place order" }),
     ).toBeVisible();
 
     const [result1, result2] = await Promise.allSettled([
-      page.getByRole("button", { name: "Place order" }).click(),
+      customerPage.getByRole("button", { name: "Place order" }).click(),
       page2.getByRole("button", { name: "Place order" }).click(),
     ]);
     expect(result1.status).toBe("fulfilled");
@@ -113,8 +128,8 @@ test.describe("submit_order() concurrent-race protection (live)", () => {
     // of those two end states before inspecting anything.
     await Promise.all([
       Promise.race([
-        page.waitForURL(/\/order\//, { timeout: 30_000 }),
-        page
+        customerPage.waitForURL(/\/order\//, { timeout: 30_000 }),
+        customerPage
           .getByText("Your cart is empty — add something before ordering.")
           .waitFor({ timeout: 30_000 }),
       ]),
@@ -126,14 +141,17 @@ test.describe("submit_order() concurrent-race protection (live)", () => {
       ]),
     ]);
 
-    const page1Won = /\/order\//.test(page.url());
+    const page1Won = /\/order\//.test(customerPage.url());
     const page2Won = /\/order\//.test(page2.url());
 
     // Exactly one of the two won — never both, never neither.
     expect(page1Won !== page2Won).toBe(true);
 
-    const winner = page1Won ? page : page2;
-    const loser = page1Won ? page2 : page;
+    // Both candidates are the DINER's pages — page1Won is derived from
+    // customerPage, so pairing it with the staff page would search the
+    // dashboard for a menu item and always find none.
+    const winner = page1Won ? customerPage : page2;
+    const loser = page1Won ? page2 : customerPage;
 
     // The loser sees the expected, safe cart-empty message — not a
     // duplicate order, not a generic/opaque error.

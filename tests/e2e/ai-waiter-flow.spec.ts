@@ -47,6 +47,7 @@ test.describe("AI waiter: full conversational order flow", () => {
 
   test("QR scan -> ask about vegetarian dishes -> add an item with a required modifier -> review cart -> place order -> check status", async ({
     page,
+    context,
   }) => {
     // Localized to this test only (not playwright.config.ts's global
     // timeout, not any other spec). The full flow chains several
@@ -133,24 +134,33 @@ test.describe("AI waiter: full conversational order flow", () => {
     const customerUrl = await page.locator("p.break-all").innerText();
 
     // --- Customer: scan the QR, open the AI waiter ---
-    await page.goto(customerUrl);
-    await page.waitForURL(new RegExp(`/r/${slug}/menu`));
+    // baseURL is NOT inherited by a context created this way, and several
+    // diner steps navigate with a relative path. Without it those gotos
+    // resolve against about:blank and the page never arrives.
+    const customerContext = await context.browser()!.newContext({
+      baseURL: "http://localhost:3000",
+    });
+    const customerPage = await customerContext.newPage();
+    await customerPage.goto(customerUrl);
+    await customerPage.waitForURL(new RegExp(`/r/${slug}/menu`));
 
-    await page.getByRole("button", { name: "Open AI waiter chat" }).click();
+    await customerPage
+      .getByRole("button", { name: "Open AI waiter chat" })
+      .click();
     // Scoped to the AI chat dialog (Base UI Dialog.Popup, role="dialog",
     // named via Dialog.Title — see ai-waiter-panel.tsx) — reused below so
     // Turn-1's own assertion can't be satisfied by the customer menu page
     // rendered behind it, which also lists "Paneer Dosa" as a menu item.
-    const aiDialog = page.getByRole("dialog", { name: "AI Waiter" });
+    const aiDialog = customerPage.getByRole("dialog", { name: "AI Waiter" });
     await expect(
       aiDialog.getByRole("heading", { name: "AI Waiter" }),
     ).toBeVisible();
 
-    const chatInput = page.getByLabel("Message the AI waiter");
+    const chatInput = customerPage.getByLabel("Message the AI waiter");
 
     // --- "What vegetarian dishes do you have?" -> AI searches the real menu ---
     await chatInput.fill("What vegetarian dishes do you have?");
-    await page.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send" }).click();
     // Scoped to the dialog (not a bare page-wide getByText) — the
     // customer's own menu page, rendered behind this dialog, also shows
     // "Paneer Dosa" as a menu item, so an unscoped text match can be
@@ -179,13 +189,13 @@ test.describe("AI waiter: full conversational order flow", () => {
 
     // --- Ask for it; the item has a required modifier, so the AI must ask ---
     await chatInput.fill("I'll have the Paneer Dosa");
-    await page.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send" }).click();
     await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
     await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
 
     // --- Answer the required modifier ---
     await chatInput.fill("Medium please");
-    await page.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send" }).click();
     await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
     await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
 
@@ -198,20 +208,22 @@ test.describe("AI waiter: full conversational order flow", () => {
     // model's exact call sequence (a real duplicate-add efficiency concern
     // is a prompt/model-choice question, not something this e2e flow test
     // should gate on). ---
-    await page.goto(`/r/${slug}/cart`);
-    await expect(page.getByText("Paneer Dosa").first()).toBeVisible();
-    await expect(page.getByText("Medium").first()).toBeVisible();
+    await customerPage.goto(`/r/${slug}/cart`);
+    await expect(customerPage.getByText("Paneer Dosa").first()).toBeVisible();
+    await expect(customerPage.getByText("Medium").first()).toBeVisible();
 
     // --- Back to the AI waiter: ask what's in the cart, then place the order ---
-    await page.getByRole("button", { name: "Open AI waiter chat" }).click();
+    await customerPage
+      .getByRole("button", { name: "Open AI waiter chat" })
+      .click();
     await chatInput.fill("What's in my cart?");
-    await page.getByRole("button", { name: "Send" }).click();
-    await expect(page.getByText(/paneer dosa/i).last()).toBeVisible({
+    await customerPage.getByRole("button", { name: "Send" }).click();
+    await expect(customerPage.getByText(/paneer dosa/i).last()).toBeVisible({
       timeout: 60_000,
     });
 
     await chatInput.fill("Please place the order");
-    await page.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send" }).click();
     // Wait for the turn to actually finish (not a fixed sleep — a fixed
     // 2s wait here was observed to check for a confirmation prompt and
     // then navigate away before the model's real turn had finished, since
@@ -220,24 +232,28 @@ test.describe("AI waiter: full conversational order flow", () => {
     // deciding whether the model asked for confirmation.
     await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
     await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
-    const confirmPrompt = page.getByText(/confirm|yes/i).last();
+    const confirmPrompt = customerPage.getByText(/confirm|yes/i).last();
     if (await confirmPrompt.isVisible().catch(() => false)) {
       await chatInput.fill("Yes, place it");
-      await page.getByRole("button", { name: "Send" }).click();
+      await customerPage.getByRole("button", { name: "Send" }).click();
       await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
       await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
     }
 
     // --- Verify a real order actually exists — independently of the AI's own claim ---
-    await page.goto(`/r/${slug}/orders`);
-    await expect(page.getByText(/Order #\d+/)).toBeVisible({ timeout: 15_000 });
+    await customerPage.goto(`/r/${slug}/orders`);
+    await expect(customerPage.getByText(/Order #\d+/)).toBeVisible({
+      timeout: 15_000,
+    });
 
     // --- Ask the AI for status; it must reflect the real order ---
-    await page.getByRole("button", { name: "Open AI waiter chat" }).click();
+    await customerPage
+      .getByRole("button", { name: "Open AI waiter chat" })
+      .click();
     await chatInput.fill("Where is my order?");
-    await page.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send" }).click();
     await expect(
-      page.getByText(/received|confirmed|preparing|ready/i).last(),
+      customerPage.getByText(/received|confirmed|preparing|ready/i).last(),
     ).toBeVisible({
       timeout: 60_000,
     });
@@ -249,6 +265,7 @@ test.describe("AI waiter: never blocks normal ordering", () => {
 
   test("the full menu -> cart -> order flow works whether or not the AI waiter is configured/available", async ({
     page,
+    context,
   }) => {
     const testId = Date.now();
     const email = `e2e-ai-fallback-${testId}@example.com`;
@@ -306,20 +323,27 @@ test.describe("AI waiter: never blocks normal ordering", () => {
     // button happens to be offered in this environment (it's an
     // independent enhancement, never a dependency of ordering — spec
     // section 32/46). ---
-    await page.goto(customerUrl);
-    await page.waitForURL(new RegExp(`/r/${slug}/menu`));
-    await page.getByText("Veg Thali").click();
-    await page.waitForURL(/\/item\//);
-    await page.getByRole("button", { name: /Add to cart/ }).click();
-    await page.getByRole("link", { name: "View cart" }).click();
-    await page.waitForURL(/\/cart/);
-    await page.getByRole("button", { name: "Place order" }).click();
-    await page.waitForURL(/\/order\/.+/);
+    // baseURL is NOT inherited by a context created this way, and several
+    // diner steps navigate with a relative path. Without it those gotos
+    // resolve against about:blank and the page never arrives.
+    const customerContext = await context.browser()!.newContext({
+      baseURL: "http://localhost:3000",
+    });
+    const customerPage = await customerContext.newPage();
+    await customerPage.goto(customerUrl);
+    await customerPage.waitForURL(new RegExp(`/r/${slug}/menu`));
+    await customerPage.getByText("Veg Thali").click();
+    await customerPage.waitForURL(/\/item\//);
+    await customerPage.getByRole("button", { name: /Add to cart/ }).click();
+    await customerPage.getByRole("link", { name: "View cart" }).click();
+    await customerPage.waitForURL(/\/cart/);
+    await customerPage.getByRole("button", { name: "Place order" }).click();
+    await customerPage.waitForURL(/\/order\/.+/);
     // Scoped to the heading, not plain getByText: this page's <title> is
     // also "Order #N" (see generateMetadata in order/[orderId]/page.tsx),
     // which makes an unscoped text match ambiguous once fully rendered.
     await expect(
-      page.getByRole("heading", { name: /Order #\d+/ }),
+      customerPage.getByRole("heading", { name: /Order #\d+/ }),
     ).toBeVisible();
   });
 });

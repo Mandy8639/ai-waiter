@@ -29,6 +29,12 @@ test.describe("customer QR-to-order flow", () => {
     page,
     context,
   }) => {
+    // A second browser context means a second cold page load on top of the
+    // dashboard setup this test already does, which pushes it past the 30s
+    // default. Raised here rather than globally so every other spec keeps
+    // the tighter budget.
+    test.setTimeout(60_000);
+
     const testId = Date.now();
     const email = `e2e-order-flow-${testId}@example.com`;
     const password = "TestPassword123!";
@@ -88,48 +94,55 @@ test.describe("customer QR-to-order flow", () => {
 
     // --- "Scan" the QR: signs the staff member out, starts a fresh
     // anonymous customer session ---
-    await page.goto(customerUrl);
-    await page.waitForURL(new RegExp(`/r/${slug}/menu`));
+    // baseURL is NOT inherited by a context created this way, and several
+    // diner steps navigate with a relative path. Without it those gotos
+    // resolve against about:blank and the page never arrives.
+    const customerContext = await context.browser()!.newContext({
+      baseURL: "http://localhost:3000",
+    });
+    const customerPage = await customerContext.newPage();
+    await customerPage.goto(customerUrl);
+    await customerPage.waitForURL(new RegExp(`/r/${slug}/menu`));
 
     // --- Add the item to cart (no modifiers on this item) and submit ---
-    await page.getByText("Paneer Tikka").click();
-    await page.waitForURL(/\/item\//);
-    await page.getByRole("button", { name: /Add to cart/ }).click();
-    await expect(page.getByText("Added to cart.")).toBeVisible();
+    await customerPage.getByText("Paneer Tikka").click();
+    await customerPage.waitForURL(/\/item\//);
+    await customerPage.getByRole("button", { name: /Add to cart/ }).click();
+    await expect(customerPage.getByText("Added to cart.")).toBeVisible();
 
-    await page.getByRole("link", { name: "View cart" }).click();
-    await page.waitForURL(/\/cart/);
+    await customerPage.getByRole("link", { name: "View cart" }).click();
+    await customerPage.waitForURL(/\/cart/);
 
-    await page.getByRole("button", { name: "Place order" }).click();
-    await page.waitForURL(/\/order\/.+/);
+    await customerPage.getByRole("button", { name: "Place order" }).click();
+    await customerPage.waitForURL(/\/order\/.+/);
 
     // --- Confirmation page: order number + status shown ---
     // Scoped to the heading, not plain getByText: this page's <title> is
     // also "Order #N" (see generateMetadata in order/[orderId]/page.tsx),
     // so an unscoped text match becomes ambiguous once the page is fully
-    // server-rendered (reliably reproduces after page.reload() below).
+    // server-rendered (reliably reproduces after customerPage.reload() below).
     await expect(
-      page.getByRole("heading", { name: /Order #\d+/ }),
+      customerPage.getByRole("heading", { name: /Order #\d+/ }),
     ).toBeVisible();
-    await expect(page.getByText("Order received")).toBeVisible();
-    await expect(page.getByText("Paneer Tikka")).toBeVisible();
-    const orderUrl = page.url();
+    await expect(customerPage.getByText("Order received")).toBeVisible();
+    await expect(customerPage.getByText("Paneer Tikka")).toBeVisible();
+    const orderUrl = customerPage.url();
 
     // --- Refresh: the order is still visible (persisted, not client state) ---
-    await page.reload();
+    await customerPage.reload();
     await expect(
-      page.getByRole("heading", { name: /Order #\d+/ }),
+      customerPage.getByRole("heading", { name: /Order #\d+/ }),
     ).toBeVisible();
-    await expect(page.getByText("Paneer Tikka")).toBeVisible();
+    await expect(customerPage.getByText("Paneer Tikka")).toBeVisible();
 
     // --- No duplicate order was created. A double-tap on "Place order"
     // itself is covered precisely (including the concurrent-request race)
     // by the submit_order() idempotency tests in
     // tests/integration/db/orders.test.ts — this checks the real,
     // end-to-end, persisted outcome: exactly one order exists for this
-    // session, not two, via the session-scoped order history page.
-    await page.goto(`/r/${slug}/orders`);
-    await expect(page.getByText(/Order #\d+/)).toHaveCount(1);
+    // session, not two, via the session-scoped order history customerPage.
+    await customerPage.goto(`/r/${slug}/orders`);
+    await expect(customerPage.getByText(/Order #\d+/)).toHaveCount(1);
 
     // --- A different customer session (different anonymous identity, same
     // table) cannot open this order by URL — RLS-scoped, not just hidden
