@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportClientError } from "@/lib/observability/report-client";
 
 export default function GlobalError({
   error,
@@ -10,7 +11,13 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
+    // Kept alongside the report: the console is what a developer sees with
+    // the page open, and it still works with no DSN configured.
     console.error(error);
+    reportClientError(error, {
+      scope: "client.global-error",
+      digest: error.digest,
+    });
   }, [error]);
 
   return (

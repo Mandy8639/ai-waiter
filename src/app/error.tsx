@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { reportClientError } from "@/lib/observability/report-client";
 
 export default function Error({
   error,
@@ -12,6 +13,7 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error(error);
+    reportClientError(error, { scope: "client.error", digest: error.digest });
   }, [error]);
 
   return (
