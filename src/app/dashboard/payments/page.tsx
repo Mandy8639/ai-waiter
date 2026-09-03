@@ -11,6 +11,12 @@ import {
 import { isStripeConfigured } from "@/lib/payments/stripe";
 import { getRestaurantPlan } from "@/lib/billing/plan";
 import { formatFeeBps, formatMonthlyPrice } from "@/lib/billing/format";
+import {
+  getRestaurantSubscription,
+  SUBSCRIPTION_STATUS_LABELS,
+} from "@/lib/billing/subscription";
+import { startSubscriptionCheckout } from "@/lib/billing/subscription-actions";
+import { SubscribeButton } from "@/components/payments/subscribe-button";
 
 export const metadata = {
   title: "Payments — AI Waiter",
@@ -60,6 +66,17 @@ export default async function PaymentsPage() {
 
   const stripeConfigured = isStripeConfigured();
   const plan = await getRestaurantPlan(restaurant.id);
+  const subscription = await getRestaurantSubscription(restaurant.id);
+
+  // Every plan, so a restaurant can see what it could move to. Read
+  // through RLS: platform_plans is readable by any signed-in user because
+  // a price list is not a secret.
+  const { data: allPlans } = await supabase
+    .from("platform_plans")
+    .select(
+      "slug, name, monthly_price_cents, currency, fee_bps, stripe_price_id",
+    )
+    .order("monthly_price_cents");
 
   return (
     <div className="flex flex-col gap-6">
@@ -102,10 +119,76 @@ export default async function PaymentsPage() {
               The platform takes {formatFeeBps(plan.feeBps)} of each card
               payment, excluding tips. Cash payments are not charged.
             </p>
-            <p className="text-muted-foreground text-xs">
-              Monthly billing isn&apos;t switched on yet — only the per-payment
-              share is being collected today.
-            </p>
+            {subscription ? (
+              <p className="text-muted-foreground text-xs">
+                Subscription:{" "}
+                {SUBSCRIPTION_STATUS_LABELS[subscription.status] ??
+                  subscription.status}
+                {subscription.currentPeriodEnd &&
+                  ` · renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`}
+                {subscription.cancelAtPeriodEnd && " · ends at period end"}
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-xs">
+                No subscription — you&apos;re on the free plan.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* The other plans. This page is already owner/manager only, and
+          startSubscriptionCheckout() enforces the same boundary regardless
+          of what renders here. */}
+      {(allPlans ?? []).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Change plan</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 text-sm">
+            {(allPlans ?? []).map((p) => {
+              const isCurrent = plan?.slug === p.slug;
+              const isFree = p.monthly_price_cents === 0;
+              return (
+                <div
+                  key={p.slug}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">{p.name}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {formatMonthlyPrice(p.monthly_price_cents, p.currency)}
+                      {" · "}
+                      {formatFeeBps(p.fee_bps)} of each card payment
+                    </span>
+                  </div>
+                  {isCurrent ? (
+                    <span className="text-muted-foreground text-xs">
+                      Current plan
+                    </span>
+                  ) : isFree ? (
+                    <span className="text-muted-foreground text-xs">
+                      Cancel from Stripe to return to this
+                    </span>
+                  ) : !p.stripe_price_id ? (
+                    /* Said plainly rather than offering a button that opens
+                       a checkout Stripe cannot build. */
+                    <span className="text-muted-foreground text-xs">
+                      Not available yet
+                    </span>
+                  ) : (
+                    <SubscribeButton
+                      action={startSubscriptionCheckout.bind(
+                        null,
+                        restaurant.id,
+                        p.slug,
+                      )}
+                      label={`Subscribe to ${p.name}`}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}
