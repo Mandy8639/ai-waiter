@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { getStripe, isStripeConfigured } from "@/lib/payments/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report";
+import { resolvePeriodEnd } from "@/lib/billing/subscription-period";
 
 /**
  * Stripe's webhook for the PLATFORM account's own events.
@@ -116,9 +117,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true, unattributed: true });
     }
 
-    const periodEnd = (
-      subscription as unknown as { current_period_end?: number }
-    ).current_period_end;
+    // Read from the subscription ITEM as well as the top level: on API
+    // version 2026-08-26.dahlia the top-level field is gone, and reading
+    // only it silently yields a subscription with no renewal date.
+    const periodEnd = resolvePeriodEnd(subscription);
 
     const { error } = await admin.rpc("record_restaurant_subscription", {
       p_restaurant_id: restaurantId,
@@ -126,9 +128,7 @@ export async function POST(request: NextRequest) {
       p_stripe_customer_id: String(subscription.customer),
       p_stripe_subscription_id: subscription.id,
       p_status: subscription.status,
-      p_current_period_end: periodEnd
-        ? new Date(periodEnd * 1000).toISOString()
-        : null,
+      p_current_period_end: periodEnd,
       p_cancel_at_period_end: subscription.cancel_at_period_end ?? false,
     });
 
