@@ -27,3 +27,30 @@ export function envFloat(name: string, fallback: number): number {
   const parsed = Number.parseFloat(raw);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
+
+/**
+ * Parses a comma-separated env var into a trimmed, non-empty list,
+ * returning `fallback` when the variable is unset or contains nothing but
+ * separators and whitespace. Added for `AI_MODEL`, which accepts either a
+ * single model or an ordered preference list (primary first) so a model
+ * that goes down or hits its provider's rate limit doesn't take the
+ * feature down with it — see src/lib/ai/config.ts and
+ * docs/ai.md#model-fallback.
+ *
+ * Duplicates are dropped, preserving first-seen order: sending the same
+ * model twice in OpenRouter's `models` array buys nothing and just makes
+ * the logged preference list harder to read.
+ */
+export function envList(name: string, fallback: string[]): string[] {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    ),
+  ];
+  return parsed.length > 0 ? parsed : fallback;
+}

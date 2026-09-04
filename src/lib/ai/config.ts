@@ -1,5 +1,5 @@
 import "server-only";
-import { envInt } from "@/lib/env-helpers";
+import { envInt, envList } from "@/lib/env-helpers";
 
 /**
  * Centralized AI configuration — every tunable in one place, read from
@@ -40,9 +40,28 @@ const provider: AiProviderName =
  * routed to a model that reported adding an item to the cart without ever
  * calling add_item_to_cart.
  */
-const defaultModelByProvider: Record<AiProviderName, string> = {
-  anthropic: "claude-opus-5",
-  openrouter: "minimax/minimax-m3:free",
+const defaultModelsByProvider: Record<AiProviderName, string[]> = {
+  anthropic: ["claude-opus-5"],
+  /**
+   * An ordered preference list, not just a default: OpenRouter accepts a
+   * `models` array and transparently serves the first one that answers, so
+   * a free model hitting its provider's rate limit (or being delisted, as
+   * google/gemma-4-26b-a4b-it:free was) degrades to the next instead of
+   * taking the AI waiter down. Both entries were vetted by running this
+   * app's own tool sequence and checking the model actually emitted
+   * add_item_to_cart before claiming the item was added — see
+   * docs/ai.md#model-fallback. Deliberately different vendors (MiniMax,
+   * NVIDIA), since two models behind one provider tend to fail together.
+   *
+   * Only add a model here after it passes that same check. An unvetted
+   * entry reintroduces exactly the failure the curated list exists to
+   * prevent: see tools/cart-fact-detection.ts for what a model that
+   * fabricates tool calls does to a customer's order.
+   */
+  openrouter: [
+    "minimax/minimax-m3:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+  ],
 };
 
 export const aiConfig = {
@@ -57,7 +76,20 @@ export const aiConfig = {
    * is deliberately no `temperature` setting here — see
    * providers/anthropic.ts.
    */
-  model: process.env.AI_MODEL || defaultModelByProvider[provider],
+  /**
+   * The primary model — first entry of the resolved preference list.
+   * Anthropic uses only this one; OpenRouter sends the whole list.
+   */
+  model: envList("AI_MODEL", defaultModelsByProvider[provider])[0],
+
+  /**
+   * The rest of the preference list, in order, or [] when only one model
+   * is configured. `AI_MODEL` accepts a comma-separated list for this;
+   * a single value behaves exactly as it always has.
+   */
+  modelFallbacks: envList("AI_MODEL", defaultModelsByProvider[provider]).slice(
+    1,
+  ),
 
   /**
    * Anthropic-only: Claude Opus 5 has adaptive thinking on by default;

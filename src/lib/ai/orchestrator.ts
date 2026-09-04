@@ -156,7 +156,7 @@ export async function sendAiMessage(
         customerSessionId,
         toolCallCount: loopResult.toolCallCount,
         latencyMs: Date.now() - start,
-        model: aiConfig.model,
+        model: loopResult.servedModel ?? aiConfig.model,
         provider: aiConfig.provider,
         outcome: "refused",
       });
@@ -181,7 +181,7 @@ export async function sendAiMessage(
         customerSessionId,
         toolCallCount: loopResult.toolCallCount,
         latencyMs: Date.now() - start,
-        model: aiConfig.model,
+        model: loopResult.servedModel ?? aiConfig.model,
         provider: aiConfig.provider,
         outcome: "tool_limit_exceeded",
       });
@@ -205,7 +205,7 @@ export async function sendAiMessage(
         customerSessionId,
         toolCallCount: loopResult.toolCallCount,
         latencyMs: Date.now() - start,
-        model: aiConfig.model,
+        model: loopResult.servedModel ?? aiConfig.model,
         provider: aiConfig.provider,
         outcome: isCartStateGuard
           ? "cart_state_guard_exhausted"
@@ -235,7 +235,7 @@ export async function sendAiMessage(
         customerSessionId,
         toolCallCount: loopResult.toolCallCount,
         latencyMs: Date.now() - start,
-        model: aiConfig.model,
+        model: loopResult.servedModel ?? aiConfig.model,
         provider: aiConfig.provider,
         outcome: "ok",
       });
@@ -254,6 +254,8 @@ export async function sendAiMessage(
       customerSessionId,
       toolCallCount: 0,
       latencyMs: Date.now() - start,
+      // The call threw, so no model served this turn — the configured
+      // primary is the only meaningful thing to attribute it to.
       model: aiConfig.model,
       provider: aiConfig.provider,
       outcome: "provider_error",

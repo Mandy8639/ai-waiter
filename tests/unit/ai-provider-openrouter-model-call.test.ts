@@ -162,3 +162,111 @@ describe("callOpenRouterModel — live HTTP behavior", () => {
     expect(result.content).toEqual([{ type: "text", text: "Here you go." }]);
   });
 });
+
+describe("model fallback — the `models` preference list", () => {
+  /**
+   * Captures the request body the real fetch actually sends, because the
+   * bug this guards against is invisible in behavior: sending `model`
+   * alongside `models` makes OpenRouter silently ignore the fallback list
+   * and serve (or fail on) the primary only. Verified live against the
+   * real API before this was written.
+   */
+  async function captureBody(
+    params: Partial<Parameters<typeof callOpenRouterModel>[0]>,
+  ): Promise<Record<string, unknown>> {
+    let captured: Record<string, unknown> = {};
+    const endpoint = await listen((req, res) => {
+      let raw = "";
+      req.on("data", (chunk) => (raw += chunk));
+      req.on("end", () => {
+        captured = JSON.parse(raw);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            model: "served/by-fallback",
+            choices: [
+              {
+                message: { role: "assistant", content: "hi" },
+                finish_reason: "stop",
+              },
+            ],
+          }),
+        );
+      });
+    });
+    await callOpenRouterModel({
+      ...baseParams,
+      endpoint,
+      requestTimeoutMs: 5_000,
+      ...params,
+    });
+    return captured;
+  }
+
+  it("sends `model` alone when no fallbacks are configured", async () => {
+    const body = await captureBody({ fallbackModels: [] });
+    expect(body.model).toBe("test-model");
+    expect(body.models).toBeUndefined();
+  });
+
+  it("sends `model` alone when fallbackModels is omitted entirely", async () => {
+    const body = await captureBody({});
+    expect(body.model).toBe("test-model");
+    expect(body.models).toBeUndefined();
+  });
+
+  it("sends `models` with the primary first, and NEVER `model` alongside it", async () => {
+    const body = await captureBody({
+      fallbackModels: ["backup-a", "backup-b"],
+    });
+    expect(body.models).toEqual(["test-model", "backup-a", "backup-b"]);
+    // The whole point: `model` present here would silently disable fallback.
+    expect(body.model).toBeUndefined();
+  });
+
+  it("reports the model that actually served, not the one requested first", async () => {
+    const endpoint = await listen((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          model: "served/by-fallback",
+          choices: [
+            {
+              message: { role: "assistant", content: "hi" },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      );
+    });
+    const result = await callOpenRouterModel({
+      ...baseParams,
+      endpoint,
+      requestTimeoutMs: 5_000,
+      fallbackModels: ["backup-a"],
+    });
+    expect(result.servedModel).toBe("served/by-fallback");
+  });
+
+  it("leaves servedModel undefined when the provider doesn't report one", async () => {
+    const endpoint = await listen((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: { role: "assistant", content: "hi" },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      );
+    });
+    const result = await callOpenRouterModel({
+      ...baseParams,
+      endpoint,
+      requestTimeoutMs: 5_000,
+    });
+    expect(result.servedModel).toBeUndefined();
+  });
+});

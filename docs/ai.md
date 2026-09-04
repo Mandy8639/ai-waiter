@@ -240,6 +240,59 @@ allergen, price, availability, popularity, review, rating, or "chef recommendati
 that returned data — and to say the menu doesn't specify it when a customer asks something the
 data doesn't cover.
 
+## Model fallback
+
+`AI_MODEL` accepts either a single model or a **comma-separated preference list**, tried in order.
+A single value behaves exactly as it always has, so nothing about an existing configuration changes.
+
+This exists because a model can stop serving with no warning and no code change on our side.
+`google/gemma-4-26b-a4b-it:free` was chosen as the default for good, documented reasons and later
+began returning `429` on every request — "temporarily rate-limited upstream" from Google AI Studio.
+With one model configured, that is a total outage of the AI waiter. With a list, it is invisible.
+
+**OpenRouter does the routing, not us.** The request sends a `models` array and OpenRouter serves
+the first entry that can answer, so there is no retry loop, no partial-turn recovery, and no extra
+latency on the happy path.
+
+> ⚠️ **`model` and `models` must never both be sent.** The singular field wins and the fallback
+> list is silently ignored — no error, no warning, the fallback simply never happens. This was
+> confirmed live against the real API: a dead primary plus a healthy fallback returned `429` with
+> both fields set, and succeeded with only `models`. `openrouter-model-call.ts` sends exactly one
+> of them, and `tests/unit/ai-provider-openrouter-model-call.test.ts` asserts the request body to
+> keep it that way.
+
+**Anthropic is unaffected** — it takes the first entry and ignores the rest.
+
+### The list is curated, and that is the whole safety property
+
+A rotating model is precisely what `openrouter/free` is, and it is banned (see the model section
+above): it routed to a model that claimed to add an item to a cart without ever calling
+`add_item_to_cart`. Fallback reintroduces that exact risk the moment an unvetted model is appended
+"for coverage."
+
+So every entry must first pass the same check: run this app's own tool sequence
+(`search_menu` → `get_menu_item` → `add_item_to_cart`) and confirm the model **actually emits the
+`add_item_to_cart` call** before telling the customer the item was added. Current entries and their
+results at the time of selection:
+
+| Model                                    | Vendor  | Tool-loop result        |
+| ---------------------------------------- | ------- | ----------------------- |
+| `minimax/minimax-m3:free`                | MiniMax | 8/8, then 5/5 on re-vet |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | NVIDIA  | 5/5                     |
+
+Different vendors on purpose — two models behind one provider tend to fail together.
+`tests/unit/ai-default-model.test.ts` enforces the structural half of this (no aliases at any
+position, every entry pinned and `:free`, at least one fallback, no duplicates, more than one
+vendor). It cannot enforce the tool-calling half; that judgement is yours before you edit the list.
+
+### Logging reports the model that actually ran
+
+Because a later entry may serve the request, `logAiTurn`'s `model` field records the model
+OpenRouter reports in its response (`servedModel`), not the configured primary. Logging the
+configured value would name a model that never ran, which is worse than useless when debugging a
+model-specific problem. When the provider reports nothing — or the call threw before any model ran
+— it falls back to the configured primary.
+
 ## Cart grounding — never state cart contents from memory
 
 The same "assertion needs an authoritative source" rule the menu gets applies to the cart, and for

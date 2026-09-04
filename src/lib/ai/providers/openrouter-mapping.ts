@@ -35,6 +35,13 @@ export interface OpenRouterTool {
 }
 
 export interface OpenRouterChatResponse {
+  /**
+   * Which model actually served this response. Under a `models`
+   * preference list this can differ from the one requested first, so it —
+   * not the configured value — is what gets logged. See
+   * docs/ai.md#model-fallback.
+   */
+  model?: string;
   choices: Array<{
     message: {
       role: "assistant";
@@ -174,5 +181,6 @@ export function parseOpenRouterResponse(
     content: blocks,
     stopReason:
       choice?.finish_reason === "content_filter" ? "refusal" : undefined,
+    servedModel: response.model,
   };
 }

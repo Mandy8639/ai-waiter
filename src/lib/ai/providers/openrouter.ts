@@ -59,6 +59,7 @@ export function createOpenRouterProvider(): AiProvider {
             endpoint: OPENROUTER_ENDPOINT,
             apiKey,
             model: aiConfig.model,
+            fallbackModels: aiConfig.modelFallbacks,
             maxOutputTokens: aiConfig.maxOutputTokens,
             requestTimeoutMs: aiConfig.requestTimeoutMs,
             messages,
