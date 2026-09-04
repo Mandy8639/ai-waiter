@@ -145,8 +145,14 @@ they were covered.
    model would likely cut this materially; it has not been measured.
 6. **Load and concurrency at scale.** Beyond the concurrent-order-submission race fixed and
    verified earlier, no load testing has been done. Peak-service behavior is unknown.
-7. **Backup and restore.** Supabase's automatic backups have never been exercised with an actual
-   restore.
+7. **There are no backups of the production database.** Not "untested" — absent. The project is on
+   the Free plan, which includes no scheduled backups ("Free Plan does not include project
+   backups"), and point-in-time recovery is a Pro add-on from $100/month. A logical backup you
+   control now exists and its restore is verified end to end — 1,574/1,574 rows, every foreign key
+   satisfied — see [`docs/backup-and-restore.md`](./backup-and-restore.md). It covers the `public`
+   schema only, so it restores every restaurant, menu, order and payment record and **no logins**:
+   Supabase's `auth` schema is not in it. Managed backups, or a separate auth export, remain
+   genuinely open.
 
 ## Why not IP address (both rate limiters)
 
