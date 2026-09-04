@@ -97,7 +97,16 @@ test.describe("submit_order() concurrent-race protection (live)", () => {
     await customerPage.getByText("Race Test Dish").click();
     await customerPage.waitForURL(/\/item\//);
     await customerPage.getByRole("button", { name: /Add to cart/ }).click();
-    await expect(customerPage.getByText("Added to cart.")).toBeVisible();
+    // 15s, not the 5s default: this is a persistent <Alert> bound to the
+    // form action's success state (item-detail-form.tsx) with no
+    // auto-dismiss, so a longer timeout tolerates a loaded server without
+    // weakening the assertion — the element cannot vanish on its own.
+    // Observed failing at 5s only when the suite ran fully parallel
+    // alongside the 2-minute live-model AI spec, which is contention on
+    // the shared dev server, not a product defect.
+    await expect(customerPage.getByText("Added to cart.")).toBeVisible({
+      timeout: 15_000,
+    });
 
     await customerPage.goto(`/r/${slug}/cart`);
     await expect(

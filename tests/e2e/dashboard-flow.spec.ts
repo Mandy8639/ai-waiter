@@ -16,10 +16,28 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const hasRealSupabaseProject =
   supabaseUrl.length > 0 && !supabaseUrl.includes("placeholder");
 
+/**
+ * Set only by playwright.e2e-disposable.config.ts. The header above has
+ * always said "never use production credentials here" — this enforces it
+ * rather than trusting it.
+ *
+ * Without this, `npm run test:e2e` (which points at the live project) ran
+ * this spec's real /signup against production: it created auth users
+ * there, and then failed after 30s because that project has "Confirm
+ * email" on and nothing navigates to /onboarding without a human opening
+ * an email. A test that cannot pass where it is being run should say so,
+ * not time out.
+ */
+const isDisposableProject = process.env.E2E_DISPOSABLE_PROJECT === "1";
+
 test.describe("full dashboard flow", () => {
   test.skip(
     !hasRealSupabaseProject,
     "Requires a real Supabase test project (NEXT_PUBLIC_SUPABASE_URL unset or placeholder).",
+  );
+  test.skip(
+    !isDisposableProject,
+    "Requires the disposable Supabase project — run `npm run test:e2e:disposable`, not `npm run test:e2e`. This spec signs up a real user and needs 'Confirm email' off; see docs/development.md#e2e-disposable.",
   );
 
   test("signup -> create restaurant -> manage menu -> logout -> redirected to login", async ({
