@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { MessageCircle } from "lucide-react";
 import { AiWaiterPanel } from "./ai-waiter-panel";
 
 /**
@@ -16,21 +15,17 @@ import { AiWaiterPanel } from "./ai-waiter-panel";
 export function AiWaiter({ restaurantSlug }: { restaurantSlug: string }) {
   const [open, setOpen] = useState(false);
 
+  // The floating button lives INSIDE the panel's Dialog root, as a real
+  // Dialog.Trigger. It used to be a plain <button> calling setOpen(true)
+  // from out here, which meant Base UI never knew a trigger existed — so
+  // none of its focus lifecycle ran: focus never entered the dialog on
+  // open and never returned to the button on close. See
+  // docs/accessibility.md.
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Open AI waiter chat"
-        className="bg-primary text-primary-foreground fixed right-4 bottom-4 z-20 flex size-14 items-center justify-center rounded-full shadow-lg motion-safe:transition-transform motion-safe:hover:scale-105"
-      >
-        <MessageCircle className="size-6" aria-hidden="true" />
-      </button>
-      <AiWaiterPanel
-        restaurantSlug={restaurantSlug}
-        open={open}
-        onOpenChange={setOpen}
-      />
-    </>
+    <AiWaiterPanel
+      restaurantSlug={restaurantSlug}
+      open={open}
+      onOpenChange={setOpen}
+    />
   );
 }

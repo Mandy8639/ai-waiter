@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import { XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -54,6 +55,20 @@ function DialogContent({
         {...props}
       >
         {children}
+        {/*
+          Base UI's own guidance for a modal dialog: "render <Dialog.Close>
+          inside <Dialog.Popup> so touch screen readers can escape the
+          popup." Nothing in this app did, which left the AI waiter panel
+          with no dismiss affordance at all for anyone not using a mouse —
+          see docs/accessibility.md. Rendered here rather than per-dialog so
+          no future dialog can forget it.
+        */}
+        <DialogClose
+          aria-label="Close"
+          className="ring-offset-background focus-visible:ring-ring absolute top-3 right-3 flex size-8 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          <XIcon className="size-4" aria-hidden="true" />
+        </DialogClose>
       </DialogPrimitive.Popup>
     </DialogPortal>
   );

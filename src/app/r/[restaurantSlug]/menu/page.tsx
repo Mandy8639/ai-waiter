@@ -71,6 +71,15 @@ export default async function MenuPage({
 
   return (
     <div className="flex flex-1 flex-col gap-4">
+      {/*
+        Visually hidden, not visually added: the restaurant name is already
+        in the header and a visible duplicate would be redundant. But this
+        page had NO heading at all — the only page in the diner flow that
+        didn't — which left screen reader users nothing to navigate by on
+        the app's busiest screen. SC 1.3.1 / 2.4.6.
+      */}
+      <h1 className="sr-only">{restaurant.name} menu</h1>
+
       <form
         className="flex gap-2"
         action={`/r/${restaurantSlug}/menu`}
@@ -92,7 +101,10 @@ export default async function MenuPage({
       </form>
 
       {categories && categories.length > 0 && (
-        <div className="-mx-4 flex scrollbar-none gap-2 overflow-x-auto px-4 pb-1">
+        <nav
+          aria-label="Menu categories"
+          className="-mx-4 flex scrollbar-none gap-2 overflow-x-auto px-4 pb-1"
+        >
           <Link
             href={`/r/${restaurantSlug}/menu${q ? `?q=${encodeURIComponent(q)}` : ""}`}
             className={cn(
@@ -123,7 +135,7 @@ export default async function MenuPage({
               </Link>
             );
           })}
-        </div>
+        </nav>
       )}
 
       {!menuItems || menuItems.length === 0 ? (
