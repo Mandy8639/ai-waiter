@@ -176,6 +176,64 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["categories"]["Insert"]>;
         Relationships: [];
       };
+      menu_imports: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          created_by: string | null;
+          status: "uploaded" | "extracting" | "review" | "committed" | "failed";
+          source_paths: string[];
+          extraction_model: string | null;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          restaurant_id: string;
+          created_by?: string | null;
+          status?:
+            "uploaded" | "extracting" | "review" | "committed" | "failed";
+          source_paths?: string[];
+          extraction_model?: string | null;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["menu_imports"]["Insert"]>;
+        Relationships: [];
+      };
+      menu_import_items: {
+        Row: {
+          id: string;
+          import_id: string;
+          restaurant_id: string;
+          category_name: string;
+          name: string;
+          /** null means the menu stated no price — never coerce this to 0. */
+          price: number | null;
+          include: boolean;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          import_id: string;
+          restaurant_id: string;
+          category_name: string;
+          name: string;
+          price?: number | null;
+          include?: boolean;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["menu_import_items"]["Insert"]
+        >;
+        Relationships: [];
+      };
       menu_items: {
         Row: {
           id: string;
@@ -958,6 +1016,13 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      commit_menu_import: {
+        Args: { p_import_id: string };
+        Returns: {
+          categories_created: number;
+          items_created: number;
+        }[];
+      };
       get_table_by_token: {
         Args: { p_public_token: string };
         Returns: {

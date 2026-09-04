@@ -63,6 +63,38 @@ export async function createTestDb(): Promise<TestDb> {
       select nullif(current_setting('app.current_user_id', true), '')::uuid
     $$;
 
+    -- Supabase's storage schema, stubbed for the same reason auth is: the
+    -- migrations reference it (menu-import uploads live in a bucket with
+    -- its own RLS), and PGlite has no Supabase platform layer. Only the
+    -- pieces the migrations actually touch are modelled.
+    create schema storage;
+
+    create table storage.buckets (
+      id text primary key,
+      name text not null,
+      public boolean not null default false,
+      file_size_limit bigint,
+      allowed_mime_types text[]
+    );
+
+    create table storage.objects (
+      id uuid primary key default gen_random_uuid(),
+      bucket_id text references storage.buckets (id),
+      name text not null,
+      owner uuid,
+      created_at timestamptz not null default now()
+    );
+
+    alter table storage.objects enable row level security;
+
+    -- Matches Supabase's own helper: the path's folder segments, i.e.
+    -- everything before the final '/'. The storage policies scope on
+    -- [1], the restaurant id that namespaces each upload.
+    create function storage.foldername(name text) returns text[]
+    language sql immutable as $$
+      select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1]
+    $$;
+
     create role authenticated nologin;
     create role anon nologin;
     -- The Stripe webhook writes as service_role, and migrations grant

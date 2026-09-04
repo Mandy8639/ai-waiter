@@ -57,12 +57,25 @@ export default async function MenuPage() {
           </p>
         </div>
         {canManage && (
-          <Link
-            href="/dashboard/menu/new"
-            className={buttonVariants({ variant: "default" })}
-          >
-            New menu item
-          </Link>
+          <div className="flex items-center gap-2">
+            {/*
+              Offered alongside manual entry rather than instead of it: a
+              restaurant with 150 items should not type them all in, and a
+              restaurant adding one dish should not have to photograph it.
+            */}
+            <Link
+              href="/dashboard/menu/import"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Import from photos
+            </Link>
+            <Link
+              href="/dashboard/menu/new"
+              className={buttonVariants({ variant: "default" })}
+            >
+              New menu item
+            </Link>
+          </div>
         )}
       </div>
 
