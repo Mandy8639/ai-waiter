@@ -19,7 +19,8 @@
     "test:e2e": "playwright test",
     "test:e2e:disposable": "playwright test --config=playwright.e2e-disposable.config.ts",
     "db:seed:users": "tsx scripts/seed-dev-users.ts",
-    "billing:setup-prices": "tsx --env-file=.env.local scripts/setup-stripe-prices.ts"
+    "billing:setup-prices": "tsx --env-file=.env.local scripts/setup-stripe-prices.ts",
+    "billing:preflight": "tsx --env-file=.env.local scripts/check-stripe-mode.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
