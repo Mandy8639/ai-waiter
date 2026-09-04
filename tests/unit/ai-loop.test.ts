@@ -330,7 +330,7 @@ describe("runConversationLoop", () => {
     expect(callModel.mock.calls.length).toBeLessThanOrEqual(3 * 2 + 10);
   });
 
-  describe("textAcceptanceGuard (menu-factuality guard integration)", () => {
+  describe("textAcceptanceGuards (menu-factuality and cart-state guard integration)", () => {
     const appendUserMessage = (messages: FakeMessage[], text: string) => [
       ...messages,
       { role: "user", note: text },
@@ -369,11 +369,14 @@ describe("runConversationLoop", () => {
         fakeParams({
           callModel,
           callTool,
-          textAcceptanceGuard: {
-            shouldAccept,
-            correctiveInstruction: "please use a menu tool",
-            appendUserMessage,
-          },
+          textAcceptanceGuards: [
+            {
+              id: "menu_fact",
+              shouldAccept,
+              correctiveInstruction: "please use a menu tool",
+              appendUserMessage,
+            },
+          ],
         }),
       );
 
@@ -395,11 +398,14 @@ describe("runConversationLoop", () => {
         fakeParams({
           callModel,
           callTool,
-          textAcceptanceGuard: {
-            shouldAccept,
-            correctiveInstruction: "please use a menu tool",
-            appendUserMessage,
-          },
+          textAcceptanceGuards: [
+            {
+              id: "menu_fact",
+              shouldAccept,
+              correctiveInstruction: "please use a menu tool",
+              appendUserMessage,
+            },
+          ],
         }),
       );
 
@@ -410,7 +416,7 @@ describe("runConversationLoop", () => {
       expect(callTool).not.toHaveBeenCalled();
     });
 
-    it("C.8 non-flagged turn (no textAcceptanceGuard passed) -> existing text-only behavior is completely unchanged", async () => {
+    it("C.8 non-flagged turn (no textAcceptanceGuards passed) -> existing text-only behavior is completely unchanged", async () => {
       const callModel = vi
         .fn<() => Promise<LoopModelResponse>>()
         .mockResolvedValue({
@@ -452,17 +458,136 @@ describe("runConversationLoop", () => {
         fakeParams({
           callModel,
           callTool,
-          textAcceptanceGuard: {
-            shouldAccept,
-            correctiveInstruction: "please use a menu tool",
-            appendUserMessage,
-          },
+          textAcceptanceGuards: [
+            {
+              id: "menu_fact",
+              shouldAccept,
+              correctiveInstruction: "please use a menu tool",
+              appendUserMessage,
+            },
+          ],
         }),
       );
 
       expect(callModel).toHaveBeenCalledTimes(2);
       expect(result.finalText).toBe("Here's what's vegetarian.");
       expect(result.guardCorrectionExhausted).toBe(false);
+    });
+
+    it("passes the candidate reply to shouldAccept, so a guard can key off what the model said", async () => {
+      const callModel = vi
+        .fn<() => Promise<LoopModelResponse>>()
+        .mockResolvedValue({
+          content: [{ type: "text", text: "you now have two dosas" }],
+        });
+      const shouldAccept = vi.fn(() => true);
+
+      await runConversationLoop(
+        fakeParams({
+          callModel,
+          callTool: vi.fn(),
+          textAcceptanceGuards: [
+            {
+              id: "cart_state",
+              shouldAccept,
+              correctiveInstruction: "read the cart",
+              appendUserMessage,
+            },
+          ],
+        }),
+      );
+
+      expect(shouldAccept).toHaveBeenCalledWith([], "you now have two dosas");
+    });
+
+    it("the first rejecting guard owns the single corrective round", async () => {
+      const callModel = vi
+        .fn<() => Promise<LoopModelResponse>>()
+        .mockResolvedValue({ content: [{ type: "text", text: "nope" }] });
+      const appended: string[] = [];
+      const recordingAppend = (messages: FakeMessage[], text: string) => {
+        appended.push(text);
+        return appendUserMessage(messages, text);
+      };
+
+      const result = await runConversationLoop(
+        fakeParams({
+          callModel,
+          callTool: vi.fn(),
+          textAcceptanceGuards: [
+            {
+              id: "menu_fact",
+              shouldAccept: () => true,
+              correctiveInstruction: "use a menu tool",
+              appendUserMessage: recordingAppend,
+            },
+            {
+              id: "cart_state",
+              shouldAccept: () => false,
+              correctiveInstruction: "read the cart",
+              appendUserMessage: recordingAppend,
+            },
+          ],
+        }),
+      );
+
+      // Only the guard that actually rejected gets to inject its note.
+      expect(appended).toEqual(["read the cart"]);
+      expect(result.exhaustedGuardId).toBe("cart_state");
+      expect(result.guardCorrectionExhausted).toBe(true);
+    });
+
+    it("shares one retry across guards rather than one retry each", async () => {
+      const callModel = vi
+        .fn<() => Promise<LoopModelResponse>>()
+        .mockResolvedValue({ content: [{ type: "text", text: "nope" }] });
+
+      const result = await runConversationLoop(
+        fakeParams({
+          callModel,
+          callTool: vi.fn(),
+          textAcceptanceGuards: [
+            {
+              id: "menu_fact",
+              shouldAccept: () => false,
+              correctiveInstruction: "use a menu tool",
+              appendUserMessage,
+            },
+            {
+              id: "cart_state",
+              shouldAccept: () => false,
+              correctiveInstruction: "read the cart",
+              appendUserMessage,
+            },
+          ],
+        }),
+      );
+
+      // Two guards, still exactly one corrective retry: 2 model calls.
+      expect(callModel).toHaveBeenCalledTimes(2);
+      expect(result.exhaustedGuardId).toBe("menu_fact");
+    });
+
+    it("leaves exhaustedGuardId undefined on an accepted reply", async () => {
+      const result = await runConversationLoop(
+        fakeParams({
+          callModel: vi
+            .fn<() => Promise<LoopModelResponse>>()
+            .mockResolvedValue({ content: [{ type: "text", text: "hi" }] }),
+          callTool: vi.fn(),
+          textAcceptanceGuards: [
+            {
+              id: "cart_state",
+              shouldAccept: () => true,
+              correctiveInstruction: "read the cart",
+              appendUserMessage,
+            },
+          ],
+        }),
+      );
+
+      expect(result.guardCorrectionExhausted).toBe(false);
+      expect(result.exhaustedGuardId).toBeUndefined();
     });
   });
 });

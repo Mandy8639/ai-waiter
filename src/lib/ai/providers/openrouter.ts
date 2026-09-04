@@ -11,10 +11,7 @@ import {
   appendUserMessage,
   type OpenRouterMessage,
 } from "./openrouter-mapping";
-import {
-  hasAuthoritativeMenuFactSource,
-  MENU_FACT_CORRECTIVE_INSTRUCTION,
-} from "../tools/menu-fact-detection";
+import { buildTextAcceptanceGuards } from "./text-acceptance-guards";
 import type { AiProvider, AiConversationTurn } from "./types";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
@@ -70,13 +67,10 @@ export function createOpenRouterProvider(): AiProvider {
         callTool: turn.callTool,
         appendAssistantMessage,
         appendToolResultMessage,
-        textAcceptanceGuard: turn.requiresAuthoritativeMenuSource
-          ? {
-              shouldAccept: hasAuthoritativeMenuFactSource,
-              correctiveInstruction: MENU_FACT_CORRECTIVE_INSTRUCTION,
-              appendUserMessage,
-            }
-          : undefined,
+        textAcceptanceGuards: buildTextAcceptanceGuards({
+          requiresAuthoritativeMenuSource: turn.requiresAuthoritativeMenuSource,
+          appendUserMessage,
+        }),
       });
     },
   };
