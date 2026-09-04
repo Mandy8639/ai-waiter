@@ -16,8 +16,8 @@ worth keeping:
 
 |                                   |                                                                                                                                                              |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Unit + integration tests          | **1099 passing** (78 files: 52 unit, 26 PGlite integration)                                                                                                  |
-| E2E specs                         | 9 (`tests/e2e/`)                                                                                                                                             |
+| Unit + integration tests          | **1118 passing** (79 files: 53 unit, 26 PGlite integration)                                                                                                  |
+| E2E                               | `npm run test:e2e` **17 passed / 1 skipped / 0 failed**; `npm run test:e2e:disposable` **1 passed** (9 specs total)                                          |
 | Migrations                        | 61 applied to production since 2026-08-28                                                                                                                    |
 | Production                        | https://ai-waiter-two.vercel.app, auto-deployed from `main`                                                                                                  |
 | Supabase (production)             | ref `dqypmprjcyxoeywsumxr` — a separate disposable project exists for `dashboard-flow.spec.ts`, see [`docs/development.md`](./development.md#e2e-disposable) |
@@ -90,6 +90,22 @@ Exercised through the real QR/table flow against production:
 - Model fallback — a request naming a dead primary was served by a later entry in the preference
   list (see [`docs/ai.md#model-fallback`](./ai.md#model-fallback)).
 
+**The full conversational ordering path now completes against a live model** (2026-09-03, via
+`npm run test:e2e`'s `ai-waiter-flow.spec.ts`): QR scan → ask about vegetarian dishes → add an item
+with a required modifier → review cart → `request_order_confirmation` → confirm in a separate
+message → `submit_order` → a real order visible on the customer's own orders page. The order is
+asserted from the ordinary non-AI pages, not from anything the model claims.
+
+Two honest qualifications on that:
+
+- It ran against **localhost** with the live Supabase project and a live OpenRouter model — not
+  against the deployed production app. The database, the model and the confirmation gate are all
+  real; the web tier is the local build.
+- It had **never passed before**. The spec sent the confirmation only when a `/confirm|yes/i`
+  regex happened to match, which made a server-enforced mandatory turn conditional on a free
+  model's phrasing — so the order was silently never placed. This document previously listed the
+  path as unvalidated, correctly, for that reason.
+
 ## Not validated
 
 Nothing below has been proven. Several are listed precisely because it would be easy to assume
@@ -104,31 +120,32 @@ they were covered.
    or a leftover "active" test subscription keeps granting a paid plan's fee rate in live mode.
    Run `npm run billing:preflight` to see the current state. Until a real payment completes, the
    payments system is unproven against real money regardless of how thoroughly test mode passes.
-2. **The AI ordering path is half-unvalidated.** `request_order_confirmation` → `submit_order` has
-   **never run live**. Menu questions and cart writes are validated; actually placing an order
-   through the AI is not, and rests on unit and E2E coverage only.
-3. **The Anthropic provider has never served a live turn.** Every live AI turn to date has gone
+2. **The Anthropic provider has never served a live turn.** Every live AI turn to date has gone
    through OpenRouter. `AI_PROVIDER=anthropic` is wired and typechecked but unexercised — the one
    attempt returned a credit-balance error.
 
 ### Known open, non-blocking
 
-4. **Realtime `INSERT` delivery to anonymous-auth connections** — a platform-side issue with
+3. **Realtime `INSERT` delivery to anonymous-auth connections** — a platform-side issue with
    Supabase ticket **SU-452145** open. Independently reproduced: publication, `REPLICA IDENTITY`
    and triggers all confirmed correct; the same JWT's `UPDATE` delivery and REST `SELECT` both
    work. **Zero functional impact on customer-facing code**, which never subscribes to `INSERT`;
    the kitchen board depends on it and has a working non-Realtime fallback. No code or RLS change
    is justified by the evidence.
-5. **One E2E spec fails** (17 passed / 1 failed at last full run). Not yet diagnosed.
-6. **AI latency on free models.** A one-tool-call turn measured **13.8s** in production.
+4. **E2E runs write to the production project.** `npm run test:e2e` points at whatever
+   `.env.local` configures, which is the production Supabase project, so every run leaves test
+   restaurants, menu items, sessions and orders behind. That is long-standing behaviour rather
+   than a regression, but it is not written down anywhere else, and it means the production
+   database accumulates test rows on every local run.
+5. **AI latency on free models.** A one-tool-call turn measured **13.8s** in production.
    `AI_REQUEST_TIMEOUT_MS=25000` leaves headroom, but that is the real-world latency currently
    shipping to diners. Note this is _not_ the daily-cap problem: the OpenRouter account is above
    the $10 lifetime-credit threshold (1,000 free requests/day rather than 50), but the configured
    models still carry the `:free` suffix and so still queue behind paid traffic. Moving to a paid
    model would likely cut this materially; it has not been measured.
-7. **Load and concurrency at scale.** Beyond the concurrent-order-submission race fixed and
+6. **Load and concurrency at scale.** Beyond the concurrent-order-submission race fixed and
    verified earlier, no load testing has been done. Peak-service behavior is unknown.
-8. **Backup and restore.** Supabase's automatic backups have never been exercised with an actual
+7. **Backup and restore.** Supabase's automatic backups have never been exercised with an actual
    restore.
 
 ## Why not IP address (both rate limiters)
@@ -312,6 +329,43 @@ explicit doc comment calling out the N+1-avoiding shape. No AI tool call retriev
 page of menu data, and the orchestrator never sends the full menu into a prompt — menu content only
 reaches the model through tool results, bounded by each tool's own `.limit()` (spec section 42's
 "never send the entire DB into every prompt" requirement, already satisfied since Batch 7).
+
+## Appendix: what the 2026-09-03 E2E pass turned up
+
+Two failures, where one was expected. Both are rule 2 again: the unit suite was fully green
+throughout.
+
+- **`ai-waiter-flow.spec.ts` never actually placed an order.** It sent the order confirmation only
+  `if (getByText(/confirm|yes/i).isVisible())`. But confirming is not optional —
+  `tools/order-confirmation.ts` requires the `request_order_confirmation` call to be _strictly
+  earlier_ than the message that triggers `submit_order` ("a confirmation call and a submit_order
+  call both happening within the same turn must never count"), so a separate customer message is
+  required on every run. Making that conditional on a loose regex meant a free model's phrasing
+  decided whether the mandatory turn happened at all. When it didn't match, the confirmation was
+  skipped, no order was placed, and the failure surfaced twenty lines later as "Order #… not
+  found" — pointing at the assertion rather than at the turn that never happened. The page
+  snapshot showed it exactly: "Cart 1" in the header, "You haven't placed an order yet." in the
+  body.
+
+- **`dashboard-flow.spec.ts` was running its real `/signup` against production.** Its only guard
+  asked whether `NEXT_PUBLIC_SUPABASE_URL` was a _placeholder_, which is false for the live
+  project — so `npm run test:e2e` created real auth users in the production Supabase project, then
+  failed after 30s because that project has "Confirm email" on and nothing reaches `/onboarding`
+  without a human opening an email. The spec's own header had always said "never use production
+  credentials here", and `docs/development.md` already claimed it "self-skips" in the main run.
+  Neither was enforced; both were believed. It now requires `E2E_DISPOSABLE_PROJECT`, set only by
+  `playwright.e2e-disposable.config.ts`, and both directions were verified — skipped in the main
+  run, still passing on the disposable project.
+
+  The general lesson is worth keeping separate from the fix: **a comment describing a safety
+  property is not the safety property**, and a document asserting behaviour does not create it.
+  Both existed here for weeks while the opposite happened on every run.
+
+- A third, smaller one: the `"Added to cart."` assertion at the default 5s timed out once under
+  parallel load. It is a persistent `<Alert>` bound to the form action's success state, with no
+  auto-dismiss — so this was contention with a two-minute live-model turn on the shared dev
+  server, not a disappearing toast. Raised to 15s in the four specs asserting it, which tolerates
+  load without weakening a check on an element that cannot vanish by itself.
 
 ## Appendix: bugs found by running E2E against real services (2026-08-28)
 
