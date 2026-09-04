@@ -36,17 +36,40 @@ npm run billing:preflight
 ```
 
 Read-only. It reports the mode of the configured `STRIPE_SECRET_KEY` and checks every Stripe id
-stored in the database against it, listing what must be reset and why. Run it **before** the
-cutover (expect all-OK in test mode) and **after** each step below.
+stored in the database against it, listing what must be reset and why.
+
+> Note its blind spot: it can only check rows that hold a Stripe id. `restaurant_plans` holds none,
+> so a stale paid-plan row passes preflight silently. Step 2 clears it explicitly for that reason. Run it **before** the
+> cutover (expect all-OK in test mode) and **after** each step below.
 
 ## The sequence
 
 Order matters. Each step is verifiable before moving on.
 
+### 0. Know which Stripe account you are in
+
+This project's test-mode work was done in a **Stripe Sandbox**, which is a separate account, not a
+toggle on the real one. Sandboxes cannot be activated for live mode at all, so "turn off test
+mode" is not the move — you switch accounts.
+
+|         | Account                                                           | Use                             |
+| ------- | ----------------------------------------------------------------- | ------------------------------- |
+| Sandbox | `acct_1UA0T2PBja26BrVt` — "Beacon Digital Consulting **sandbox**" | everything done so far          |
+| Live    | `acct_1UA0SwPI26hGxVnb` — "Beacon Digital Consulting"             | the real one, already activated |
+
+Confirmed 2026-09-04: the live account is activated (a `pk_live_...` key is present on its
+dashboard) and Connect settings are available on it. If a future account is _not_ activated,
+Stripe's own "Go live" checklist on the dashboard is the path — identity verification first, keys
+after.
+
+This matters beyond fetching a key: because the two are different accounts, **every** Stripe id in
+the database belongs to the sandbox and none of them exist in live. That is exactly what step 2
+resets.
+
 ### 1. Live API keys
 
-In Vercel → Production, replace `STRIPE_SECRET_KEY` with the live key (`sk_live_...`). Get it from
-the Stripe dashboard with the **Test mode** toggle **off**.
+In Vercel → Production, replace `STRIPE_SECRET_KEY` with the live key (`sk_live_...`), taken from
+the **live** account above — not the sandbox.
 
 Do not redeploy yet — the database still holds test-mode ids, and a deploy now would put a live key
 in front of them.
@@ -64,6 +87,25 @@ update public.platform_plans set stripe_price_id = null;
 -- a paid plan's fee rate in live mode.
 delete from public.restaurant_subscriptions
  where stripe_subscription_id like 'sub_%';
+
+-- restaurant_plans: delete too, and do NOT skip this.
+--
+-- Deleting the subscription does not reset the plan. record_restaurant_
+-- subscription() writes BOTH, but only the subscription row carries a
+-- stripe id, so a cutover that deletes "everything with a stripe id"
+-- leaves the plan behind. platform_fee_minor_units() reads
+-- restaurant_plans, so the restaurant keeps its paid plan's discounted
+-- rate with no subscription behind it — the exact silent revenue leak
+-- this runbook warns about, reintroduced by the runbook itself.
+--
+-- Found by running this procedure for real on 2026-09-04: after deleting
+-- the subscription, Nashta was still on `standard` at 0.50%.
+--
+-- Deleting is correct rather than repointing at the default:
+-- platform_fee_minor_units() coalesces a missing row to the default plan,
+-- so no row is exactly the state a brand-new restaurant is in.
+delete from public.restaurant_plans
+ where restaurant_id in (select id from public.restaurants);
 
 -- Connect accounts: delete so onboarding starts clean in live mode (step 5).
 delete from public.restaurant_payment_accounts
