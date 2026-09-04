@@ -222,6 +222,42 @@ allergen, price, availability, popularity, review, rating, or "chef recommendati
 that returned data — and to say the menu doesn't specify it when a customer asks something the
 data doesn't cover.
 
+## Cart grounding — never state cart contents from memory
+
+The same "assertion needs an authoritative source" rule the menu gets applies to the cart, and for
+the same reason. A live production test produced this exchange: the model told the customer _"you
+now have two chicken tikka masala in your order"_ when the cart held one. Nothing was fabricated
+that turn — an earlier turn (on a weaker free model) had claimed an add that never actually called
+`add_item_to_cart`, and the model then reasoned about the cart from conversation history instead of
+reading it back.
+
+`get_cart` is the only tool that returns the cart, so it is the only authoritative source for what
+the cart holds or costs. The cart mutations (`add_item_to_cart`, `update_cart_item`,
+`remove_cart_item`, `clear_cart`) each prove their own effect but none returns the resulting cart,
+so none of them substantiates an aggregate claim — exactly mirroring how `get_cart` doesn't count
+as an authoritative source for _menu_ facts.
+
+**Why this guard is shaped differently from the menu one.** `menu-fact-detection.ts` inspects the
+_customer's message_, because "how much is the dosa?" reliably predicts that the reply will state a
+menu fact. Cart-state claims don't work that way: the observed failure followed _"Please add one
+more chicken tikka masala"_ — a mutation request, not a question — so a message-keyword detector
+would never have fired. The unsafe assertion was in the _model's reply_, so `cart-fact-detection.ts`
+inspects that instead, via the `finalText` argument `loop.ts` passes to every guard's
+`shouldAccept`. Because it gates itself on the reply, it is wired unconditionally rather than behind
+a per-turn flag.
+
+Detection is sentence-scoped and anchor-gated to keep false positives cheap: ordinary waiter
+questions like _"Do you have any allergies?"_ must not be flagged, since a false positive costs a
+corrective round-trip and, if the model doesn't comply, replaces a perfectly good reply with the
+fallback text.
+
+Both guards run through the same bounded mechanism (`loop.ts#textAcceptanceGuards`): the first
+guard to reject a reply injects its corrective instruction, and the turn gets **exactly one** retry
+shared across all guards — never one retry per guard. If the retry doesn't help, the orchestrator
+substitutes that guard's own fallback wording and logs `cart_state_guard_exhausted` or
+`menu_fact_guard_exhausted`. As with every other rule here, the system prompt states the policy and
+the guard is what actually enforces it — see `docs/security.md#ai-tool-authorization`.
+
 ## Allergen safety
 
 Allergen and dietary questions are answered strictly from the `menu_item_allergens`/dietary-flag

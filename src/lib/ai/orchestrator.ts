@@ -13,6 +13,8 @@ import {
   looksLikeMenuFactQuestion,
   MENU_FACT_GUARD_FALLBACK_TEXT,
 } from "./tools/menu-fact-detection";
+import { CART_STATE_GUARD_FALLBACK_TEXT } from "./tools/cart-fact-detection";
+import { CART_STATE_GUARD_ID } from "./providers/text-acceptance-guards";
 import type { ToolContext } from "./tools/types";
 
 export interface SendAiMessageParams {
@@ -186,11 +188,18 @@ export async function sendAiMessage(
     }
 
     if (loopResult.guardCorrectionExhausted) {
-      // The menu-factuality guard's one corrective retry didn't get the
-      // model to consult a menu tool — fail safely rather than risking a
-      // fabricated/stale answer reaching the customer (see
-      // tools/menu-fact-detection.ts).
-      finalText = MENU_FACT_GUARD_FALLBACK_TEXT;
+      // A text-acceptance guard's one corrective retry didn't get the
+      // model to consult an authoritative tool — fail safely rather than
+      // risking a fabricated/stale answer reaching the customer (see
+      // tools/menu-fact-detection.ts and tools/cart-fact-detection.ts).
+      // Each guard has its own fallback wording because the two failures
+      // are not interchangeable: one means "I couldn't look up the menu",
+      // the other "I couldn't confirm your cart".
+      const isCartStateGuard =
+        loopResult.exhaustedGuardId === CART_STATE_GUARD_ID;
+      finalText = isCartStateGuard
+        ? CART_STATE_GUARD_FALLBACK_TEXT
+        : MENU_FACT_GUARD_FALLBACK_TEXT;
       logAiTurn({
         restaurantId,
         customerSessionId,
@@ -198,7 +207,9 @@ export async function sendAiMessage(
         latencyMs: Date.now() - start,
         model: aiConfig.model,
         provider: aiConfig.provider,
-        outcome: "menu_fact_guard_exhausted",
+        outcome: isCartStateGuard
+          ? "cart_state_guard_exhausted"
+          : "menu_fact_guard_exhausted",
       });
     }
 

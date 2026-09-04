@@ -50,8 +50,19 @@ export interface LoopToolOutcome {
  * `toolOutcomes` the loop already accumulates — no parallel state.
  */
 export interface TextAcceptanceGuard<TMessages> {
-  /** True = accept the text-only reply as final. False = needs correction. */
-  shouldAccept: (toolOutcomes: LoopToolOutcome[]) => boolean;
+  /**
+   * Identifies which guard rejected a reply, so the caller can pick the
+   * matching customer-facing fallback and log outcome without loop.ts
+   * knowing anything about menus, carts, or logging.
+   */
+  id: string;
+  /**
+   * True = accept the text-only reply as final. False = needs correction.
+   * Receives the candidate reply as well as the turn's tool outcomes:
+   * some guards key off what the model just said (see
+   * tools/cart-fact-detection.ts) rather than off the customer's message.
+   */
+  shouldAccept: (toolOutcomes: LoopToolOutcome[], finalText: string) => boolean;
   /** Injected as one corrective message before the single retry round. */
   correctiveInstruction: string;
   appendUserMessage: (messages: TMessages, text: string) => TMessages;
@@ -70,8 +81,12 @@ export interface RunConversationLoopParams<TMessages> {
     messages: TMessages,
     results: Array<{ toolUseId: string; content: string; isError: boolean }>,
   ) => TMessages;
-  /** Omitted entirely for turns that don't need it — existing callers/tests are unaffected. */
-  textAcceptanceGuard?: TextAcceptanceGuard<TMessages>;
+  /**
+   * Omitted or empty for turns that need no guarding. Evaluated in order;
+   * the first guard to reject a reply owns the single corrective round, so
+   * list the more specific guard first if two could ever fire together.
+   */
+  textAcceptanceGuards?: Array<TextAcceptanceGuard<TMessages>>;
 }
 
 export interface RunConversationLoopResult {
@@ -81,8 +96,10 @@ export interface RunConversationLoopResult {
   toolOutcomes: LoopToolOutcome[];
   /** True when the model declined to respond (stop_reason "refusal") — the caller must show a safe decline message, never treat `finalText` as a real reply. */
   refused: boolean;
-  /** True when textAcceptanceGuard rejected the reply twice in a row (the one bounded retry didn't help) — the caller must show its own safe fallback, `finalText` is empty. */
+  /** True when a text-acceptance guard rejected the reply twice in a row (the one bounded retry didn't help) — the caller must show its own safe fallback, `finalText` is empty. */
   guardCorrectionExhausted: boolean;
+  /** Which guard's `id` exhausted its retry, when `guardCorrectionExhausted` is true — lets the caller choose the matching fallback text. */
+  exhaustedGuardId?: string;
 }
 
 export async function runConversationLoop<TMessages>(
@@ -103,10 +120,11 @@ export async function runConversationLoop<TMessages>(
   // spin this loop forever.
   const absoluteIterationCeiling = params.maxToolCalls * 2 + 10;
   let iterations = 0;
-  // The menu-factuality guard's one bounded corrective round — separate
+  // The text-acceptance guards' one bounded corrective round — separate
   // from `maxToolCalls`/`absoluteIterationCeiling` since it's not a tool
-  // call, but still hard-capped at exactly one retry so a model that keeps
-  // refusing to call a menu tool can never spin this loop.
+  // call, but still hard-capped at exactly one retry (shared across all
+  // guards) so a model that keeps ignoring the correction can never spin
+  // this loop.
   let guardRetryUsed = false;
 
   while (true) {
@@ -158,16 +176,22 @@ export async function runConversationLoop<TMessages>(
         .join("\n")
         .trim();
 
-      const guard = params.textAcceptanceGuard;
-      if (guard && !guard.shouldAccept(toolOutcomes)) {
+      // The single retry round is shared across all guards, not one per
+      // guard: a model that ignores one corrective note is not made more
+      // reliable by stacking another, and per-guard retries would let a
+      // turn call the model once per guard.
+      const rejectingGuard = (params.textAcceptanceGuards ?? []).find(
+        (candidate) => !candidate.shouldAccept(toolOutcomes, finalText),
+      );
+      if (rejectingGuard) {
         if (!guardRetryUsed) {
           // One bounded corrective round: nudge the model, then let the
           // while loop run again — this does NOT consume the tool-call
           // budget, matching how "pause_turn" also loops without doing so.
           guardRetryUsed = true;
-          messages = guard.appendUserMessage(
+          messages = rejectingGuard.appendUserMessage(
             messages,
-            guard.correctiveInstruction,
+            rejectingGuard.correctiveInstruction,
           );
           continue;
         }
@@ -180,6 +204,7 @@ export async function runConversationLoop<TMessages>(
           toolOutcomes,
           refused: false,
           guardCorrectionExhausted: true,
+          exhaustedGuardId: rejectingGuard.id,
         };
       }
 
