@@ -149,10 +149,11 @@ established (`SECURITY DEFINER` functions following the existing narrow-count pa
 session-derived identity, RLS-respecting clients only). No payments, POS, voice, reservations,
 loyalty, delivery, or analytics were added, per this batch's explicit exclusions.
 
-Still pending (requires a real Supabase project and/or a real Anthropic API key, neither available
-in this sandbox): every Realtime/Auth/live-model validation item — see
-[`docs/production-audit.md`](./production-audit.md#confirmed-pending-requires-real-supabase-andor-real-anthropic-credentials)
-and the Batch 8 final report for the complete list.
+Still pending: see
+[`docs/production-audit.md`](./production-audit.md#not-validated) for the current list of what has
+and has not been validated against real services. (The Batch 8-era "requires a real Supabase
+project" framing no longer applies — a real project has since been provisioned and extensively
+live-validated.)
 
 ## What Batch 7 added
 
@@ -457,7 +458,7 @@ tests/
   e2e/                  Playwright end-to-end tests, including the QR-to-cart flow (Batch 4),
                         the QR-to-order flow (Batch 5), the full kitchen workflow (Batch 6),
                         and the conversational AI waiter flow (Batch 7)
-docs/                    This documentation set, plus docs/production-audit.md (Batch 8)
+docs/                    This documentation set, plus docs/production-audit.md
 ```
 
 `src/app/api/` now exists as of Batch 8, but only for the health check endpoint

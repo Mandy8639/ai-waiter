@@ -1,21 +1,151 @@
-# Production audit (Batch 8)
+# Production audit
 
-> **This document's original body (below) is a historical snapshot from Batch 8, written when no
-> real Supabase project existed and every "confirmed pending" item was genuinely untested. A real
-> Supabase project has since been provisioned and extensively live-validated, and a real
-> OpenRouter-based AI provider has been configured. See
-> ["Current status (Production Hardening pass)"](#current-status-production-hardening-pass) at the
-> bottom of this file for what's actually true today — do not rely on the "Confirmed pending"
-> section below as current.**
+**Last rewritten 2026-09-03.** This document states what has actually been validated against real
+services and what has not. Its one job is to be honest about that boundary, so read the
+[Not validated](#not-validated) section as carefully as the passing one — an item's absence from
+the passing list is meaningful.
 
-Full-system audit performed before any Batch 8 code changes, per the batch's own instruction to
-inspect everything rather than assume Batches 1–7 are correct because their tests pass. Findings
-below are grouped by outcome: **fixed this batch**, **reviewed and confirmed safe** (no change
-needed), and **confirmed pending** (needs a real Supabase project and/or a real Anthropic API key
-this sandbox doesn't have — see [`docs/security.md`](./security.md) and the Batch 8 final report
-for the full validation-status breakdown).
+Two rules this file is written under, carried over from the Batch 8 audit that started it and
+worth keeping:
 
-## Environment reality check (read this first)
+1. **Never convert "skipped" into "passed."** A test that didn't run is not a test that succeeded.
+2. **A green test suite is not validation.** Nine of the defects found in this project's history
+   were invisible to a fully passing suite and only appeared when something touched a live service.
+
+## Current state
+
+|                                   |                                                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit + integration tests          | **1099 passing** (78 files: 52 unit, 26 PGlite integration)                                                                                                  |
+| E2E specs                         | 9 (`tests/e2e/`)                                                                                                                                             |
+| Migrations                        | 61 applied to production since 2026-08-28                                                                                                                    |
+| Production                        | https://ai-waiter-two.vercel.app, auto-deployed from `main`                                                                                                  |
+| Supabase (production)             | ref `dqypmprjcyxoeywsumxr` — a separate disposable project exists for `dashboard-flow.spec.ts`, see [`docs/development.md`](./development.md#e2e-disposable) |
+| Lint / typecheck / format / build | clean                                                                                                                                                        |
+
+## What exists now that didn't at the last audit
+
+The Batch 8 body preserved below audits a system with no payments, no billing, no reservations and
+no error monitoring. All of the following shipped after it, across 45 commits:
+
+- **Payments** — Stripe Connect onboarding (Accounts **v2**; v1 is rejected outright for new
+  integrations), card charging with tips, session tabs paying several orders at once, cash
+  recording with reversal, and full/partial refunds. `src/lib/payments/` (18 modules).
+- **Platform billing** — per-restaurant plans with a basis-point fee taken from each card payment,
+  monthly subscriptions via a **separate** platform webhook endpoint, and a fee rate that follows
+  the paid plan automatically.
+- **Reservations** — customer-facing booking requests with staff confirmation, stored and displayed
+  in the restaurant's timezone.
+- **Error monitoring** — Sentry on both server (`@sentry/node`) and client (`@sentry/browser`),
+  deliberately not `@sentry/nextjs` (build-coupled and version-gated against standard Next, which
+  this fork is not). Includes the serverless flush that these SDKs need or events are silently
+  dropped, PII scrubbing, and server source-map upload keyed to the commit SHA.
+- **Reporting** — takings reporting with CSV export, and diner receipts that outlive the session.
+- **AI hardening** — a cart-state guard, a replaced default model, and model fallback (below).
+
+## Validated against real services
+
+Each item here was exercised against a live service, not a mock or PGlite.
+
+### Core ordering (validated 2026-08-28, unchanged since)
+
+Dashboard login and every sub-page; table QR generation; the full QR → menu → modifiers → cart
+flow; Supabase Anonymous Auth; a real order submitted and verified end to end (order number,
+pricing, item/modifier snapshots, audit trail, cart clearing, idempotency on retry); the complete
+kitchen/staff status-transition permission matrix with real staff logins; cross-tenant and
+cross-customer isolation checks; and Realtime `UPDATE` delivery on both the customer order page and
+the kitchen board.
+
+### Payments and platform billing (test mode)
+
+Proven end to end in Stripe **test mode**: a tab of 3 orders settled from a single webhook
+($59.97, $0.59 platform fee), a single order ($19.99, $0.19 fee), a subscription recorded as
+`status=active` on the `standard` plan, and — the part worth checking — **the per-payment fee
+dropped from 1% to 0.5% automatically when the plan changed**.
+
+> ⚠️ **This is test mode. No real money has ever moved through this application.** Live-mode
+> cutover is listed under [Not validated](#not-validated).
+
+### Error monitoring
+
+Verified in production, not staging: a server error captured from the Lambda runtime with an email
+alert delivered, a client-side error captured from a real browser, and 615 source-map artifacts
+uploaded against a release. Client source maps remain **off** (`productionBrowserSourceMaps`
+unset) — enabling them publishes client source, which is a deliberate trade, not an oversight.
+
+### AI waiter (validated 2026-09-03)
+
+Exercised through the real QR/table flow against production:
+
+- A menu question — called `search_menu`, got an empty result, and **said so rather than inventing
+  a dish**.
+- A correct refusal on a non-existent item ("papad" is a category, not an item).
+- A cart add — real `add_item_to_cart` call, real `cart_items` row, **verified in the database**
+  rather than trusted from the model's own claim.
+- The cart-state guard — asked for a count, the model called `get_cart` and reported the true
+  quantity, contradicting an earlier fabricated claim still sitting in its own conversation
+  history.
+- Provider-failure fallback — an exhausted Anthropic credit balance surfaced as a structured
+  `ai_error` while the menu, cart and ordering kept working.
+- Model fallback — a request naming a dead primary was served by a later entry in the preference
+  list (see [`docs/ai.md#model-fallback`](./ai.md#model-fallback)).
+
+## Not validated
+
+Nothing below has been proven. Several are listed precisely because it would be easy to assume
+they were covered.
+
+### Blocking a real launch
+
+1. **No real payment has ever been taken.** Everything is `sk_test_`. Live mode needs: live keys,
+   `npm run billing:setup-prices` re-run, both event destinations recreated (`events_from` is
+   create-only), both webhook secrets set, Connect re-onboarding with real bank details, and one
+   real card payment. Until that happens the payments system is unproven against real money,
+   regardless of how thoroughly test mode passes.
+2. **The AI ordering path is half-unvalidated.** `request_order_confirmation` → `submit_order` has
+   **never run live**. Menu questions and cart writes are validated; actually placing an order
+   through the AI is not, and rests on unit and E2E coverage only.
+3. **The Anthropic provider has never served a live turn.** Every live AI turn to date has gone
+   through OpenRouter. `AI_PROVIDER=anthropic` is wired and typechecked but unexercised — the one
+   attempt returned a credit-balance error.
+
+### Known open, non-blocking
+
+4. **Realtime `INSERT` delivery to anonymous-auth connections** — a platform-side issue with
+   Supabase ticket **SU-452145** open. Independently reproduced: publication, `REPLICA IDENTITY`
+   and triggers all confirmed correct; the same JWT's `UPDATE` delivery and REST `SELECT` both
+   work. **Zero functional impact on customer-facing code**, which never subscribes to `INSERT`;
+   the kitchen board depends on it and has a working non-Realtime fallback. No code or RLS change
+   is justified by the evidence.
+5. **One E2E spec fails** (17 passed / 1 failed at last full run). Not yet diagnosed.
+6. **AI latency on free models.** A one-tool-call turn measured **13.8s** in production.
+   `AI_REQUEST_TIMEOUT_MS=25000` leaves headroom, but that is the real-world latency currently
+   shipping to diners. Note this is _not_ the daily-cap problem: the OpenRouter account is above
+   the $10 lifetime-credit threshold (1,000 free requests/day rather than 50), but the configured
+   models still carry the `:free` suffix and so still queue behind paid traffic. Moving to a paid
+   model would likely cut this materially; it has not been measured.
+7. **Load and concurrency at scale.** Beyond the concurrent-order-submission race fixed and
+   verified earlier, no load testing has been done. Peak-service behavior is unknown.
+8. **Backup and restore.** Supabase's automatic backups have never been exercised with an actual
+   restore.
+
+## Why not IP address (both rate limiters)
+
+Consistent with the reasoning already established for AI conversation rate limiting in Batch 7
+(`docs/security.md#rate-limiting`): a restaurant's customers are commonly on the same shared
+Wi-Fi, so IP address both over-blocks (many legitimate diners, one IP) and under-identifies (NAT,
+proxies, mobile carriers). `table_id` (for session creation) and `customer_session_id` (for order
+submission) are both meaningful, already-authenticated-or-derived identity boundaries specific to
+this application's actual usage pattern, not a generic network-layer proxy for identity.
+
+## Appendix: Batch 8 audit (historical, 2026-08)
+
+> **Historical snapshot. Do not rely on it for current state** — it was written when no real
+> Supabase project existed, before payments, billing, reservations or monitoring were built, and
+> its environment description is no longer true of this repository. It is kept because its
+> findings and reasoning still explain why several things are the way they are.
+
+### Environment reality check (read this first)
 
 Before auditing code, the environment itself was checked:
 
@@ -34,9 +164,9 @@ This means every item in this batch requiring a live Supabase project or a live 
 is **PENDING**, not PASS — see the final report for the complete PASS/SKIPPED/PENDING breakdown
 (spec section 50's explicit requirement: never convert "skipped" into "passed").
 
-## Fixed this batch
+### Fixed this batch
 
-### 1. Customer session creation had no abuse protection
+#### 1. Customer session creation had no abuse protection
 
 **Risk**: `src/app/r/[restaurantSlug]/table/[token]/route.ts` created a new anonymous Supabase
 Auth identity + `customer_sessions` row on every request that didn't already have a reusable
@@ -50,7 +180,7 @@ never before reusing an existing one, so a returning customer is never throttled
 `table_id`, not IP (see "Why not IP" below). Default: 30 new sessions per table per 5-minute
 window — see [`docs/security.md`](./security.md#customer-session-creation-rate-limiting).
 
-### 2. Order submission had no protection beyond idempotency
+#### 2. Order submission had no protection beyond idempotency
 
 **Risk**: `submit_order()`'s idempotency guarantee (Batch 5) correctly collapses repeated calls
 with the _same_ key into one order, but nothing stopped a session from submitting many
@@ -64,7 +194,7 @@ orders. Default: 10 orders per session per 10-minute window. Verified this speci
 non-interference-with-retries property directly in
 `tests/integration/db/abuse-protection-rpcs.test.ts`.
 
-### 3. Four top-level docs were never updated for Batch 7
+#### 3. Four top-level docs were never updated for Batch 7
 
 `README.md`, `docs/database.md`, `docs/multi-tenancy.md`, and `docs/development.md`.
 
@@ -76,7 +206,7 @@ wrong mental model of what's implemented).
 
 **Fix**: All four updated this batch — see "Documentation" in the Batch 8 final report.
 
-### 4. E2E real-credential gating silently never actually ran, even with real credentials configured
+#### 4. E2E real-credential gating silently never actually ran, even with real credentials configured
 
 **Risk (the most significant finding in this audit)**: every e2e spec's `hasRealSupabaseProject`/
 `hasRealAiProvider` check reads `process.env.NEXT_PUBLIC_SUPABASE_URL`/`ANTHROPIC_API_KEY` at
@@ -101,14 +231,14 @@ new package) — before `defineConfig()` runs, so every spec file's top-level en
 `.env.local` exactly as the app itself would. See the header comment on that call site for the
 full mechanism.
 
-### 5. Two independent SDK-correctness fixes carried over from the Batch 7 final report
+#### 5. Two independent SDK-correctness fixes carried over from the Batch 7 final report
 
 Already applied at the end of Batch 7 (model id, sampling params removed, beta-endpoint refusal
 fallback, `effort`/`thinking` config) — re-verified as still correct against the `claude-api`
 skill's model catalog during this batch's model-validation pass (see "Model validation" below).
 No further change needed.
 
-### 6. Minor performance fix: sequential queries on the customer menu page
+#### 6. Minor performance fix: sequential queries on the customer menu page
 
 **Risk**: `src/app/r/[restaurantSlug]/menu/page.tsx` fetched `categories` and `menu_items` in two
 sequential `await`s despite neither depending on the other's result — an unnecessary round trip on
@@ -120,9 +250,9 @@ out an unbounded query in principle). Every other data-fetching path audited (it
 `getCart()`, the AI menu tools, the kitchen board query) was already parallelized/batched
 correctly — see "Performance audit" below for the full list reviewed.
 
-## Reviewed and confirmed safe (no change needed)
+### Reviewed and confirmed safe (no change needed)
 
-### AI rate limiting is already multi-instance-safe
+#### AI rate limiting is already multi-instance-safe
 
 `src/lib/ai/rate-limit.ts`'s `isRateLimited()` counts `ai_conversation_messages` rows via a
 Postgres query through the RLS-respecting client — there is no in-memory counter anywhere, so this
@@ -142,7 +272,7 @@ disproportionate: it would need either a hardcoded threshold divorced from the a
 whose worst case is negligible. Order submission (a real financial/inventory action) has its own,
 separate, actually-authoritative protection: `submit_order()`'s idempotency constraint.
 
-### AI tool authorization architecture
+#### AI tool authorization architecture
 
 Re-reviewed against the exact Batch 8 checklist (spec sections 16, 23, 24): every AI tool's
 `ToolContext` (`restaurant_id`, `customer_session_id`) is still derived exclusively from the
@@ -151,7 +281,7 @@ authenticated customer session server-side, never from a model argument — conf
 No regression since Batch 7. See [`docs/security.md`](./security.md#ai-tool-authorization) for the
 full mechanism, unchanged.
 
-### Error handling
+#### Error handling
 
 `src/lib/errors/database-error.ts`, `src/lib/orders/errors.ts` — both already map raw
 Postgres/RPC errors to a fixed set of customer-safe messages via error codes, never passing
@@ -160,7 +290,7 @@ catch block logs the raw error server-side (`logAiError`) but only ever returns 
 string to the caller. No stack trace, SQL fragment, or internal identifier reaches a response body
 anywhere in the codebase that was checked.
 
-### Secret handling
+#### Secret handling
 
 `grep`-audited the full `src` tree for `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `service_role`,
 `dangerouslySetInnerHTML`, and the five forbidden AI tool names — every hit is either the one
@@ -170,7 +300,7 @@ actual usage). `npm audit` reports zero vulnerabilities across all 843 dependenc
 optional + peer). See the Batch 8 final report's "Dependency/security scan" section for the raw
 output.
 
-### Performance — everything except the one page above
+#### Performance — everything except the one page above
 
 `src/lib/ai/tools/menu.ts#getMenuItem`, `src/lib/cart/get-cart.ts#getCart`,
 `src/lib/orders/kitchen.ts#getActiveOrdersForRestaurant`, and
@@ -181,123 +311,29 @@ page of menu data, and the orchestrator never sends the full menu into a prompt 
 reaches the model through tool results, bounded by each tool's own `.limit()` (spec section 42's
 "never send the entire DB into every prompt" requirement, already satisfied since Batch 7).
 
-## Confirmed pending (requires real Supabase and/or real Anthropic credentials)
+## Appendix: bugs found by running E2E against real services (2026-08-28)
 
-These cannot be validated in this sandbox — see the Batch 8 final report for the authoritative
-PASS/SKIPPED/PENDING table. Listed here as the specific, unresolved production risks a real
-deployment must still validate before launch:
-
-- **Realtime delivery under real network conditions** (reconnect timing, event ordering, actual
-  RLS-based `postgres_changes` authorization) — PGlite has no Realtime layer at all. Carried over
-  from every prior batch's final report.
-- **Live Anthropic API behavior**: the configured model (`claude-opus-5`), the beta
-  refusal-fallback endpoint, actual tool-calling round trips, actual refusal responses, actual
-  token usage/cost, and actual latency have only been verified against the `claude-api` skill's
-  documented/cached model catalog and API semantics — never against a live request in this
-  sandbox. See "Model validation" and "AI cost/latency" in the final report.
-- **Supabase Auth configuration**: whether Anonymous Auth is actually enabled on a target project
-  (a dashboard toggle, not something a migration can turn on) — documented as a required manual
-  step in `docs/development.md`, never verified against a real project here.
-- **Real cross-tenant/cross-customer/kitchen-simulation scenarios against a live project** (spec
-  sections 5, 6, 23, 24, 32) — the _logic_ for all of these is covered by the PGlite integration
-  suite (346 tests) and was re-reviewed in this audit, but PGlite is a single-connection WASM
-  Postgres, not a live multi-connection Supabase project with real Realtime/Auth/network behavior.
-- **Golden-path E2E with real services** (spec section 34) — `tests/e2e/ai-waiter-flow.spec.ts`
-  is written, confirmed to skip cleanly without real credentials (not silently, per the fix above —
-  it now correctly _would_ run given real ones), but has never executed against real services.
-
-## Why not IP address (both new rate limiters)
-
-Consistent with the reasoning already established for AI conversation rate limiting in Batch 7
-(`docs/security.md#rate-limiting`): a restaurant's customers are commonly on the same shared
-Wi-Fi, so IP address both over-blocks (many legitimate diners, one IP) and under-identifies (NAT,
-proxies, mobile carriers). `table_id` (for session creation) and `customer_session_id` (for order
-submission) are both meaningful, already-authenticated-or-derived identity boundaries specific to
-this application's actual usage pattern, not a generic network-layer proxy for identity.
-
-## Current status (Production Hardening pass)
-
-Everything in this section reflects real validation against the live Supabase project (ref
-`dqypmprjcyxoeywsumxr`) and the real OpenRouter provider — it supersedes the "Confirmed pending"
-list above, which was written before any of this existed.
-
-**Resolved / validated for real:**
-
-- Dashboard login/data, all dashboard sub-pages, table QR generation, the full customer QR → menu
-  → modifiers → cart flow, and Supabase Anonymous Auth are all validated against the real project.
-- A real order was submitted, verified end to end (order number, pricing, item/modifier snapshots,
-  audit trail, cart clearing, idempotency on retry) directly against the live database.
-- The full kitchen/staff status-transition permission matrix (pending → confirmed → preparing →
-  ready → served, plus the role-boundary rejections) was validated with real staff logins.
-- Cross-tenant/cross-customer security checks (can't read another session's cart/order, can't
-  modify totals/status, can't access another restaurant) were validated live where a real check was
-  possible, and otherwise rest on the existing PGlite integration-test suite per the standing
-  instruction not to manufacture unnecessary cross-tenant test data.
-- Realtime `UPDATE` delivery (both the customer order page and the kitchen board) is validated live.
-- `AI_PROVIDER=openrouter` + a real `OPENROUTER_API_KEY` is confirmed correctly wired end to end
-  (`/api/health`, provider resolution, model selection) with zero dependency on `ANTHROPIC_API_KEY`.
-- The e2e suite's real-AI gating (`tests/e2e/ai-waiter-flow.spec.ts`) now derives the required
-  credential from `AI_PROVIDER` generically instead of hardcoding `ANTHROPIC_API_KEY` — see
-  `tests/e2e/ai-provider-gate.ts` and its unit tests.
-- **A live AI conversation has now completed successfully** (2026-08-28, production-hardening
-  pass). Two direct real calls against the configured model (`AI_MODEL=openrouter/free`) via
-  `callOpenRouterModel()` (bypassing the DB/session layer entirely — no dashboard login or
-  customer session needed) both succeeded: a plain-text turn returned a real assistant reply in
-  ~19s, and a tool-forcing turn ("Do you have anything vegetarian under $15?" against a
-  `search_menu` tool) correctly returned a `tool_use` block with `is_vegetarian: true, max_price:
-15` extracted from natural language, in ~1.5s. The previously-observed `429 Too Many Requests`
-  was a transient external rate limit, not a persistent block — it has since cleared. The AI
-  waiter can now be considered validated against a live model for both plain text and
-  tool-calling; **the same has still never been verified against the Anthropic provider**
-  (`AI_PROVIDER=anthropic`), which requires a paid `ANTHROPIC_API_KEY` this environment doesn't
-  have.
-
-**Still genuinely open:**
-
-1. **Realtime `INSERT` delivery to anonymous-auth connections** — a platform-side issue,
-   independently reproduced with direct evidence (publication/`REPLICA IDENTITY`/trigger
-   configuration all confirmed correct; the identical JWT's `UPDATE` delivery and REST `SELECT`
-   both work; a `claims_role: anon` anomaly was observed for the anonymous connection despite its
-   JWT's `role` claim being `authenticated`). Supabase support ticket **SU-452145** is open. Has
-   zero functional impact on any customer-facing code (which never subscribes to `INSERT`); the
-   kitchen board depends on it but has a working non-Realtime fallback. No code, RLS, or migration
-   change has been made or is currently justified by the evidence.
-
-This is the only item still open as of 2026-08-28 — everything below was resolved this pass.
-
-**All 6 previously-"blocked" real-credential E2E specs now run and pass (2026-08-28).** This
-document previously (and, before that, incorrectly a second time) misdiagnosed all 6 as blocked by
-the live project's "Confirm email" Auth setting. In fact only `dashboard-flow.spec.ts` — the one
-spec that tests `/signup` itself — was ever genuinely blocked by it; the other 5 already used
-`test-auth-helpers.ts`'s `createConfirmedTestUser()` (Admin API, pre-confirmed, built in an earlier
-phase) and never touched `/signup`. Getting all 6 actually running live surfaced 5 real,
-previously-undiscoverable bugs — undiscoverable because these code paths had never actually
-executed against a real project before now:
+Kept because it is the clearest evidence for this document's second rule. Six real-credential specs
+had never executed against a real project; getting them running surfaced five defects that were
+undiscoverable until then.
 
 - `order-flow.spec.ts` asserted a cross-session order URL returns HTTP `404`. Not a security bug —
-  verified directly (a real second anonymous session) that RLS correctly serves the real "Page not
-  found" UI and never leaks order data; this Next.js version's own docs confirm a streamed
-  `notFound()` legitimately keeps a `200` status. Fixed to check rendered content instead.
-- `kitchen-flow.spec.ts`'s customer-side Realtime status updates occasionally missed a 15s window —
-  a real occasional Realtime miss correctly falling back to the 12s poll interval, just without
-  enough margin. Fixed by widening the margin; verified passing twice in a row.
-- `ai-waiter-flow.spec.ts` failed at a different point on nearly every run: a hardcoded
-  `waitForTimeout` racing a live model call, and a strict-mode-violating cart assertion — both
-  fixed by loosening to what the flow actually needs to prove, tolerating a live free model's
-  run-to-run variance rather than pinning exact wording or call counts.
+  verified directly that RLS serves the real "Page not found" UI and never leaks order data, and
+  this Next.js version's own docs confirm a streamed `notFound()` legitimately keeps a `200`.
+  Fixed to check rendered content instead.
+- `kitchen-flow.spec.ts` — a real occasional Realtime miss correctly falling back to the 12s poll,
+  but without enough margin in a 15s window. Margin widened.
+- `ai-waiter-flow.spec.ts` — a hardcoded `waitForTimeout` racing a live model call, plus a
+  strict-mode-violating cart assertion. Loosened to what the flow actually needs to prove, so a
+  live free model's run-to-run variance doesn't fail it.
 - `search_menu`'s Zod schema gave the model no guidance on its `query` field, so a weaker free
-  model observed passing a redundant text query alongside a `dietary` filter, self-defeating both
-  ("my searches are coming up empty" for a real vegetarian item). Fixed with `.describe()`
-  guidance; live-verified 3/3 fresh runs correctly using the dedicated filter instead.
-- `dashboard-flow.spec.ts` itself, once a disposable Supabase project actually existed to run it
-  against (see `docs/development.md#e2e-disposable`), turned up two more: a `waitForURL` race that
-  matched the already-current `/signup` URL before the real async signup/redirect ever completed
-  (misreporting "confirmation required" even when confirmation was genuinely off — confirmed by a
-  manual signup against the identical build succeeding), and a strict-mode-violating locator on the
-  categories page (a fresh restaurant legitimately renders "New category" as both a header link and
-  an empty-state CTA). Both fixed; verified 3 clean runs in a row.
+  model passed a redundant text query alongside a `dietary` filter, defeating both ("my searches
+  are coming up empty" for a real vegetarian item). Fixed with `.describe()` guidance.
+- `dashboard-flow.spec.ts` — a `waitForURL` race matching the already-current `/signup` URL before
+  the async signup/redirect completed, misreporting "confirmation required"; and a
+  strict-mode-violating locator where a fresh restaurant legitimately renders "New category" as
+  both a header link and an empty-state CTA.
 
-**Regression baseline as of this pass**: lint/typecheck/format all clean, `npm test` 574/574,
-production build succeeds, and all 6 real-credential E2E specs run and pass against their
-respective projects (`dashboard-flow.spec.ts` against the new disposable project via
-`npm run test:e2e:disposable`; the other 5 against the live project via `npm run test:e2e`).
+This document previously misdiagnosed all six as blocked by the live project's "Confirm email"
+setting. Only `dashboard-flow.spec.ts` ever was; the other five used `createConfirmedTestUser()`
+and never touched `/signup`.
