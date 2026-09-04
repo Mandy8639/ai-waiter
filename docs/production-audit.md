@@ -97,11 +97,13 @@ they were covered.
 
 ### Blocking a real launch
 
-1. **No real payment has ever been taken.** Everything is `sk_test_`. Live mode needs: live keys,
-   `npm run billing:setup-prices` re-run, both event destinations recreated (`events_from` is
-   create-only), both webhook secrets set, Connect re-onboarding with real bank details, and one
-   real card payment. Until that happens the payments system is unproven against real money,
-   regardless of how thoroughly test mode passes.
+1. **No real payment has ever been taken.** Everything is `sk_test_`. The full sequence is in
+   [`docs/going-live.md`](./going-live.md) — note it is **not** just an env-var change: test-mode
+   Stripe ids are stored in Postgres (`platform_plans.stripe_price_id`,
+   `restaurant_payment_accounts.stripe_account_id`, `restaurant_subscriptions`) and must be reset,
+   or a leftover "active" test subscription keeps granting a paid plan's fee rate in live mode.
+   Run `npm run billing:preflight` to see the current state. Until a real payment completes, the
+   payments system is unproven against real money regardless of how thoroughly test mode passes.
 2. **The AI ordering path is half-unvalidated.** `request_order_confirmation` → `submit_order` has
    **never run live**. Menu questions and cart writes are validated; actually placing an order
    through the AI is not, and rests on unit and E2E coverage only.
