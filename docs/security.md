@@ -178,7 +178,7 @@ reaches this check, so a returning customer re-scanning or refreshing is never t
 - **Limit**: 30 new sessions per table (default, `CUSTOMER_SESSION_RATE_LIMIT_MAX`).
 - **Window**: 5 minutes (default, `CUSTOMER_SESSION_RATE_LIMIT_WINDOW_SECONDS`).
 - **Identity boundary**: `table_id`, deliberately not IP address — see
-  [`docs/production-audit.md`](./production-audit.md#why-not-ip-address-both-new-rate-limiters).
+  [`docs/production-audit.md`](./production-audit.md#why-not-ip-address-both-rate-limiters).
 - **Failure behavior**: fails open on an RPC error (a transient failure here must never block a
   real customer from getting seated — this is an abuse throttle, not a security boundary); on
   exceeding the limit, redirects to `/r/table-not-found?reason=busy`, a distinct friendlier
