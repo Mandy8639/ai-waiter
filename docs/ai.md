@@ -98,11 +98,29 @@ authorization model this section describes is identical regardless of provider.
 - **API**: OpenRouter's OpenAI-compatible Chat Completions endpoint
   (`POST https://openrouter.ai/api/v1/chat/completions`), called via plain `fetch` — no new SDK
   dependency, since this is the one endpoint `src/lib/ai/providers/openrouter.ts` needs.
-- **Model**: `google/gemma-4-26b-a4b-it:free` by default (overridable via `AI_MODEL`) — confirmed
-  free, tool-calling-capable, and structured-output-capable on OpenRouter's own models page at the
-  time this was selected (Google DeepMind, Apache 2.0, 1.70% tool-call error rate, 100% 3-day
-  uptime). Chosen specifically so `AI_PROVIDER=openrouter` + `OPENROUTER_API_KEY` alone is enough
-  to develop against — no `AI_MODEL` tuning required to get a working tool-calling model.
+- **Model**: `minimax/minimax-m3:free` by default (overridable via `AI_MODEL`). Chosen so
+  `AI_PROVIDER=openrouter` + `OPENROUTER_API_KEY` alone is enough to develop against — no
+  `AI_MODEL` tuning required to get a working tool-calling model. Selected on 2026-09-03 by
+  running the app's own tool sequence (`search_menu` → `get_menu_item` → `add_item_to_cart`)
+  against every free model OpenRouter lists as supporting `tools`, and checking whether the model
+  actually emitted the `add_item_to_cart` call before claiming the item was added: it called the
+  tool 8/8 times with no fabricated adds. `nvidia/nemotron-3-ultra-550b-a55b:free` also passed but
+  hit its own per-day cap partway through; `z-ai/glm-5.2:free` and `google/gemma-4-31b-it:free`
+  returned provider errors.
+  - **The previous default, `google/gemma-4-26b-a4b-it:free`, no longer serves.** It was picked for
+    good documented reasons (free, tool-calling-capable, 1.70% tool-call error rate, 100% 3-day
+    uptime at the time) but now returns `429` — "temporarily rate-limited upstream" from Google AI
+    Studio — on every attempt. A default that always fails is worse than no default, since it makes
+    a correctly-configured setup look broken.
+  - **Never set this to `openrouter/free`.** It is a router alias that resolves to a _different
+    model per request_, so its tool-calling reliability cannot be characterized or reproduced. In
+    production it routed to a nano reasoning model that told a customer "Added one chicken tikka
+    masala ($19.99) to your order" while the conversation log shows it never called
+    `add_item_to_cart` at all — the incident that motivated `tools/cart-fact-detection.ts`.
+  - **Free-tier quota is the real operating constraint,** not model choice: an OpenRouter account
+    under $10 lifetime credits is capped at a low number of free-model requests per day
+    (`"Rate limit exceeded: free-models-per-day"`), and one customer turn costs one request per
+    model round-trip. Fine for development; not sized for real diner traffic.
 - **Refusal signal**: OpenAI-compatible `finish_reason: "content_filter"` is mapped to the same
   `stopReason: "refusal"` `loop.ts` already handles for Anthropic — refusal protection is uniform
   across providers without `loop.ts` knowing two providers exist (see
@@ -455,20 +473,38 @@ underlying menu/cart pages — closing it returns to exactly where the customer 
 
 ## Current live-validation status
 
-Validated against the real Supabase project (ref `dqypmprjcyxoeywsumxr`): `AI_PROVIDER=openrouter` +
-a real `OPENROUTER_API_KEY` resolves correctly end to end — `/api/health` reports `aiConfigured:
-true`, the provider correctly resolves to `openrouter` with model `google/gemma-4-26b-a4b-it:free`,
-and no `ANTHROPIC_API_KEY` is present or required anywhere in the environment. A real customer
-session (via the real QR/table flow) was used to send a real message to the AI waiter. **No live
-conversational turn has completed successfully yet** — every attempt so far has returned `429 Too
-Many Requests` from OpenRouter itself (an external free-tier rate limit on `google/gemma-4-26b-a4b-it:free`),
-confirmed via the app's own `ai_error`/`ai_turn` structured logs, not a guess. The provider
-implementation itself (`src/lib/ai/providers/openrouter.ts`/`openrouter-mapping.ts`) was
-re-inspected and found correct — API URL, auth header, model selection, tool-schema mapping,
-tool-call parsing, refusal mapping, timeout, and error handling all match the documented contract
-above. **Do not claim the AI waiter is production-validated** until a real conversational turn —
-menu question, cart add, confirmation gate, and order submission — has actually succeeded end to
-end against a live model.
+**Updated 2026-09-03: live conversational turns now succeed in production, but validation is
+partial — read what is and isn't covered before claiming more.**
+
+Exercised against production (https://ai-waiter-two.vercel.app, backed by the real Supabase project
+ref `dqypmprjcyxoeywsumxr`) through the real QR/table flow, with `AI_PROVIDER=openrouter` and a real
+`OPENROUTER_API_KEY`:
+
+- ✅ **Menu question** — "What do you recommend? I'd like something spicy." The model called
+  `search_menu`, got an empty result, and said so rather than inventing a dish.
+- ✅ **Correct refusal on a non-existent item** — asked for "papad" (a category, not an item), it
+  said it couldn't find one instead of fabricating an item or a price.
+- ✅ **Cart add** — "add one more chicken tikka masala" produced a real `add_item_to_cart` call
+  (`tool_success = true` in `ai_conversation_messages`), a real `cart_items` row, and the item
+  visible on `/r/my-restaurant/cart`. Verified in the database, not from the model's own claim.
+- ✅ **Provider-failure fallback** — an Anthropic call with an exhausted credit balance surfaced as
+  a structured `ai_error` (`category: "http_error"`) and the customer saw the graceful "having
+  trouble responding right now" message while the menu, cart, and ordering kept working.
+- ❌ **Confirmation gate and order submission are still unexercised.** No live turn has run
+  `request_order_confirmation` → `submit_order`.
+
+**So: do not claim the ordering path is production-validated.** Until a real turn has gone through
+the confirmation gate and actually created an order, that half of the flow rests on unit and E2E
+coverage only.
+
+One real defect was found by this live testing that the full test suite did not catch: on the
+`openrouter/free` router alias the model claimed "Added one chicken tikka masala ($19.99) to your
+order" while the conversation log shows no `add_item_to_cart` call at all, and the cart stayed
+empty. That produced both the default-model change above and the cart-state guard
+(`tools/cart-fact-detection.ts`). The provider implementation itself
+(`src/lib/ai/providers/openrouter.ts`/`openrouter-mapping.ts`) was re-inspected and found correct —
+API URL, auth header, model selection, tool-schema mapping, tool-call parsing, refusal mapping,
+timeout, and error handling all match the documented contract above.
 
 ## What's explicitly out of scope for this batch
 
