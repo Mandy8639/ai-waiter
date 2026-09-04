@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { envInt, envFloat } from "@/lib/env-helpers";
+import { envInt, envFloat, envList } from "@/lib/env-helpers";
 
 // These test the parsing primitives src/lib/ai/config.ts (and, as of
 // Batch 8, src/lib/customer/rate-limit.ts and src/lib/orders/rate-limit.ts)
@@ -58,5 +58,47 @@ describe("envFloat", () => {
     process.env.AI_TEST_FLOAT = "0";
     expect(envFloat("AI_TEST_FLOAT", 0.4)).toBe(0);
     delete process.env.AI_TEST_FLOAT;
+  });
+});
+
+describe("envList", () => {
+  it("returns the fallback when unset", () => {
+    expect(envList("AI_TEST_UNSET_LIST", ["a", "b"])).toEqual(["a", "b"]);
+  });
+
+  it("parses a single value into a one-entry list", () => {
+    process.env.AI_TEST_LIST = "solo-model";
+    expect(envList("AI_TEST_LIST", ["x"])).toEqual(["solo-model"]);
+    delete process.env.AI_TEST_LIST;
+  });
+
+  it("splits on commas and trims surrounding whitespace", () => {
+    process.env.AI_TEST_LIST = " first , second ,third ";
+    expect(envList("AI_TEST_LIST", ["x"])).toEqual([
+      "first",
+      "second",
+      "third",
+    ]);
+    delete process.env.AI_TEST_LIST;
+  });
+
+  it("drops empty entries from stray or trailing commas", () => {
+    process.env.AI_TEST_LIST = "first,,second,";
+    expect(envList("AI_TEST_LIST", ["x"])).toEqual(["first", "second"]);
+    delete process.env.AI_TEST_LIST;
+  });
+
+  it("drops duplicates, preserving first-seen order", () => {
+    // Sending the same model twice in OpenRouter's `models` array buys
+    // nothing and makes the logged preference list harder to read.
+    process.env.AI_TEST_LIST = "a,b,a,c,b";
+    expect(envList("AI_TEST_LIST", ["x"])).toEqual(["a", "b", "c"]);
+    delete process.env.AI_TEST_LIST;
+  });
+
+  it("falls back when the value is only separators and whitespace", () => {
+    process.env.AI_TEST_LIST = " , , ";
+    expect(envList("AI_TEST_LIST", ["fallback"])).toEqual(["fallback"]);
+    delete process.env.AI_TEST_LIST;
   });
 });

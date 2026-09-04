@@ -28,6 +28,13 @@ export interface LoopModelResponse {
    * falls through to the existing tool_use/text handling unchanged.
    */
   stopReason?: string;
+  /**
+   * Which model actually produced this response, when the provider
+   * reports it. Differs from the configured model when a preference list
+   * fell back to a later entry — the caller logs this rather than the
+   * configured value, so a log line never names a model that didn't run.
+   */
+  servedModel?: string;
 }
 
 export interface LoopToolResult {
@@ -100,6 +107,13 @@ export interface RunConversationLoopResult {
   guardCorrectionExhausted: boolean;
   /** Which guard's `id` exhausted its retry, when `guardCorrectionExhausted` is true — lets the caller choose the matching fallback text. */
   exhaustedGuardId?: string;
+  /**
+   * The model that served the most recent response of this turn, when the
+   * provider reports one. A turn can span several model calls, and under a
+   * preference list they need not all be served by the same model, so this
+   * is the last one — the model that produced the reply the customer sees.
+   */
+  servedModel?: string;
 }
 
 export async function runConversationLoop<TMessages>(
@@ -126,6 +140,9 @@ export async function runConversationLoop<TMessages>(
   // guards) so a model that keeps ignoring the correction can never spin
   // this loop.
   let guardRetryUsed = false;
+  // The last model to actually serve a response this turn — see
+  // RunConversationLoopResult#servedModel for why the last one wins.
+  let servedModel: string | undefined;
 
   while (true) {
     iterations += 1;
@@ -137,10 +154,12 @@ export async function runConversationLoop<TMessages>(
         toolOutcomes,
         refused: false,
         guardCorrectionExhausted: false,
+        servedModel,
       };
     }
 
     const response = await params.callModel(messages);
+    servedModel = response.servedModel ?? servedModel;
 
     if (response.stopReason === "refusal") {
       return {
@@ -150,6 +169,7 @@ export async function runConversationLoop<TMessages>(
         toolOutcomes,
         refused: true,
         guardCorrectionExhausted: false,
+        servedModel,
       };
     }
 
@@ -205,6 +225,7 @@ export async function runConversationLoop<TMessages>(
           refused: false,
           guardCorrectionExhausted: true,
           exhaustedGuardId: rejectingGuard.id,
+          servedModel,
         };
       }
 
@@ -215,6 +236,7 @@ export async function runConversationLoop<TMessages>(
         toolOutcomes,
         refused: false,
         guardCorrectionExhausted: false,
+        servedModel,
       };
     }
 
@@ -226,6 +248,7 @@ export async function runConversationLoop<TMessages>(
         toolOutcomes,
         refused: false,
         guardCorrectionExhausted: false,
+        servedModel,
       };
     }
 

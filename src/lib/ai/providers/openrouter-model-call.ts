@@ -11,6 +11,11 @@ export interface OpenRouterModelCallParams {
   endpoint: string;
   apiKey: string;
   model: string;
+  /**
+   * Additional models to try, in order, if `model` can't serve the request
+   * — see docs/ai.md#model-fallback. Empty for a single-model config.
+   */
+  fallbackModels?: string[];
   maxOutputTokens: number;
   requestTimeoutMs: number;
   messages: OpenRouterMessage[];
@@ -30,6 +35,7 @@ export interface OpenRouterModelCallParams {
 export async function callOpenRouterModel(
   params: OpenRouterModelCallParams,
 ): Promise<LoopModelResponse> {
+  const fallbackModels = params.fallbackModels ?? [];
   let response: Response;
   try {
     response = await fetch(params.endpoint, {
@@ -41,7 +47,15 @@ export async function callOpenRouterModel(
         "X-Title": "AI Waiter",
       },
       body: JSON.stringify({
-        model: params.model,
+        // OpenRouter routes across a preference list via `models`, serving
+        // the first entry that can answer. Critically, `model` and
+        // `models` must NEVER both be sent: the singular field wins and
+        // the fallback list is silently ignored — verified live against
+        // the real API, where a dead primary + healthy fallback returned
+        // 429 with both fields set and succeeded with only `models`.
+        ...(fallbackModels.length > 0
+          ? { models: [params.model, ...fallbackModels] }
+          : { model: params.model }),
         max_tokens: params.maxOutputTokens,
         messages: params.messages,
         tools: params.tools,
