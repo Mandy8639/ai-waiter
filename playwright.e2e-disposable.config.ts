@@ -19,6 +19,12 @@ import { config } from "dotenv";
 // silently win and point this run at the wrong project.
 config({ path: ".env.e2e-disposable.local", override: true });
 
+// An explicit marker dashboard-flow.spec.ts requires before it will run.
+// Set here rather than in the env file so it cannot be forgotten when that
+// file is recreated, and so it is impossible to satisfy by accident from a
+// shell that happens to have other Supabase variables exported.
+process.env.E2E_DISPOSABLE_PROJECT = "1";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   testMatch: "dashboard-flow.spec.ts",

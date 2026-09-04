@@ -131,10 +131,17 @@ npm run test:e2e:disposable
 This runs against `playwright.e2e-disposable.config.ts` — a separate config from
 `playwright.config.ts` on purpose, so it never shares a port or an already-running server with the
 main `npm run test:e2e` run (which stays pointed at whatever `.env.local` has configured, per
-above). `dashboard-flow.spec.ts` still runs as part of the main `npm run test:e2e` too (it isn't
-excluded from that config's `testDir`) — there it just self-skips again with the same "Project
-requires email confirmation" reason as before, since `.env.local` still points at a project where
-confirmation is required. `npm run test:e2e:disposable` is the one that actually exercises it.
+above). `dashboard-flow.spec.ts` is still collected by the main `npm run test:e2e` run (it isn't excluded
+from that config's `testDir`), but it **skips** there: it requires `E2E_DISPOSABLE_PROJECT`, which
+only `playwright.e2e-disposable.config.ts` sets. `npm run test:e2e:disposable` is the one that
+actually exercises it.
+
+That marker exists because the skip used to be theoretical. The spec's only guard was "is
+`NEXT_PUBLIC_SUPABASE_URL` a placeholder?", which is false for the live project — so `npm run
+test:e2e` ran this spec's real `/signup` **against production**, creating auth users there, and
+then failed after 30s because that project has "Confirm email" on and nothing reaches `/onboarding`
+without a human opening an email. The header on that spec has always said "never use production
+credentials here"; the marker enforces it rather than trusting it.
 
 ## Error monitoring
 

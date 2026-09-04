@@ -232,19 +232,53 @@ test.describe("AI waiter: full conversational order flow", () => {
     // deciding whether the model asked for confirmation.
     await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
     await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
-    const confirmPrompt = customerPage.getByText(/confirm|yes/i).last();
-    if (await confirmPrompt.isVisible().catch(() => false)) {
-      await chatInput.fill("Yes, place it");
+    // Confirming is NOT optional, so this is not conditional. The gate in
+    // tools/order-confirmation.ts requires the request_order_confirmation
+    // call to be strictly earlier than the user message that triggers
+    // submit_order — "a confirmation call and a submit_order call both
+    // happening within the same turn must never count". A separate
+    // customer message is therefore structurally required, every run,
+    // and no wording the model chooses can change that.
+    //
+    // This used to be gated on `getByText(/confirm|yes/i)` being visible,
+    // which made a mandatory step conditional on a loose regex matching a
+    // live free model's run-to-run phrasing. When it didn't match, the
+    // confirmation was silently skipped, no order was ever placed, and
+    // the failure surfaced 20 lines later as "Order #… not found" —
+    // pointing at the assertion rather than at the turn that never
+    // happened.
+    await chatInput.fill("Yes, place it");
+    await customerPage.getByRole("button", { name: "Send" }).click();
+    await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
+    await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
+
+    // --- Verify a real order actually exists — independently of the AI's own claim ---
+    //
+    // Bounded nudges rather than a single shot: a live free model may
+    // answer the first "place the order" with a clarifying question
+    // instead of the summary, which legitimately pushes the confirmable
+    // summary one turn later. This tolerates that the same way the
+    // add-to-cart assertion above tolerates a variable call sequence —
+    // what's being tested is that the AI can drive a real order to
+    // completion, not that it does so in a fixed number of turns. It is
+    // bounded so a model that never gets there still fails.
+    const orderNumber = customerPage.getByText(/Order #\d+/);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await customerPage.goto(`/r/${slug}/orders`);
+      if (await orderNumber.isVisible({ timeout: 15_000 }).catch(() => false)) {
+        break;
+      }
+      await customerPage
+        .getByRole("button", { name: "Open AI waiter chat" })
+        .click();
+      await chatInput.fill("Yes — please place the order now.");
       await customerPage.getByRole("button", { name: "Send" }).click();
       await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
       await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
     }
 
-    // --- Verify a real order actually exists — independently of the AI's own claim ---
     await customerPage.goto(`/r/${slug}/orders`);
-    await expect(customerPage.getByText(/Order #\d+/)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(orderNumber).toBeVisible({ timeout: 15_000 });
 
     // --- Ask the AI for status; it must reflect the real order ---
     await customerPage
