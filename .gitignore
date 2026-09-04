@@ -52,3 +52,4 @@ next-env.d.ts
 
 # supabase CLI local/tooling artifacts
 /supabase/.temp/
+backups/
