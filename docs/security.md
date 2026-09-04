@@ -978,8 +978,10 @@ submission (as distinct, unauthenticated-adjacent surfaces) remains a design com
 later batch. Realtime's RLS-based authorization model is implemented and has now been exercised
 against the real Supabase project for `UPDATE` delivery (see above) — the one open item is the
 `INSERT`-to-anonymous-connections platform issue tracked as Supabase ticket SU-452145, which does
-not affect any customer-facing path. A live conversational AI turn against a real model provider
-remains unvalidated: `AI_PROVIDER=openrouter` with a real `OPENROUTER_API_KEY` is correctly wired
-end to end (confirmed via `/api/health` and a real customer session), but the configured free model
-(`google/gemma-4-26b-a4b-it:free`) returned `429 Too Many Requests` on every live attempt so far —
-an external rate limit, not an application defect (see `docs/ai.md#current-live-validation-status`).
+not affect any customer-facing path. Live conversational AI turns now succeed in
+production as of 2026-09-03 (`AI_PROVIDER=openrouter`, model `minimax/minimax-m3:free`): a menu
+question, a correct refusal on a non-existent item, and a cart add verified in the database all
+completed end to end. The confirmation gate and `submit_order` remain unexercised live. The former
+default `google/gemma-4-26b-a4b-it:free` returns `429` on every attempt and is no longer the
+default — an external rate limit, not an application defect (see
+`docs/ai.md#current-live-validation-status`).

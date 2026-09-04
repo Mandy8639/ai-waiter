@@ -29,10 +29,20 @@ const provider: AiProviderName =
  * tool-calling-capable model, not a placeholder that needs tuning before
  * dev even starts. See docs/ai.md#provider-and-configuration for why this
  * specific OpenRouter model was chosen.
+ *
+ * The OpenRouter default was google/gemma-4-26b-a4b-it:free until
+ * 2026-09-03, when it was changed because that model had stopped serving:
+ * it returns 429 ("temporarily rate-limited upstream" from Google AI
+ * Studio) on every attempt, which defeated the entire point of shipping a
+ * default that works untuned. Never pick "openrouter/free" here — it is a
+ * router alias that resolves to a different model per request, so its
+ * tool-calling reliability cannot be characterized, and in production it
+ * routed to a model that reported adding an item to the cart without ever
+ * calling add_item_to_cart.
  */
 const defaultModelByProvider: Record<AiProviderName, string> = {
   anthropic: "claude-opus-5",
-  openrouter: "google/gemma-4-26b-a4b-it:free",
+  openrouter: "minimax/minimax-m3:free",
 };
 
 export const aiConfig = {
