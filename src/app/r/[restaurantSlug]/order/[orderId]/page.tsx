@@ -60,12 +60,34 @@ export default async function OrderConfirmationPage({
       <OrderStatusSync orderId={order.id} />
 
       <div className="flex flex-col items-center gap-1 py-4 text-center">
-        <Badge
-          variant={order.status === "cancelled" ? "destructive" : "secondary"}
-        >
-          {STATUS_LABELS[order.status as keyof typeof STATUS_LABELS] ??
-            order.status}
-        </Badge>
+        {/*
+          role="status" (an implicit polite live region) so the kitchen
+          moving this order from "received" to "preparing" to "ready" is
+          ANNOUNCED, not just repainted.
+
+          OrderStatusSync renders nothing and drives updates with
+          router.refresh(), so the badge text is replaced by a server
+          re-render. Visually that's obvious; to a screen reader it was
+          silent — on the one screen a diner sits and watches. SC 4.1.3.
+
+          The label is duplicated into a visually-hidden sentence because a
+          live region announces its whole contents: "Preparing" alone is
+          ambiguous out of context, where "Order status: Preparing" is not.
+        */}
+        <div role="status">
+          <span className="sr-only">
+            Order status:{" "}
+            {STATUS_LABELS[order.status as keyof typeof STATUS_LABELS] ??
+              order.status}
+          </span>
+          <Badge
+            aria-hidden="true"
+            variant={order.status === "cancelled" ? "destructive" : "secondary"}
+          >
+            {STATUS_LABELS[order.status as keyof typeof STATUS_LABELS] ??
+              order.status}
+          </Badge>
+        </div>
         <h1 className="text-2xl font-semibold tracking-tight">
           Order #{order.orderNumber}
         </h1>

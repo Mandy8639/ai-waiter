@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { MessageCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,12 +103,43 @@ export function AiWaiterPanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
+      {/*
+        A real Dialog.Trigger, not a detached button that flips state from
+        outside. Base UI derives its focus behaviour (move focus in on
+        open, restore it to the trigger on close) from the trigger it
+        knows about — without one, neither happened.
+      */}
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Open AI waiter chat"
+            className="bg-primary text-primary-foreground fixed right-4 bottom-4 z-20 flex size-14 items-center justify-center rounded-full shadow-lg motion-safe:transition-transform motion-safe:hover:scale-105"
+          >
+            <MessageCircle className="size-6" aria-hidden="true" />
+          </button>
+        }
+      />
       <DialogContent className="flex h-[85vh] max-h-[720px] flex-col p-0 sm:h-[600px]">
         <DialogHeader className="border-b px-4 py-3">
           <DialogTitle>AI Waiter</DialogTitle>
         </DialogHeader>
 
-        <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3">
+        {/*
+          role="log" + aria-live="polite" so a screen reader announces the
+          AI's reply when it arrives. Without this the typing indicator
+          below announced "Thinking…" and then nothing ever followed — the
+          user was told an answer was coming and never told it had come.
+          "polite" rather than "assertive": a reply is worth hearing, not
+          worth interrupting whatever the user is currently reading.
+        */}
+        <div
+          ref={listRef}
+          role="log"
+          aria-live="polite"
+          aria-label="Conversation with the AI waiter"
+          className="flex-1 overflow-y-auto px-4 py-3"
+        >
           {messages.length === 0 && historyLoaded && (
             <p className="text-muted-foreground py-6 text-center text-sm">
               Ask about the menu, build your order, or check on one already
@@ -123,6 +156,15 @@ export function AiWaiterPanel({
                     : "bg-muted mr-auto max-w-[85%] rounded-2xl rounded-bl-sm px-3 py-2 text-sm whitespace-pre-wrap"
                 }
               >
+                {/*
+                  Who said what was previously conveyed only by colour and
+                  alignment (SC 1.3.1). The visually-hidden prefix gives a
+                  screen reader the same information sight gives everyone
+                  else, without changing the visual design.
+                */}
+                <span className="sr-only">
+                  {message.role === "user" ? "You said: " : "AI waiter said: "}
+                </span>
                 {message.content}
               </div>
             ))}
