@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { extractJsonObject } from "./extraction";
 
 /**
  * Turning a dish name into suggested ingredients and allergens.
@@ -86,9 +87,11 @@ export function canonicalAllergen(raw: string): string | null {
 }
 
 export function parseSuggestions(rawText: string): SuggestionOutcome {
-  const start = rawText.indexOf("{");
-  const end = rawText.lastIndexOf("}");
-  if (start === -1 || end <= start) {
+  // The balanced-brace scanner from extraction.ts, not indexOf/lastIndexOf:
+  // this model reasons before answering, and a stray brace in that prose
+  // would otherwise swallow or truncate the real object.
+  const json = extractJsonObject(rawText);
+  if (!json) {
     return {
       ok: false,
       suggestions: [],
@@ -98,7 +101,7 @@ export function parseSuggestions(rawText: string): SuggestionOutcome {
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(rawText.slice(start, end + 1));
+    parsed = JSON.parse(json);
   } catch {
     return {
       ok: false,

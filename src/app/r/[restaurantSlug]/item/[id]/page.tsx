@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ItemDetailForm } from "@/components/customer/item-detail-form";
 import { createClient } from "@/lib/supabase/server";
@@ -180,16 +181,42 @@ export default async function MenuItemDetailPage({
         </div>
       </div>
 
+      {/*
+        Only ever CONFIRMED allergens reach this point — the query above
+        filters unconfirmed suggestions out. So this is the restaurant's own
+        statement, not the platform's, and it is worded that way.
+
+        Presented as a caution rather than a grey line of metadata: someone
+        avoiding an allergen is scanning for exactly this, and it should not
+        look like the preparation time. The word "Contains" carries the
+        meaning, not the colour or the icon (SC 1.4.1).
+      */}
       <div className="flex flex-col gap-1">
         <h2 className="text-sm font-medium">Allergens</h2>
         {allergens && allergens.length > 0 ? (
-          <p className="text-muted-foreground text-sm">
-            {allergens.map((a) => a.name).join(", ")}
-          </p>
+          <div
+            className="border-destructive/40 bg-destructive/5 text-foreground flex items-start gap-2 rounded-md border px-3 py-2 text-sm"
+            role="note"
+          >
+            <TriangleAlert
+              className="text-destructive mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
+            <p>
+              <strong>
+                Contains {allergens.map((a) => a.name).join(", ")}
+              </strong>
+              <span className="text-muted-foreground">
+                {" "}
+                — as stated by the restaurant. If you have an allergy, please
+                check with staff before ordering.
+              </span>
+            </p>
+          </div>
         ) : (
           <p className="text-muted-foreground text-sm">
             This restaurant hasn&apos;t provided allergen information for this
-            item.
+            item. Please ask a member of staff if you have an allergy.
           </p>
         )}
       </div>

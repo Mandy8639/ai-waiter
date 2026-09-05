@@ -168,7 +168,7 @@ export async function suggestForMenu(
 export async function confirmAllergensForItem(
   restaurantId: string,
   menuItemId: string,
-  allergenIds: string[],
+  allergenNames: string[],
 ): Promise<SuggestState> {
   const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
   if (!auth.ok) return { error: auth.error };
@@ -176,7 +176,7 @@ export async function confirmAllergensForItem(
   const supabase = await createClient();
   const { error } = await supabase.rpc("confirm_menu_item_allergens", {
     p_menu_item_id: menuItemId,
-    p_allergen_ids: allergenIds,
+    p_allergen_names: allergenNames,
   });
 
   if (error) {

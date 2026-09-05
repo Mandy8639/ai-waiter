@@ -8,7 +8,8 @@ import { confirmAllergensForItem } from "@/lib/menu-import/suggest-actions";
 export interface PendingItem {
   menuItemId: string;
   itemName: string;
-  suggested: { allergenId: string; name: string }[];
+  /** The whole vocabulary. `suggested` only decides what starts ticked. */
+  options: { name: string; suggested: boolean }[];
 }
 
 /**
@@ -36,18 +37,18 @@ export function AllergenConfirmList({
     Object.fromEntries(
       items.map((i) => [
         i.menuItemId,
-        new Set(i.suggested.map((s) => s.allergenId)),
+        new Set(i.options.filter((o) => o.suggested).map((o) => o.name)),
       ]),
     ),
   );
   const [busy, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
 
-  function toggle(menuItemId: string, allergenId: string) {
+  function toggle(menuItemId: string, name: string) {
     setTicked((current) => {
       const next = new Set(current[menuItemId] ?? []);
-      if (next.has(allergenId)) next.delete(allergenId);
-      else next.add(allergenId);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
       return { ...current, [menuItemId]: next };
     });
   }
@@ -109,23 +110,37 @@ export function AllergenConfirmList({
             className="flex flex-col gap-2 rounded-md border p-3"
           >
             <p className="text-sm font-medium">{item.itemName}</p>
-            <div className="flex flex-wrap gap-3">
-              {item.suggested.map((s) => (
-                <label
-                  key={s.allergenId}
-                  className="flex items-center gap-1.5 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    className="accent-primary size-4"
-                    checked={
-                      ticked[item.menuItemId]?.has(s.allergenId) ?? false
-                    }
-                    onChange={() => toggle(item.menuItemId, s.allergenId)}
-                  />
-                  {s.name}
-                </label>
-              ))}
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {item.options.map((option) => {
+                const isTicked =
+                  ticked[item.menuItemId]?.has(option.name) ?? false;
+                return (
+                  <label
+                    key={option.name}
+                    className="flex items-center gap-1.5 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-primary size-4"
+                      checked={isTicked}
+                      onChange={() => toggle(item.menuItemId, option.name)}
+                    />
+                    <span className={isTicked ? "font-medium" : undefined}>
+                      {option.name}
+                    </span>
+                    {/*
+                      Marks what the model proposed, so a reviewer can tell
+                      its guesses from their own additions. Text, not
+                      styling alone.
+                    */}
+                    {option.suggested && (
+                      <span className="text-muted-foreground text-xs">
+                        (suggested)
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
             </div>
             <div>
               <Button

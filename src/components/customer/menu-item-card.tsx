@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Flame, Leaf } from "lucide-react";
+import { Flame, Leaf, TriangleAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,8 @@ export interface MenuItemCardData {
   isVegetarian: boolean;
   isVegan: boolean;
   isSpicy: boolean;
+  /** Confirmed allergens only — never suggestions. */
+  allergens: string[];
 }
 
 export function MenuItemCard({
@@ -48,6 +50,18 @@ export function MenuItemCard({
             {item.description && (
               <p className="text-muted-foreground line-clamp-2 text-xs">
                 {item.description}
+              </p>
+            )}
+            {/*
+              Shown on the card, not just the item page: someone avoiding an
+              allergen is scanning a 153-item menu, and making them open every
+              dish to find out is how a mistake happens. Only confirmed
+              allergens reach here.
+            */}
+            {item.allergens.length > 0 && (
+              <p className="text-destructive flex items-center gap-1 text-xs">
+                <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />
+                Contains {item.allergens.join(", ")}
               </p>
             )}
             {(item.isVegetarian || item.isVegan || item.isSpicy) && (
