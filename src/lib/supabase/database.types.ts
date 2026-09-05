@@ -1022,7 +1022,7 @@ export interface Database {
     Views: Record<string, never>;
     Functions: {
       confirm_menu_item_allergens: {
-        Args: { p_menu_item_id: string; p_allergen_ids: string[] };
+        Args: { p_menu_item_id: string; p_allergen_names: string[] };
         Returns: number;
       };
       confirmed_allergen_ids: {

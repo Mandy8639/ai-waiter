@@ -68,7 +68,7 @@ describe("allergen confirmation", () => {
     await db.asUser(ownerId, (client) =>
       client.query("select public.confirm_menu_item_allergens($1, $2);", [
         menuItemId,
-        [nutsId],
+        ["Nuts"],
       ]),
     );
     const { rows } = await db.admin.query<{ confirmed_allergen_ids: string }>(
@@ -95,7 +95,7 @@ describe("allergen confirmation", () => {
     await db.asUser(ownerId, (client) =>
       client.query("select public.confirm_menu_item_allergens($1, $2);", [
         menuItemId,
-        [nutsId], // dairy deliberately not ticked
+        ["Nuts"], // dairy deliberately not ticked
       ]),
     );
     const { rows } = await db.admin.query<{ count: string }>(
@@ -117,7 +117,7 @@ describe("allergen confirmation", () => {
       db.asUser(kitchenId, (client) =>
         client.query("select public.confirm_menu_item_allergens($1, $2);", [
           menuItemId,
-          [dairyId],
+          ["Dairy"],
         ]),
       ),
     ).rejects.toThrow(/ALLERGEN_FORBIDDEN/);
@@ -130,5 +130,71 @@ describe("allergen confirmation", () => {
       [menuItemId, nutsId],
     );
     expect(rows[0].confirmed_at).not.toBeNull();
+  });
+
+  it("lets a reviewer ADD an allergen the model never suggested", async () => {
+    // The reason this function takes names. The suggestion prompt tells the
+    // model to leave an allergen out when unsure, so it under-suggests by
+    // design — a reviewer who could only untick would be unable to correct
+    // it in the one direction that matters.
+    const { rows: before } = await db.admin.query<{ count: string }>(
+      "select count(*)::text as count from public.allergens where restaurant_id = $1 and name = 'Sesame';",
+      [restaurantId],
+    );
+    expect(Number(before[0].count)).toBe(0);
+
+    await db.asUser(ownerId, (client) =>
+      client.query("select public.confirm_menu_item_allergens($1, $2);", [
+        menuItemId,
+        ["Nuts", "Sesame"],
+      ]),
+    );
+
+    // The allergen row is created for the restaurant on demand...
+    const { rows: created } = await db.admin.query<{ id: string }>(
+      "select id from public.allergens where restaurant_id = $1 and name = 'Sesame';",
+      [restaurantId],
+    );
+    expect(created).toHaveLength(1);
+
+    // ...and it is confirmed, so a diner can be told.
+    const { rows: confirmed } = await db.admin.query<{ count: string }>(
+      `select count(*)::text as count
+         from public.confirmed_allergen_ids($1) ids
+         where ids = $2;`,
+      [menuItemId, created[0].id],
+    );
+    expect(Number(confirmed[0].count)).toBe(1);
+  });
+
+  it("does not create a duplicate allergen row when confirming a name twice", async () => {
+    await db.asUser(ownerId, (client) =>
+      client.query("select public.confirm_menu_item_allergens($1, $2);", [
+        menuItemId,
+        ["Nuts", "Sesame"],
+      ]),
+    );
+    const { rows } = await db.admin.query<{ count: string }>(
+      "select count(*)::text as count from public.allergens where restaurant_id = $1 and name = 'Sesame';",
+      [restaurantId],
+    );
+    expect(Number(rows[0].count)).toBe(1);
+  });
+
+  it("never withdraws an already-confirmed allergen by unticking", async () => {
+    // Unticking discards SUGGESTIONS. Removing a claim a human already
+    // vouched for is a different act, and must not happen as a side effect
+    // of reviewing something else.
+    await db.asUser(ownerId, (client) =>
+      client.query("select public.confirm_menu_item_allergens($1, $2);", [
+        menuItemId,
+        [], // everything unticked
+      ]),
+    );
+    const { rows } = await db.admin.query<{ count: string }>(
+      "select count(*)::text as count from public.menu_item_allergens where menu_item_id = $1 and confirmed_at is not null;",
+      [menuItemId],
+    );
+    expect(Number(rows[0].count)).toBeGreaterThan(0);
   });
 });

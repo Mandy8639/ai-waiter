@@ -4,6 +4,7 @@ import {
 } from "@/components/dashboard/allergen-confirm-list";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
+import { ALLERGEN_VOCABULARY } from "@/lib/menu-import/suggestions";
 
 export const metadata = {
   title: "Confirm allergens — AI Waiter",
@@ -35,16 +36,28 @@ export default async function AllergenReviewPage() {
   const itemName = new Map((menuItems ?? []).map((i) => [i.id, i.name]));
   const allergenName = new Map((allergens ?? []).map((a) => [a.id, a.name]));
 
-  const pending: PendingItem[] = itemIds.map((id) => ({
-    menuItemId: id,
-    itemName: itemName.get(id) ?? "Unknown dish",
-    suggested: (links ?? [])
-      .filter((l) => l.menu_item_id === id)
-      .map((l) => ({
-        allergenId: l.allergen_id,
-        name: allergenName.get(l.allergen_id) ?? "Unknown",
+  // Every allergen in the vocabulary is offered for every dish, with the
+  // model's suggestions pre-ticked. Showing only what was suggested would
+  // let a reviewer remove but never add — and the suggestion prompt tells
+  // the model to leave an allergen out when unsure, so it under-suggests by
+  // design. A kitchen that knows its dahi vada is finished with a
+  // wheat-based sev must be able to say so here.
+  const pending: PendingItem[] = itemIds.map((id) => {
+    const suggestedNames = new Set(
+      (links ?? [])
+        .filter((l) => l.menu_item_id === id)
+        .map((l) => allergenName.get(l.allergen_id))
+        .filter((n): n is string => Boolean(n)),
+    );
+    return {
+      menuItemId: id,
+      itemName: itemName.get(id) ?? "Unknown dish",
+      options: ALLERGEN_VOCABULARY.map((name) => ({
+        name,
+        suggested: suggestedNames.has(name),
       })),
-  }));
+    };
+  });
 
   return (
     <div className="flex max-w-2xl flex-1 flex-col gap-5">

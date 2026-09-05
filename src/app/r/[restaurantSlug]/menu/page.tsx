@@ -69,6 +69,38 @@ export default async function MenuPage({
     itemsQuery,
   ]);
 
+  // Confirmed allergens for everything on this page, in two queries rather
+  // than one per dish. RLS already restricts these rows to this restaurant;
+  // `confirmed_at is not null` is what keeps unconfirmed SUGGESTIONS away
+  // from diners — see 20260904140000_allergen_confirmation.sql.
+  const itemIds = (menuItems ?? []).map((item) => item.id);
+  const allergensByItem = new Map<string, string[]>();
+
+  if (itemIds.length > 0) {
+    const { data: links } = await supabase
+      .from("menu_item_allergens")
+      .select("menu_item_id, allergen_id")
+      .in("menu_item_id", itemIds)
+      .not("confirmed_at", "is", null);
+
+    const allergenIds = [...new Set((links ?? []).map((l) => l.allergen_id))];
+    const { data: allergenRows } = allergenIds.length
+      ? await supabase
+          .from("allergens")
+          .select("id, name")
+          .in("id", allergenIds)
+      : { data: [] as { id: string; name: string }[] };
+
+    const nameById = new Map((allergenRows ?? []).map((a) => [a.id, a.name]));
+    for (const link of links ?? []) {
+      const name = nameById.get(link.allergen_id);
+      if (!name) continue;
+      const current = allergensByItem.get(link.menu_item_id) ?? [];
+      current.push(name);
+      allergensByItem.set(link.menu_item_id, current);
+    }
+  }
+
   return (
     <div className="flex flex-1 flex-col gap-4">
       {/*
@@ -162,6 +194,7 @@ export default async function MenuPage({
                 isVegetarian: item.is_vegetarian,
                 isVegan: item.is_vegan,
                 isSpicy: item.is_spicy,
+                allergens: allergensByItem.get(item.id) ?? [],
               }}
             />
           ))}
