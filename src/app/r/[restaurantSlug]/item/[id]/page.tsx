@@ -41,7 +41,7 @@ export default async function MenuItemDetailPage({
   const { data: item } = await supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time",
+      "id, name, description, price, image_url, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note",
     )
     .eq("id", id)
     .eq("restaurant_id", restaurant.id)
@@ -158,6 +158,18 @@ export default async function MenuItemDetailPage({
         </div>
         {item.description && (
           <p className="text-muted-foreground text-sm">{item.description}</p>
+        )}
+        {/*
+          Sits with the description rather than among the badges: it is a
+          sentence in the restaurant's voice, not a data point, and a diner
+          deciding whether to order one biryani or two is reading prose at
+          this moment, not scanning chips.
+        */}
+        {item.portion_note && (
+          <p className="text-muted-foreground text-sm">
+            <span className="text-foreground font-medium">Portion: </span>
+            {item.portion_note}
+          </p>
         )}
 
         <div className="flex flex-wrap gap-1.5">

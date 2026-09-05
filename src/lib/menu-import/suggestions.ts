@@ -25,8 +25,30 @@ const suggestionSchema = z.object({
   items: z.array(
     z.object({
       name: z.string().trim().min(1).max(200),
-      ingredients: z.array(z.string().trim().min(1).max(80)).max(30),
-      allergens: z.array(z.string().trim().min(1).max(60)).max(15),
+      // Defaulted rather than required so the same parser can read a
+      // narrower answer — PORTION_PROMPT below asks for portion notes
+      // alone, and an absent list there means "not asked", not "none".
+      ingredients: z
+        .array(z.string().trim().min(1).max(80))
+        .max(30)
+        .default([]),
+      allergens: z.array(z.string().trim().min(1).max(60)).max(15).default([]),
+      /**
+       * One appetising sentence for the menu. Nullable because a model that
+       * has nothing to say should say nothing rather than pad — an empty
+       * description is honest, a generic one is noise on every dish.
+       */
+      description: z.string().trim().max(300).nullable().optional(),
+      /**
+       * Rough minutes from order to service. Capped at two hours: anything
+       * beyond that is the model misreading the dish, not a slow kitchen.
+       */
+      prepTimeMinutes: z.number().int().min(1).max(120).nullable().optional(),
+      /**
+       * "How many people does this feed?", answered the way a waiter
+       * answers it. Capped to match the database check constraint.
+       */
+      portionNote: z.string().trim().max(200).nullable().optional(),
     }),
   ),
 });
@@ -36,6 +58,12 @@ export interface ItemSuggestion {
   ingredients: string[];
   /** Always unconfirmed when written. Never shown to a diner until confirmed. */
   allergens: string[];
+  /** One menu sentence, or null when the model had nothing worth saying. */
+  description: string | null;
+  /** Rough minutes, or null. */
+  prepTimeMinutes: number | null;
+  /** Plain-language portion answer, or null when the dish plainly feeds one. */
+  portionNote: string | null;
 }
 
 export interface SuggestionOutcome {
@@ -64,13 +92,56 @@ export const ALLERGEN_VOCABULARY = [
   "Sulphites",
 ] as const;
 
-export const SUGGESTION_PROMPT = `For each dish name, list its likely ingredients and likely allergens.
+/**
+ * The one rule in this file that exists because of how a person asked the
+ * question, not because of a data shape.
+ *
+ * Asked "how many does the biryani feed?", a waiter does not say "two".
+ * They say it depends on you — one big appetite finishes it, two smaller
+ * ones share it. A model told to estimate a number produces the flatly
+ * confident answer that is wrong for half the table, so the instruction
+ * asks for the hedge explicitly and forbids the bare number.
+ *
+ * Shared by both prompts below so the two paths cannot drift apart.
+ */
+const PORTION_RULE = `a ONE-sentence, plain answer to "how many people does this feed?", written the way a waiter would say it out loud.
+
+- Allow for appetite instead of stating a bare number. NEVER answer with just "Serves 2" or a number on its own.
+- Ground it in what the dish actually IS. If the name gives you a count or a size — "9 pcs", "with 2 Roti", "16 oz" — build the answer around it: "Nine pieces, so comfortably two people picking, or one if you're making a meal of it." A dish whose name tells you nothing specific about quantity should usually get null instead of a vague answer.
+- VARY THE WORDING. These sentences sit next to each other on one menu; the same sentence repeated across twenty dishes reads like a fault, not a service.
+- Single-serving drinks are NOT shared. A cup of tea, a glass of juice, a shake, a 16 oz anything — use null. Only a jug, pitcher or an explicitly large sharing format gets a note.
+- Only fill this in where the question genuinely comes up: biryanis, thalis, platters, piece counts, family-size dishes, combos that arrive with bread. For anything obviously one person's order — a single samosa, one roti, a cup of chai — use null. Most dishes should be null.`;
+
+/**
+ * Portion notes ALONE, for a menu whose ingredients, allergens and
+ * descriptions are already written.
+ *
+ * Re-running the full prompt over such a menu would cost nothing in
+ * database writes (only empty fields are filled) but a great deal in human
+ * attention: every re-asked dish yields fresh allergen suggestions, and
+ * each one puts a row back in front of a person who has already reviewed
+ * that dish. Asking a narrower question is the cheaper thing to do.
+ */
+export const PORTION_PROMPT = `For each dish name, say how much food it is.
 
 Return ONLY JSON, no prose:
-{"items":[{"name":"...","ingredients":["..."],"allergens":["..."]}]}
+{"items":[{"name":"...","portionNote":"..."}]}
 
 Rules:
 - "name" must exactly match the dish name you were given.
+- "portionNote": ${PORTION_RULE}
+- Return one entry per dish name given, in the same order. Do not invent dishes.`;
+
+export const SUGGESTION_PROMPT = `For each dish name, describe it and list its likely ingredients and likely allergens.
+
+Return ONLY JSON, no prose:
+{"items":[{"name":"...","description":"...","prepTimeMinutes":0,"portionNote":"...","ingredients":["..."],"allergens":["..."]}]}
+
+Rules:
+- "name" must exactly match the dish name you were given.
+- "description": ONE short, appetising sentence a customer would read on a menu — what it is and what it tastes like. For example: "Fresh mango blended with yogurt and a touch of cardamom." Do NOT write a recipe, cooking steps, quantities, or marketing superlatives like "best" or "famous". If the dish name tells you nothing useful, use null rather than padding.
+- "prepTimeMinutes": roughly how long this takes from order to serving, as a whole number. A blended drink is 2-5, a fried snack 10-15, a thali 20-30. Use null if you genuinely cannot tell.
+- "portionNote": ${PORTION_RULE}
 - "ingredients": the main components a typical version of this dish contains. Keep them short and singular, like "paneer", "wheat flour", "potato".
 - "allergens": ONLY values from this list, and only where a typical version of the dish would contain them: ${ALLERGEN_VOCABULARY.join(", ")}.
 - If you are unsure whether a dish contains an allergen, LEAVE IT OUT. A human will review every allergen before it is shown to anyone, and a missing suggestion is easy to add — a wrong one is dangerous.
@@ -121,6 +192,12 @@ export function parseSuggestions(rawText: string): SuggestionOutcome {
 
   const suggestions: ItemSuggestion[] = result.data.items.map((item) => ({
     name: item.name.trim(),
+    // Empty string is treated as "nothing to say", the same as null: a
+    // blank description on a menu is worse than none, because it looks
+    // like the restaurant forgot rather than chose not to.
+    description: item.description?.trim() ? item.description.trim() : null,
+    prepTimeMinutes: item.prepTimeMinutes ?? null,
+    portionNote: item.portionNote?.trim() ? item.portionNote.trim() : null,
     // Deduplicated and lowercased: ingredient lists are free text, and
     // "Potato" twice in one dish is noise a reviewer has to clean up.
     ingredients: [

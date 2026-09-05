@@ -38,6 +38,7 @@ function parse(formData: FormData) {
     containsGluten: toBoolean(formData.get("containsGluten")),
     preparationTime:
       preparationTimeRaw === undefined ? undefined : Number(preparationTimeRaw),
+    portionNote: emptyToUndefined(formData.get("portionNote")),
     displayOrder: toNumber(formData.get("displayOrder"), 0),
   });
 }
@@ -74,6 +75,7 @@ export async function createMenuItem(
     contains_dairy: parsed.data.containsDairy,
     contains_gluten: parsed.data.containsGluten,
     preparation_time: parsed.data.preparationTime ?? null,
+    portion_note: parsed.data.portionNote ?? null,
     display_order: parsed.data.displayOrder,
   });
 
@@ -108,6 +110,10 @@ export async function updateMenuItem(
       description: parsed.data.description ?? null,
       price: parsed.data.price,
       image_url: parsed.data.imageUrl ?? null,
+      // A person editing this item owns its text from now on, so it stops
+      // being flagged as an unreviewed AI draft. Set on save rather than on
+      // change: opening the form and pressing save IS the review.
+      details_source: "restaurant",
       is_available: parsed.data.isAvailable,
       is_vegetarian: parsed.data.isVegetarian,
       is_vegan: parsed.data.isVegan,
@@ -117,6 +123,7 @@ export async function updateMenuItem(
       contains_dairy: parsed.data.containsDairy,
       contains_gluten: parsed.data.containsGluten,
       preparation_time: parsed.data.preparationTime ?? null,
+      portion_note: parsed.data.portionNote ?? null,
       display_order: parsed.data.displayOrder,
     })
     .eq("id", menuItemId)

@@ -58,6 +58,25 @@ describe("menuItemSchema", () => {
     expect(menuItemSchema.safeParse(valid).success).toBe(true);
   });
 
+  it("rejects a portion note longer than the database allows", () => {
+    // 200 characters, matching menu_items_portion_note_length. Caught in
+    // the form rather than as a constraint violation on save.
+    const result = menuItemSchema.safeParse({
+      ...valid,
+      portionNote: "a".repeat(201),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a portion note written as a sentence", () => {
+    expect(
+      menuItemSchema.safeParse({
+        ...valid,
+        portionNote: "Generous for one, or two can share it with a roti.",
+      }).success,
+    ).toBe(true);
+  });
+
   it("rejects an invalid spiceLevel", () => {
     const result = menuItemSchema.safeParse({
       ...valid,

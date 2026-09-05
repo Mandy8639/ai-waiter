@@ -79,7 +79,7 @@ async function getMenuItem(
   const { data: item, error } = await supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, is_available, category_id, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time",
+      "id, name, description, price, is_available, category_id, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note",
     )
     .eq("id", args.menuItemId)
     .eq("restaurant_id", context.restaurantId)
@@ -105,7 +105,19 @@ async function getMenuItem(
     };
   }
 
-  const [{ data: allergenLinks }, { data: groupRows }] = await Promise.all([
+  const [
+    { data: ingredientLinks },
+    { data: allergenLinks },
+    { data: groupRows },
+  ] = await Promise.all([
+    // Ingredients, unlike allergens, are NOT confirmation-gated. They are
+    // written directly (see docs/menu-import.md): a wrong ingredient is an
+    // odd list a restaurant corrects, where a wrong allergen is an
+    // ambulance. Different stakes, different gate.
+    supabase
+      .from("menu_item_ingredients")
+      .select("ingredient_id")
+      .eq("menu_item_id", item.id),
     supabase
       .from("menu_item_allergens")
       .select("allergen_id")
@@ -127,28 +139,33 @@ async function getMenuItem(
       .order("display_order", { ascending: true }),
   ]);
 
+  const ingredientIds = (ingredientLinks ?? []).map((l) => l.ingredient_id);
   const allergenIds = (allergenLinks ?? []).map((l) => l.allergen_id);
   const groupIds = (groupRows ?? []).map((g) => g.id);
 
-  const [{ data: allergens }, { data: optionRows }] = await Promise.all([
-    allergenIds.length > 0
-      ? supabase.from("allergens").select("name").in("id", allergenIds)
-      : Promise.resolve({ data: [] as { name: string }[] }),
-    groupIds.length > 0
-      ? supabase
-          .from("modifier_options")
-          .select("id, modifier_id, name, price_adjustment, is_available")
-          .in("modifier_id", groupIds)
-      : Promise.resolve({
-          data: [] as {
-            id: string;
-            modifier_id: string;
-            name: string;
-            price_adjustment: number;
-            is_available: boolean;
-          }[],
-        }),
-  ]);
+  const [{ data: ingredients }, { data: allergens }, { data: optionRows }] =
+    await Promise.all([
+      ingredientIds.length > 0
+        ? supabase.from("ingredients").select("name").in("id", ingredientIds)
+        : Promise.resolve({ data: [] as { name: string }[] }),
+      allergenIds.length > 0
+        ? supabase.from("allergens").select("name").in("id", allergenIds)
+        : Promise.resolve({ data: [] as { name: string }[] }),
+      groupIds.length > 0
+        ? supabase
+            .from("modifier_options")
+            .select("id, modifier_id, name, price_adjustment, is_available")
+            .in("modifier_id", groupIds)
+        : Promise.resolve({
+            data: [] as {
+              id: string;
+              modifier_id: string;
+              name: string;
+              price_adjustment: number;
+              is_available: boolean;
+            }[],
+          }),
+    ]);
 
   return {
     ok: true,
@@ -165,6 +182,16 @@ async function getMenuItem(
       containsDairy: item.contains_dairy,
       containsGluten: item.contains_gluten,
       preparationTimeMinutes: item.preparation_time,
+      // The restaurant's own answer to "how many people does this feed?",
+      // written as a sentence because that question has no numeric answer.
+      // Null means they have not said — the model must ask the customer to
+      // check with staff rather than estimating from the dish name.
+      portionNote: item.portion_note,
+      // What the dish is made from, as recorded by the restaurant. Empty
+      // means the restaurant hasn't listed any — say so plainly rather than
+      // describing the dish from general knowledge, which would be a
+      // recipe from the internet and not this kitchen's.
+      ingredients: (ingredients ?? []).map((i) => i.name),
       // Empty array here means "the restaurant hasn't listed any
       // allergens for this item" — the model must treat that as
       // "unknown/not specified," never as "confirmed allergen-free" (see
@@ -221,7 +248,7 @@ export const menuTools: ToolDefinition[] = [
   {
     name: "get_menu_item",
     description:
-      "Get full detail for one menu item by id (from a prior search_menu result) — description, price, dietary flags, declared allergens, and its modifier groups/options. Use this before adding an item to the cart if you need to know its required modifiers, and any time a customer asks about a specific item's price, ingredients, or dietary suitability — never state these from memory.",
+      "Get full detail for one menu item by id (from a prior search_menu result) — description, price, dietary flags, ingredients, declared allergens, preparation time, portion size, and its modifier groups/options. Use this before adding an item to the cart if you need to know its required modifiers, and any time a customer asks about a specific item's price, ingredients, dietary suitability, how long it takes, or how many people it feeds — never state these from memory.",
     schema: getMenuItemSchema,
     execute: getMenuItem as ToolDefinition["execute"],
   },

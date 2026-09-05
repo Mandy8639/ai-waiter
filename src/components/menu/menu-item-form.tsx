@@ -30,6 +30,7 @@ export interface MenuItemFormValues {
   containsDairy: boolean;
   containsGluten: boolean;
   preparationTime: number | null;
+  portionNote: string | null;
   displayOrder: number;
 }
 
@@ -185,6 +186,28 @@ export function MenuItemForm({
           />
         </FormField>
       </div>
+
+      {/*
+        Deliberately a sentence, not a "Serves" number. Diners ask "is this
+        enough for me?", and the true answer depends on appetite — the
+        placeholder shows the shape of a good answer, because a restaurant
+        given a blank box will otherwise type "2".
+      */}
+      <FormField
+        id="portionNote"
+        label="Portion (optional)"
+        errors={errors.portionNote}
+        hint="How much food is it, in your own words? e.g. “Generous for one, or two can share it with a roti.”"
+      >
+        <Textarea
+          id="portionNote"
+          name="portionNote"
+          rows={2}
+          maxLength={200}
+          disabled={isPending}
+          defaultValue={defaultValues?.portionNote ?? undefined}
+        />
+      </FormField>
 
       <FormField
         id="imageUrl"

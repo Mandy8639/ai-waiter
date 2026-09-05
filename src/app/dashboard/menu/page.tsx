@@ -27,7 +27,7 @@ export default async function MenuPage() {
     supabase
       .from("menu_items")
       .select(
-        "id, name, category_id, price, is_available, is_vegetarian, is_spicy, display_order",
+        "id, name, category_id, price, is_available, is_vegetarian, is_spicy, details_source, display_order",
       )
       .eq("restaurant_id", restaurant.id)
       .order("display_order", { ascending: true }),
@@ -131,7 +131,20 @@ export default async function MenuPage() {
             <TableBody>
               {menuItems.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.name}</TableCell>
+                  <TableCell className="font-medium">
+                    {item.name}
+                    {/*
+                      The description and prep time on this dish were
+                      written from its NAME and nobody has read them. Diners
+                      see them regardless — this is a prompt to check, not a
+                      gate. Opening the item and saving clears it.
+                    */}
+                    {item.details_source === "ai_draft" && (
+                      <Badge variant="outline" className="ml-2 font-normal">
+                        Draft text
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {categoryNameById.get(item.category_id) ?? "—"}
                   </TableCell>

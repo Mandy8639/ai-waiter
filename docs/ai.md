@@ -234,11 +234,35 @@ model arguments — verified per-schema in `tests/unit/ai-tool-schemas.test.ts` 
 ## Menu grounding — never invent menu facts
 
 `get_menu_item` and `search_menu` return only what's actually stored: name, description, price,
-category, availability, dietary flags, allergens, spice level, and modifier groups/options. The
-system prompt (`system-prompt.ts`) explicitly instructs the model never to invent an ingredient,
-allergen, price, availability, popularity, review, rating, or "chef recommendation" that isn't in
-that returned data — and to say the menu doesn't specify it when a customer asks something the
-data doesn't cover.
+category, availability, dietary flags, ingredients, allergens, spice level, preparation time,
+portion note, and modifier groups/options. The system prompt (`system-prompt.ts`) explicitly
+instructs the model never to invent an ingredient, allergen, price, availability, popularity,
+review, rating, or "chef recommendation" that isn't in that returned data — and to say the menu
+doesn't specify it when a customer asks something the data doesn't cover.
+
+### Talking about how a dish is made
+
+Grounding rules of this kind have a failure mode in the opposite direction: a waiter that answers
+"the menu doesn't provide a detailed description for this item" to _every_ question about the food
+is grounded and useless. Knowing the food is the job.
+
+So the prompt has a section (`## Talking about the food`) that says what the model _may_ do with
+each field, rather than only what it may not:
+
+| Field                    | What it licenses                                                                                                                                                                                                                                         |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ingredients`            | Describing the dish from them, and naming the broad method the name and ingredients plainly imply (fried, steamed, blended, tandoor-baked). **Not** quantities, recipe steps, or temperatures — that would be a claim about a kitchen it has never seen. |
+| `preparationTimeMinutes` | An approximation ("usually about fifteen minutes"), never a promise, with the caveat that a busy kitchen runs longer.                                                                                                                                    |
+| `portionNote`            | The restaurant's own answer to "how many does this feed?", keeping the appetite hedge rather than flattening it to "serves 2".                                                                                                                           |
+
+An empty field still means _say so_, not _estimate_. The line the prompt draws is between reading
+back what this restaurant recorded and reciting what the internet says about the dish.
+
+A bug worth remembering: `get_menu_item`'s description advertised ingredients for weeks while its
+query never selected them, so the waiter said "the menu doesn't specify" about 726 recorded
+ingredient links. Nothing failed — the tool returned a valid result that was simply missing a
+field. `tests/unit/ai-tool-surface.test.ts` now asserts the tool returns each kind of detail its
+own description promises.
 
 ## Model fallback
 
