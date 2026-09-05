@@ -122,3 +122,20 @@ export function estimateOrderPrep(params: {
     finished,
   };
 }
+
+/**
+ * The estimate as a sentence, or null when there is nothing honest to say.
+ *
+ * Null rather than a cheerful placeholder: a diner told "about 20 minutes"
+ * by a kitchen that never recorded a time has been given a number the
+ * restaurant never stood behind.
+ */
+export function etaSentence(estimate: PrepEstimate): string | null {
+  if (estimate.finished || estimate.totalMinutes === null) return null;
+  const { minutesRemaining: soonest, minutesRemainingAtWorst: latest } =
+    estimate;
+  if (soonest === null || latest === null) return null;
+  if (soonest === 0 && latest === 0) return "Should be any moment now.";
+  if (soonest === latest) return `About ${soonest} more minutes.`;
+  return `About ${soonest}–${latest} more minutes.`;
+}

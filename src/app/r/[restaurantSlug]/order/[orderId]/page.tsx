@@ -9,6 +9,9 @@ import { CUSTOMER_STATUS_LABELS as STATUS_LABELS } from "@/lib/orders/status";
 import { getOrderPaymentState } from "@/lib/payments/queries";
 import { startOrderCheckout } from "@/lib/payments/checkout";
 import { PayOrderPanel } from "@/components/customer/pay-order-panel";
+import { OrderProgress } from "@/components/customer/order-progress";
+import { getOrderEta } from "@/lib/orders/order-eta";
+import { etaSentence } from "@/lib/orders/prep-estimate";
 
 export async function generateMetadata({
   params,
@@ -45,7 +48,10 @@ export default async function OrderConfirmationPage({
   // Payment is offered only when a card could actually be charged: the
   // restaurant has switched card payments on AND its Stripe account can
   // take them. A cancelled order is never payable.
-  const payment = await getOrderPaymentState(order.id, order.restaurantId);
+  const [payment, eta] = await Promise.all([
+    getOrderPaymentState(order.id, order.restaurantId),
+    getOrderEta(order),
+  ]);
   const payable =
     payment.canTakeCard && !payment.paid && order.status !== "cancelled";
 
@@ -95,6 +101,14 @@ export default async function OrderConfirmationPage({
           {order.restaurantName} · {order.tableLabel}
         </p>
       </div>
+
+      {/*
+        The tracker a diner actually watches. OrderStatusSync above keeps
+        this whole page live, so this re-renders on the server as the
+        kitchen moves the order along — no second subscription for the
+        same row, and no client state to drift.
+      */}
+      <OrderProgress status={order.status} eta={etaSentence(eta)} />
 
       <div className="flex flex-col gap-4">
         {order.items.map((item) => (

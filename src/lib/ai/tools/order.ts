@@ -1,6 +1,5 @@
 import "server-only";
-import { estimateOrderPrep } from "@/lib/orders/prep-estimate";
-import { createClient } from "@/lib/supabase/server";
+import { getOrderEta } from "@/lib/orders/order-eta";
 import type { z } from "zod";
 import { submitOrder } from "@/lib/orders/submit-order";
 import { getOrderById, getOrdersForSession } from "@/lib/orders/queries";
@@ -181,24 +180,10 @@ async function getOrderStatus(
   // ordering, and this tool could not answer it: it returned the status,
   // the total and the items, and nothing about time. The model fell back
   // to get_menu_item and quoted one drink's preparation time instead.
-  // How much work is already in front of this order. Via the SECURITY
-  // DEFINER aggregate, because a diner cannot read other tables' orders
-  // and must not be able to — it returns two integers, never a row.
-  const supabase = await createClient();
-  const { data: queue } = await supabase
-    .rpc("get_kitchen_queue_ahead", {
-      target_restaurant_id: context.restaurantId,
-      placed_before: mostRecent.createdAt,
-    })
-    .maybeSingle();
-
-  const estimate = estimateOrderPrep({
-    itemPrepMinutes: mostRecent.items.map((i) => i.prepMinutes),
-    status: mostRecent.status,
-    placedAt: mostRecent.createdAt,
-    queueMinutesAhead: queue?.prep_minutes_ahead ?? 0,
-    ordersAhead: queue?.orders_ahead ?? 0,
-  });
+  // The same helper the diner's own order page uses, so the screen in
+  // their hand and the waiter answering them cannot give two different
+  // numbers for the same order.
+  const estimate = await getOrderEta(mostRecent);
 
   return {
     ok: true,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estimateOrderPrep } from "@/lib/orders/prep-estimate";
+import { estimateOrderPrep, etaSentence } from "@/lib/orders/prep-estimate";
 
 const placedAt = "2026-09-05T17:00:00.000Z";
 const at = (mins: number) => new Date(Date.parse(placedAt) + mins * 60_000);
@@ -124,5 +124,56 @@ describe("estimateOrderPrep", () => {
     });
     expect(e.totalMinutes).toBe(10);
     expect(e.minutesRemaining).toBeNull();
+  });
+});
+
+describe("etaSentence", () => {
+  it("says nothing at all when the kitchen never recorded a time", () => {
+    // Null rather than a cheerful placeholder: a diner told "about 20
+    // minutes" by a kitchen that never gave one has been handed a number
+    // the restaurant never stood behind.
+
+    expect(
+      etaSentence({
+        totalMinutes: null,
+        minutesRemaining: null,
+        minutesRemainingAtWorst: null,
+        ordersAhead: 0,
+        finished: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("gives one number when the kitchen is clear, a range when it is not", () => {
+    expect(
+      etaSentence({
+        totalMinutes: 15,
+        minutesRemaining: 12,
+        minutesRemainingAtWorst: 12,
+        ordersAhead: 0,
+        finished: false,
+      }),
+    ).toBe("About 12 more minutes.");
+    expect(
+      etaSentence({
+        totalMinutes: 15,
+        minutesRemaining: 12,
+        minutesRemainingAtWorst: 27,
+        ordersAhead: 1,
+        finished: false,
+      }),
+    ).toBe("About 12–27 more minutes.");
+  });
+
+  it("stops estimating once the food is ready", () => {
+    expect(
+      etaSentence({
+        totalMinutes: 15,
+        minutesRemaining: null,
+        minutesRemainingAtWorst: null,
+        ordersAhead: 0,
+        finished: true,
+      }),
+    ).toBeNull();
   });
 });
