@@ -1,4 +1,5 @@
 import "server-only";
+import { estimateOrderPrep } from "@/lib/orders/prep-estimate";
 import type { z } from "zod";
 import { submitOrder } from "@/lib/orders/submit-order";
 import { getOrderById, getOrdersForSession } from "@/lib/orders/queries";
@@ -175,6 +176,16 @@ async function getOrderStatus(
   const mostRecent = await getOrderById(orders[0].id);
   if (!mostRecent) return { ok: false, error: "Couldn't load that order." };
 
+  // "How long will it be?" is the question a diner asks immediately after
+  // ordering, and this tool could not answer it: it returned the status,
+  // the total and the items, and nothing about time. The model fell back
+  // to get_menu_item and quoted one drink's preparation time instead.
+  const estimate = estimateOrderPrep({
+    itemPrepMinutes: mostRecent.items.map((i) => i.prepMinutes),
+    status: mostRecent.status,
+    placedAt: mostRecent.createdAt,
+  });
+
   return {
     ok: true,
     data: {
@@ -183,6 +194,13 @@ async function getOrderStatus(
       total: mostRecent.total,
       currency: mostRecent.currency,
       createdAt: mostRecent.createdAt,
+      // The whole order, not one dish: the longest item gates the plate.
+      // null means no dish on the order has a recorded preparation time —
+      // say the kitchen hasn't given a time, never guess one.
+      estimatedTotalMinutes: estimate.totalMinutes,
+      // Already accounts for how long ago the order was placed, so this
+      // can be read out directly rather than worked out from createdAt.
+      estimatedMinutesRemaining: estimate.minutesRemaining,
       items: mostRecent.items.map((i) => ({
         name: i.itemName,
         quantity: i.quantity,
@@ -229,7 +247,7 @@ export const orderTools: ToolDefinition[] = [
   {
     name: "get_order_status",
     description:
-      "Get the status and details of the customer's most recent order in this visit.",
+      "Get the status and details of the customer's most recent order in this visit, including how long the whole order takes and how many minutes are left. Use this — never get_menu_item — when the customer asks how long their ORDER will be; get_menu_item answers how long one DISH takes, which is a different question.",
     schema: getOrderStatusSchema,
     execute: getOrderStatus as ToolDefinition["execute"],
   },
