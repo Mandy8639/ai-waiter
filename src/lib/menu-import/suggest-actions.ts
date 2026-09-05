@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { toFriendlyError } from "@/lib/errors/database-error";
 import { aiConfig } from "@/lib/ai/config";
-import { visionModel } from "./vision";
+
 import {
   parseSuggestions,
   SUGGESTION_PROMPT,
@@ -57,7 +57,11 @@ async function askForSuggestions(
         "X-Title": "AI Waiter menu suggestions",
       },
       body: JSON.stringify({
-        model: visionModel(),
+        // The suggester's own list, not the reader's: this call contains
+        // no image, and the two jobs vet differently (a model that reads a
+        // board perfectly can return malformed JSON from dish names).
+        // `models` alone — never alongside `model`.
+        models: aiConfig.suggestionModels,
         max_tokens: 6000,
         messages: [
           {

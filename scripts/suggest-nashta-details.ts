@@ -49,9 +49,25 @@ const BATCH = 8;
  * a prep time, an ingredient list and an allergen list.
  */
 const PORTION_BATCH = 20;
-const MODEL =
-  process.env.MENU_IMPORT_VISION_MODEL ||
-  "dots-studio/dots-3-note-preview:free";
+/**
+ * The suggester's own preference list, matching the in-app path. Sent as
+ * `models` so a rate-limited primary degrades to the next instead of
+ * failing the batch — never alongside `model`, which would silently win
+ * and discard the list.
+ */
+const MODELS = (
+  process.env.MENU_SUGGESTION_MODEL ??
+  [
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "z-ai/glm-5.2:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "cohere/north-mini-code:free",
+    "dots-studio/dots-3-note-preview:free",
+  ].join(",")
+)
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 
 async function ask(names: string[], prompt = SUGGESTION_PROMPT) {
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -61,7 +77,7 @@ async function ask(names: string[], prompt = SUGGESTION_PROMPT) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: MODEL,
+      models: MODELS,
       max_tokens: 8000,
       messages: [
         {
@@ -267,7 +283,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log(`${restaurant.name}, ${MODEL}`);
+  console.log(
+    `${restaurant.name}, ${MODELS[0]} (+${MODELS.length - 1} fallbacks)`,
+  );
   console.log(apply ? "MODE: APPLY\n" : "MODE: dry run\n");
 
   if (portionsOnly) {
