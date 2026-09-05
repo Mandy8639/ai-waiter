@@ -1,4 +1,6 @@
 import "server-only";
+import { estimateOrderPrep } from "@/lib/orders/prep-estimate";
+import { createClient } from "@/lib/supabase/server";
 import type { z } from "zod";
 import { submitOrder } from "@/lib/orders/submit-order";
 import { getOrderById, getOrdersForSession } from "@/lib/orders/queries";
@@ -175,6 +177,29 @@ async function getOrderStatus(
   const mostRecent = await getOrderById(orders[0].id);
   if (!mostRecent) return { ok: false, error: "Couldn't load that order." };
 
+  // "How long will it be?" is the question a diner asks immediately after
+  // ordering, and this tool could not answer it: it returned the status,
+  // the total and the items, and nothing about time. The model fell back
+  // to get_menu_item and quoted one drink's preparation time instead.
+  // How much work is already in front of this order. Via the SECURITY
+  // DEFINER aggregate, because a diner cannot read other tables' orders
+  // and must not be able to — it returns two integers, never a row.
+  const supabase = await createClient();
+  const { data: queue } = await supabase
+    .rpc("get_kitchen_queue_ahead", {
+      target_restaurant_id: context.restaurantId,
+      placed_before: mostRecent.createdAt,
+    })
+    .maybeSingle();
+
+  const estimate = estimateOrderPrep({
+    itemPrepMinutes: mostRecent.items.map((i) => i.prepMinutes),
+    status: mostRecent.status,
+    placedAt: mostRecent.createdAt,
+    queueMinutesAhead: queue?.prep_minutes_ahead ?? 0,
+    ordersAhead: queue?.orders_ahead ?? 0,
+  });
+
   return {
     ok: true,
     data: {
@@ -183,6 +208,20 @@ async function getOrderStatus(
       total: mostRecent.total,
       currency: mostRecent.currency,
       createdAt: mostRecent.createdAt,
+      // The whole order, not one dish: the longest item gates the plate.
+      // null means no dish on the order has a recorded preparation time —
+      // say the kitchen hasn't given a time, never guess one.
+      estimatedTotalMinutes: estimate.totalMinutes,
+      // A RANGE, already accounting for how long ago the order was placed
+      // AND for the orders queued in front of it. Read both out — "about
+      // 15 to 30 minutes" — rather than picking one: the low number alone
+      // is a promise the kitchen has not made, and the high number alone
+      // sends people away.
+      estimatedMinutesRemaining: estimate.minutesRemaining,
+      estimatedMinutesRemainingAtWorst: estimate.minutesRemainingAtWorst,
+      // Say this only if it helps ("there are two orders ahead of yours").
+      // Never as a reason the customer should feel rushed.
+      ordersAheadInKitchen: estimate.ordersAhead,
       items: mostRecent.items.map((i) => ({
         name: i.itemName,
         quantity: i.quantity,
@@ -229,7 +268,7 @@ export const orderTools: ToolDefinition[] = [
   {
     name: "get_order_status",
     description:
-      "Get the status and details of the customer's most recent order in this visit.",
+      "Get the status and details of the customer's most recent order in this visit, including how long the whole order takes and how many minutes are left. Use this — never get_menu_item — when the customer asks how long their ORDER will be; get_menu_item answers how long one DISH takes, which is a different question.",
     schema: getOrderStatusSchema,
     execute: getOrderStatus as ToolDefinition["execute"],
   },

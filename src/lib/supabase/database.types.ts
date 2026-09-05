@@ -1091,6 +1091,14 @@ export interface Database {
           allow_upselling: boolean;
         }[];
       };
+      /** Aggregate kitchen load ahead of one order — two integers, never a row. */
+      get_kitchen_queue_ahead: {
+        Args: { target_restaurant_id: string; placed_before: string };
+        Returns: {
+          orders_ahead: number;
+          prep_minutes_ahead: number;
+        }[];
+      };
       order_belongs_to_caller: {
         Args: { target_order_id: string };
         Returns: boolean;

@@ -1041,3 +1041,61 @@ describe("order access: restaurant staff", () => {
     expect(rows[0].status).toBe("pending");
   });
 });
+
+describe("get_kitchen_queue_ahead()", () => {
+  let db: TestDb;
+  beforeAll(async () => {
+    db = await createTestDb();
+  });
+  afterAll(async () => {
+    await db.close();
+  });
+
+  it("counts only active orders placed before this one", async () => {
+    const fx = await fullCustomerFixture(db);
+    await db.admin.query(
+      "update public.menu_items set preparation_time = 15 where id = $1;",
+      [fx.menuItemId],
+    );
+    await addCartItem(db, fx.userId, fx.cartId, fx.restaurantId, fx.menuItemId);
+    const first = await submitOrder(db, fx.userId, "queue-1");
+
+    const { rows } = await db.admin.query<{
+      orders_ahead: number;
+      prep_minutes_ahead: number;
+    }>("select * from public.get_kitchen_queue_ahead($1, now());", [
+      fx.restaurantId,
+    ]);
+    expect(Number(rows[0].orders_ahead)).toBe(1);
+    expect(Number(rows[0].prep_minutes_ahead)).toBe(15);
+
+    // Served food is no longer occupying the kitchen. Walked through the
+    // real state machine rather than jumped: order_status_transitions
+    // rejects pending -> served outright, which is the trigger doing its
+    // job and this test getting it wrong the first time.
+    for (const next of ["confirmed", "preparing", "ready", "served"]) {
+      await db.admin.query(
+        "update public.orders set status = $2 where id = $1;",
+        [first.id, next],
+      );
+    }
+    const { rows: after } = await db.admin.query<{ orders_ahead: number }>(
+      "select * from public.get_kitchen_queue_ahead($1, now());",
+      [fx.restaurantId],
+    );
+    expect(Number(after[0].orders_ahead)).toBe(0);
+  });
+
+  it("does not count another restaurant's kitchen", async () => {
+    const a = await fullCustomerFixture(db);
+    const b = await fullCustomerFixture(db);
+    await addCartItem(db, a.userId, a.cartId, a.restaurantId, a.menuItemId);
+    await submitOrder(db, a.userId, "queue-tenant-1");
+
+    const { rows } = await db.admin.query<{ orders_ahead: number }>(
+      "select * from public.get_kitchen_queue_ahead($1, now());",
+      [b.restaurantId],
+    );
+    expect(Number(rows[0].orders_ahead)).toBe(0);
+  });
+});

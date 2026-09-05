@@ -11,6 +11,7 @@ import {
   type ReceiptState,
 } from "@/lib/payments/receipt-status";
 import { formatReservationTime } from "@/lib/reservations/timezone";
+import { ShareReceipt } from "@/components/customer/share-receipt";
 
 export const metadata = {
   title: "Receipt",
@@ -206,6 +207,16 @@ export default async function ReceiptPage({
       </p>
 
       <div className="flex flex-col gap-2">
+        {/*
+          Offered, never required. A diner who wants nothing simply walks
+          away from this page, and "Your orders" below is an ordinary link
+          rather than a dismissal they have to find — there is no step to
+          skip because sharing was never in the way.
+        */}
+        <ShareReceipt
+          restaurantName={restaurant.name}
+          total={money(receipt.net)}
+        />
         <Link
           href={`/r/${restaurantSlug}/orders`}
           className={buttonVariants({ variant: "outline" })}

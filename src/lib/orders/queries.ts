@@ -11,6 +11,8 @@ export interface OrderItemModifierView {
 export interface OrderItemView {
   id: string;
   itemName: string;
+  /** The dish's recorded preparation time, or null if it has none. */
+  prepMinutes: number | null;
   quantity: number;
   unitPrice: number;
   modifierTotal: number;
@@ -74,11 +76,35 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
       supabase
         .from("order_items")
         .select(
-          "id, item_name, quantity, unit_price, modifier_total, line_total",
+          "id, menu_item_id, item_name, quantity, unit_price, modifier_total, line_total",
         )
         .eq("order_id", order.id)
         .order("created_at", { ascending: true }),
     ]);
+
+  // Preparation times are read LIVE from menu_items rather than
+  // snapshotted onto the order line. Deliberate: this estimate is only
+  // meaningful while the food is being cooked, minutes after placement,
+  // and a menu rarely changes in that window. For a historical order the
+  // number is meaningless anyway, so snapshotting it would add a column
+  // and a submit_order rewrite to buy accuracy nobody reads.
+  const menuItemIds = [
+    ...new Set(
+      (items ?? [])
+        .map((i) => i.menu_item_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const { data: prepRows } =
+    menuItemIds.length > 0
+      ? await supabase
+          .from("menu_items")
+          .select("id, preparation_time")
+          .in("id", menuItemIds)
+      : { data: [] as { id: string; preparation_time: number | null }[] };
+  const prepById = new Map(
+    (prepRows ?? []).map((r) => [r.id, r.preparation_time]),
+  );
 
   const itemIds = (items ?? []).map((i) => i.id);
   const { data: modifiers } =
@@ -130,6 +156,10 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
     items: (items ?? []).map((i) => ({
       id: i.id,
       itemName: i.item_name,
+      // null when the dish was deleted from the menu, or never had one.
+      prepMinutes: i.menu_item_id
+        ? (prepById.get(i.menu_item_id) ?? null)
+        : null,
       quantity: i.quantity,
       unitPrice: Number(i.unit_price),
       modifierTotal: Number(i.modifier_total),
