@@ -25,6 +25,17 @@ import { OrderDetailDialog } from "./order-detail-dialog";
 import { SplitOrderDialog } from "./split-order-dialog";
 import { MergeOrderDialog } from "./merge-order-dialog";
 import { useNotificationSound } from "./use-notification-sound";
+
+/**
+ * How often to chime again while an order sits unaccepted.
+ *
+ * Twenty seconds is chosen to be answerable rather than ignorable. Faster
+ * becomes noise a kitchen mutes on the first busy night, and a muted board
+ * is the failure this exists to prevent — which is why the count is also
+ * shown in writing, and why the banner says the alerts are muted when
+ * they are.
+ */
+const REMINDER_INTERVAL_MS = 20_000;
 import {
   resolvePollIntervalMs,
   shouldPollNow,
@@ -274,6 +285,27 @@ export function KitchenBoard({
     [orders],
   );
 
+  // Orders nobody has accepted yet. `pending` already means exactly that —
+  // the state machine's first transition is pending -> confirmed, which IS
+  // the "Accept" a DoorDash tablet demands — so this needs no new column.
+  const unacceptedCount = orders.filter((o) => o.status === "pending").length;
+
+  // Keep chiming until someone accepts.
+  //
+  // The one-shot chime on arrival was not enough, and this restaurant has
+  // the evidence: eleven orders sat at `pending` for hours because the
+  // sound played once, into an empty room, and nothing ever asked again.
+  // A single alert only works if a person happens to be standing there
+  // when it fires. Service does not work like that.
+  //
+  // Stops the instant the last unaccepted order is accepted, so a kitchen
+  // that is keeping up hears nothing at all.
+  useEffect(() => {
+    if (unacceptedCount === 0) return;
+    const timer = setInterval(() => play(), REMINDER_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [unacceptedCount, play]);
+
   return (
     <div className="flex flex-1 flex-col gap-4" onClickCapture={unlock}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -287,6 +319,31 @@ export function KitchenBoard({
           {muted ? "Unmute alerts" : "Mute alerts"}
         </Button>
       </div>
+
+      {/*
+        Said in words as well as sound, and it has to be. A kitchen mutes
+        the board, or the tablet's volume is down, or the person nearest it
+        cannot hear — and an alert that exists only as a noise has simply
+        not happened for them (SC 1.4.1, and ordinary kitchen reality).
+        aria-live announces it without stealing focus from whatever a cook
+        is doing.
+      */}
+      {unacceptedCount > 0 && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="border-destructive/40 bg-destructive/5 text-foreground rounded-md border px-3 py-2 text-sm font-medium"
+        >
+          {unacceptedCount === 1
+            ? "1 order is waiting to be accepted."
+            : `${unacceptedCount} orders are waiting to be accepted.`}{" "}
+          <span className="text-muted-foreground font-normal">
+            {muted
+              ? "Alerts are muted."
+              : "This will keep chiming until you accept them."}
+          </span>
+        </div>
+      )}
 
       {actionError && (
         <div className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">

@@ -7,7 +7,7 @@
 // interval/staleness/dedup decisions this component relies on are
 // separately covered, without any mocking at all, in
 // tests/unit/kds-reconciliation.test.ts.
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KitchenBoard } from "@/components/kitchen/kitchen-board";
 import type { KitchenOrder } from "@/lib/orders/kitchen";
@@ -342,5 +342,62 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
     await flush(500);
 
     expect(orderCardIds()).toEqual(["1"]);
+  });
+});
+
+describe("KitchenBoard — unaccepted orders keep asking", () => {
+  it("says in writing how many orders are waiting to be accepted", async () => {
+    // The alert cannot exist only as a noise: a kitchen mutes the board on
+    // its first busy night, and a muted alert has simply not happened.
+    mockFetchActiveOrders.mockResolvedValue([]);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        role="owner"
+        initialOrders={[
+          makeOrder({ id: "a", status: "pending" }),
+          makeOrder({ id: "b", status: "pending" }),
+        ]}
+      />,
+    );
+    expect(
+      screen.getByText(/2 orders are waiting to be accepted/i),
+    ).toBeTruthy();
+  });
+
+  it("says nothing when every order has been accepted", async () => {
+    // A kitchen that is keeping up should hear and see nothing at all.
+    mockFetchActiveOrders.mockResolvedValue([]);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        role="owner"
+        initialOrders={[makeOrder({ id: "a", status: "preparing" })]}
+      />,
+    );
+    expect(screen.queryByText(/waiting to be accepted/i)).toBeNull();
+  });
+
+  it("stops reminding once the last order is accepted", async () => {
+    // The regression that matters: an interval that outlives the thing it
+    // was reminding about is worse than no reminder, because the next
+    // thing staff do is mute the board permanently.
+    mockFetchActiveOrders.mockResolvedValue([]);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        role="owner"
+        initialOrders={[makeOrder({ id: "a", status: "pending" })]}
+      />,
+    );
+    expect(screen.getByText(/waiting to be accepted/i)).toBeTruthy();
+
+    mockFetchActiveOrders.mockResolvedValue([
+      makeOrder({ id: "a", status: "confirmed" }),
+    ]);
+    act(() => realtimeState.onCallback?.({}));
+    await flush();
+
+    expect(screen.queryByText(/waiting to be accepted/i)).toBeNull();
   });
 });
