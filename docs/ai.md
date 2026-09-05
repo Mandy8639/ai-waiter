@@ -72,6 +72,28 @@ same, unmodified `runConversationLoop()`. See ["The provider abstraction"](#the-
 below for the architecture, and [`docs/security.md`](./security.md#ai-tool-authorization) — the
 authorization model this section describes is identical regardless of provider.
 
+### Running free now, paid later
+
+Both versions are built, and switching between them is configuration, not code — the parity test
+(`tests/unit/ai-provider-parity.test.ts`) proves the same tool-calling scenario produces identical
+tool calls, outcomes and final text through either provider's mapping.
+
+**Free (current).** `AI_PROVIDER=openrouter` with `OPENROUTER_API_KEY`. Costs nothing, and the
+trade is reliability: free models rate-limit (`429`), get delisted without notice, and vary in
+whether they call tools at all. That last one is the dangerous failure — a model that answers a
+menu question without calling `search_menu` produces a well-formed reply, logs `outcome: ok`, and
+tells a customer the restaurant doesn't serve something it serves. Leave `AI_MODEL` **unset** so
+the vetted preference list in `config.ts` applies.
+
+**Paid (at launch).** Set `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`, and leave `AI_MODEL`
+unset so `claude-opus-5` applies. Nothing else changes — no code edit, no migration, no redeploy
+beyond the environment variables. Remove `OPENROUTER_API_KEY` only if you want to be certain the
+free path can't be selected; it is otherwise ignored.
+
+The switch is worth making when real customers are ordering rather than when the bill becomes
+affordable: the cost of the free tier is not measured in dollars but in the occasional confident
+wrong answer, and that lands on a diner.
+
 ### Anthropic (production default)
 
 - **SDK**: `@anthropic-ai/sdk`, called via the beta Messages endpoint
@@ -298,6 +320,26 @@ latency on the happy path.
 > keep it that way.
 
 **Anthropic is unaffected** — it takes the first entry and ignores the rest.
+
+### Re-vetting the list
+
+`scripts/vet-openrouter-models.ts` runs the check this section requires, as four questions that
+can only be answered by calling a tool, counting actual `tool_calls` in the raw response. It
+deliberately bypasses the app's own loop, because the menu-factuality guard would mask the exact
+behaviour being measured.
+
+```bash
+npx tsx --env-file=.env.local scripts/vet-openrouter-models.ts
+```
+
+Last run 2026-09-05: `minimax-m3` 4/4, `nemotron-3-ultra` 4/4, `dots-3-note-preview` 4/4 (added as
+a third vendor after a live 429 showed two entries is thin cover), `poolside/laguna-s-2.1` **3/4 —
+rejected**.
+
+That rejection is the useful result. laguna-s answered every factual question with a tool call —
+price, ingredients, preparation — and then answered _"What do you recommend?"_ from nothing at all.
+A model can be reliable on the questions that look hard and fail on the one that looks easy, so a
+probe set that only asks about prices would have passed it.
 
 ### The list is curated, and that is the whole safety property
 

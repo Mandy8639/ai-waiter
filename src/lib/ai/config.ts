@@ -57,10 +57,30 @@ const defaultModelsByProvider: Record<AiProviderName, string[]> = {
    * entry reintroduces exactly the failure the curated list exists to
    * prevent: see tools/cart-fact-detection.ts for what a model that
    * fabricates tool calls does to a customer's order.
+   *
+   * Re-vetted 2026-09-05 with scripts/vet-openrouter-models.ts, which
+   * runs that check as four questions answerable only by a tool call:
+   *
+   *   minimax/minimax-m3:free                4/4
+   *   nvidia/nemotron-3-ultra-550b-a55b:free 4/4
+   *   dots-studio/dots-3-note-preview:free   4/4  (added)
+   *   poolside/laguna-s-2.1:free             3/4  REJECTED
+   *
+   * dots-3 was added as a third vendor because the failure this list
+   * exists for actually happened again — a 429 mid-session — and two
+   * entries is thin cover. It is already this app's menu-import vision
+   * model, so it is a known quantity.
+   *
+   * laguna-s is rejected, and instructively: it answered every factual
+   * question with a tool call and then answered "What do you recommend?"
+   * from nothing. A model can be reliable on the questions that look hard
+   * and fail on the one that looks easy, which is why the probe set
+   * includes it.
    */
   openrouter: [
     "minimax/minimax-m3:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "dots-studio/dots-3-note-preview:free",
   ],
 };
 
