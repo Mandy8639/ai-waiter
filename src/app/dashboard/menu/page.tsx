@@ -37,6 +37,14 @@ export default async function MenuPage() {
       .eq("restaurant_id", restaurant.id),
   ]);
 
+  // Dishes carrying an allergen suggestion nobody has confirmed. Counted
+  // rather than fetched: the page only needs to know whether to nudge.
+  const { count: pendingAllergens } = await supabase
+    .from("menu_item_allergens")
+    .select("menu_item_id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurant.id)
+    .is("confirmed_at", null);
+
   const categoryNameById = new Map(
     (categories ?? []).map((c) => [c.id, c.name]),
   );
@@ -63,6 +71,20 @@ export default async function MenuPage() {
               restaurant with 150 items should not type them all in, and a
               restaurant adding one dish should not have to photograph it.
             */}
+            {/*
+              Surfaced next to the menu itself, with a count, because an
+              unconfirmed allergen is invisible to diners: without a visible
+              reminder a restaurant would never learn there was anything
+              waiting, and would assume its allergen data was live.
+            */}
+            {(pendingAllergens ?? 0) > 0 && (
+              <Link
+                href="/dashboard/menu/allergen-review"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Confirm allergens ({pendingAllergens})
+              </Link>
+            )}
             <Link
               href="/dashboard/menu/import"
               className={buttonVariants({ variant: "outline" })}

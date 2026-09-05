@@ -102,3 +102,66 @@ successfully committed an import in the integration tests before it was fixed wi
   how someone gets hurt; unset means the AI correctly says the menu doesn't specify.
 - **Uploaded pages are not yet persisted.** The bucket exists and is policied, but extraction reads
   the bytes directly from the browser, so there is currently no stored copy of what was read.
+
+## Ingredients and allergens
+
+Menu import can also suggest what a dish contains, which saves a restaurant
+typing ingredients for 150 items. The two halves are treated very differently,
+and the difference is deliberate.
+
+**Ingredients are suggested and written straight in.** "Paneer Paratha" almost
+certainly contains paneer, wheat flour and potato. Getting one wrong produces
+an odd list that the restaurant corrects; nobody is harmed.
+
+**Allergens are suggested but never asserted.** A dish name cannot tell you
+whether _this_ kitchen thickens its tikka masala with cashew paste. So a
+suggested allergen is written with `confirmed_at = NULL` and is invisible
+everywhere a diner could see it — the menu page, the item page, and
+`get_menu_item` all filter on it — until a human ticks that specific dish.
+
+The asymmetry driving this: **a missing allergen fails safe** (the AI already
+says "the menu doesn't specify — please check with staff"), while **a wrong
+allergen fails deadly**, because a diner with an allergy acts on it.
+
+### Why there is no "confirm all"
+
+The realistic failure is not the model. It is a tired owner clearing 150 items
+at 11pm. If confirming is one click for the whole menu, the confirmation
+records nothing except a wish for the banner to disappear — while a diner is
+told the restaurant checked.
+
+So confirmation is per dish, and unticked suggestions are **deleted** rather
+than left pending, so the same question is not asked forever.
+
+### Suggestions are constrained to a fixed vocabulary
+
+`ALLERGEN_VOCABULARY` in `suggestions.ts`. Anything outside it is dropped, not
+passed through: "may contain traces of nuts" is unmatchable, unfilterable, and
+invisible to a diner scanning for one word — which is worse than nothing,
+because it looks like coverage.
+
+The prompt also tells the model to **leave an allergen out when unsure**.
+Under-suggesting is recoverable; over-suggesting is what hurts someone.
+
+### Where this is enforced
+
+| Layer    | Enforcement                                                     |
+| -------- | --------------------------------------------------------------- |
+| Prompt   | "If you are unsure… LEAVE IT OUT"                               |
+| Parser   | non-vocabulary allergens dropped                                |
+| Database | `confirmed_at` NULL, `confirmed_allergen_ids()` excludes it     |
+| Reads    | item page and `get_menu_item` filter `confirmed_at is not null` |
+| UI       | per-dish confirmation, no bulk accept                           |
+
+Staff ticking an allergen by hand in the dashboard **is** the confirmation —
+there is no weaker state to record, and those rows were backfilled as confirmed
+by the migration since they could only have been created by a person.
+
+### Still not covered
+
+- **Cross-contamination is not modelled at all.** "Fried in the same oil as" is
+  a real allergen risk this schema has no way to express.
+- **No jurisdiction-specific compliance.** Allergen disclosure is regulated and
+  the rules differ by country; nothing here claims to satisfy any of them.
+- **The suggestion pass has not been run against a real model** — the parser is
+  tested, the round trip is not.

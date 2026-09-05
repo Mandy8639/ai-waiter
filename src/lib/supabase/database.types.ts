@@ -406,11 +406,16 @@ export interface Database {
           restaurant_id: string;
           menu_item_id: string;
           allergen_id: string;
+          /** NULL means an unconfirmed suggestion — never show it to a diner. */
+          confirmed_at: string | null;
+          confirmed_by: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           restaurant_id: string;
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
           menu_item_id: string;
           allergen_id: string;
           created_at?: string;
@@ -1016,6 +1021,14 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      confirm_menu_item_allergens: {
+        Args: { p_menu_item_id: string; p_allergen_ids: string[] };
+        Returns: number;
+      };
+      confirmed_allergen_ids: {
+        Args: { target_menu_item_id: string };
+        Returns: string[];
+      };
       commit_menu_import: {
         Args: { p_import_id: string };
         Returns: {

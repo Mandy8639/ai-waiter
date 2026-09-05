@@ -109,7 +109,15 @@ async function getMenuItem(
     supabase
       .from("menu_item_allergens")
       .select("allergen_id")
-      .eq("menu_item_id", item.id),
+      .eq("menu_item_id", item.id)
+      // Confirmed allergens only. An unconfirmed row is a SUGGESTION —
+      // typically inferred from a dish name during menu import — and this
+      // platform never states an allergen on its own authority. Omitting it
+      // makes the app say "the menu doesn't specify, check with staff",
+      // which is the safe answer; including it would be an assertion a
+      // diner with an allergy acts on. See
+      // supabase/migrations/20260904140000_allergen_confirmation.sql.
+      .not("confirmed_at", "is", null),
     supabase
       .from("menu_item_modifiers")
       .select(
