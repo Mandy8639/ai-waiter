@@ -21,6 +21,26 @@ import { extractJsonObject } from "./extraction";
  *   see 20260904140000_allergen_confirmation.sql.
  */
 
+/**
+ * The heat ladder, matching the menu_items.spice_level check constraint.
+ *
+ * Suggested, never asserted. A dish name is decent evidence of heat —
+ * "Peri Peri Fries" is not mild anywhere — but how hot a kitchen actually
+ * makes its chaat is a fact about that kitchen. So the restaurant sees the
+ * suggestion pre-selected and either confirms it or picks another, the
+ * same shape as the allergen review, minus the confirmation gate: getting
+ * heat wrong spoils a meal, it does not send anyone to hospital.
+ */
+export const SPICE_LEVELS = [
+  "none",
+  "mild",
+  "medium",
+  "hot",
+  "very_hot",
+] as const;
+
+export type SpiceLevel = (typeof SPICE_LEVELS)[number];
+
 const suggestionSchema = z.object({
   items: z.array(
     z.object({
@@ -49,6 +69,14 @@ const suggestionSchema = z.object({
        * answers it. Capped to match the database check constraint.
        */
       portionNote: z.string().trim().max(200).nullable().optional(),
+      /**
+       * How hot the dish is. Constrained to the ladder the database
+       * already stores, because a free-text heat level is one the app
+       * cannot filter on — the same reason allergens use a fixed
+       * vocabulary. Never written as fact: a restaurant confirms or
+       * changes it before it reaches a diner.
+       */
+      spiceLevel: z.enum(SPICE_LEVELS).nullable().optional(),
     }),
   ),
 });
@@ -64,6 +92,8 @@ export interface ItemSuggestion {
   prepTimeMinutes: number | null;
   /** Plain-language portion answer, or null when the dish plainly feeds one. */
   portionNote: string | null;
+  /** Suggested heat, or null when the dish name gives no clue. Always reviewed. */
+  spiceLevel: SpiceLevel | null;
 }
 
 export interface SuggestionOutcome {
@@ -132,16 +162,32 @@ Rules:
 - "portionNote": ${PORTION_RULE}
 - Return one entry per dish name given, in the same order. Do not invent dishes.`;
 
+/**
+ * Heat levels ALONE, for a menu whose other details are already written.
+ * Same trade as PORTION_PROMPT: a narrower question costs less and puts
+ * nothing new in front of a reviewer who has finished with those dishes.
+ */
+export const SPICE_PROMPT = `For each dish name, say how hot it is.
+
+Return ONLY JSON, no prose:
+{"items":[{"name":"...","spiceLevel":"..."}]}
+
+Rules:
+- "name" must exactly match the dish name you were given.
+- "spiceLevel": one of ${SPICE_LEVELS.join(", ")}. "none" means not spicy at all, "very_hot" means punishing. Judge the dish, not the cuisine — a mango lassi, a plain roti and a sweet dessert are all "none" no matter which country the menu comes from, and a dish is only "hot" if a typical version really is. Use null only if the name genuinely tells you nothing.
+- Return one entry per dish name given, in the same order. Do not invent dishes.`;
+
 export const SUGGESTION_PROMPT = `For each dish name, describe it and list its likely ingredients and likely allergens.
 
 Return ONLY JSON, no prose:
-{"items":[{"name":"...","description":"...","prepTimeMinutes":0,"portionNote":"...","ingredients":["..."],"allergens":["..."]}]}
+{"items":[{"name":"...","description":"...","prepTimeMinutes":0,"portionNote":"...","spiceLevel":"...","ingredients":["..."],"allergens":["..."]}]}
 
 Rules:
 - "name" must exactly match the dish name you were given.
 - "description": ONE short, appetising sentence a customer would read on a menu — what it is and what it tastes like. For example: "Fresh mango blended with yogurt and a touch of cardamom." Do NOT write a recipe, cooking steps, quantities, or marketing superlatives like "best" or "famous". If the dish name tells you nothing useful, use null rather than padding.
 - "prepTimeMinutes": roughly how long this takes from order to serving, as a whole number. A blended drink is 2-5, a fried snack 10-15, a thali 20-30. Use null if you genuinely cannot tell.
 - "portionNote": ${PORTION_RULE}
+- "spiceLevel": how hot a typical version of this dish is, as one of: ${SPICE_LEVELS.join(", ")}. "none" means not spicy at all, "very_hot" means punishing. Judge the dish, not the cuisine — a mango lassi is "none" on any menu. Use null only if the name genuinely gives you nothing to go on.
 - "ingredients": the main components a typical version of this dish contains. Keep them short and singular, like "paneer", "wheat flour", "potato".
 - "allergens": ONLY values from this list, and only where a typical version of the dish would contain them: ${ALLERGEN_VOCABULARY.join(", ")}.
 - If you are unsure whether a dish contains an allergen, LEAVE IT OUT. A human will review every allergen before it is shown to anyone, and a missing suggestion is easy to add — a wrong one is dangerous.
@@ -198,6 +244,7 @@ export function parseSuggestions(rawText: string): SuggestionOutcome {
     description: item.description?.trim() ? item.description.trim() : null,
     prepTimeMinutes: item.prepTimeMinutes ?? null,
     portionNote: item.portionNote?.trim() ? item.portionNote.trim() : null,
+    spiceLevel: item.spiceLevel ?? null,
     // Deduplicated and lowercased: ingredient lists are free text, and
     // "Potato" twice in one dish is noise a reviewer has to clean up.
     ingredients: [

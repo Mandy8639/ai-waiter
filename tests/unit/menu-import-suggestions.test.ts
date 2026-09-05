@@ -5,6 +5,7 @@ import {
   ALLERGEN_VOCABULARY,
   SUGGESTION_PROMPT,
   PORTION_PROMPT,
+  SPICE_LEVELS,
 } from "@/lib/menu-import/suggestions";
 
 describe("canonicalAllergen", () => {
@@ -222,6 +223,60 @@ describe("descriptions and prep times", () => {
     expect(out.ok).toBe(true);
     expect(out.suggestions[0].ingredients).toEqual([]);
     expect(out.suggestions[0].portionNote).toBe("Plenty for one.");
+  });
+
+  it("reads a suggested spice level from the fixed ladder", () => {
+    const out = parseSuggestions(
+      JSON.stringify({
+        items: [
+          {
+            name: "Peri Peri Fries",
+            ingredients: ["potato"],
+            allergens: [],
+            spiceLevel: "hot",
+          },
+        ],
+      }),
+    );
+    expect(out.ok).toBe(true);
+    expect(out.suggestions[0].spiceLevel).toBe("hot");
+  });
+
+  it("rejects a spice level outside the ladder the column can store", () => {
+    // Free-text heat is heat the app cannot filter on — the same reason
+    // allergens are held to a vocabulary. Better to fail here than to hit
+    // the check constraint mid-menu.
+    const out = parseSuggestions(
+      JSON.stringify({
+        items: [
+          {
+            name: "X",
+            ingredients: [],
+            allergens: [],
+            spiceLevel: "nuclear",
+          },
+        ],
+      }),
+    );
+    expect(out.ok).toBe(false);
+  });
+
+  it("treats a missing spice level as no answer, not as 'not spicy'", () => {
+    // null and "none" are different claims: one says nobody knows, the
+    // other says the kitchen makes it without heat.
+    const out = parseSuggestions(
+      JSON.stringify({
+        items: [{ name: "Mystery Dish", ingredients: [], allergens: [] }],
+      }),
+    );
+    expect(out.suggestions[0].spiceLevel).toBeNull();
+  });
+
+  it("asks for heat on the same ladder the database stores", () => {
+    for (const level of SPICE_LEVELS) {
+      expect(SUGGESTION_PROMPT).toContain(level);
+    }
+    expect(SUGGESTION_PROMPT).toMatch(/Judge the dish, not the cuisine/);
   });
 
   it("forbids the bare number in both prompts that ask for a portion", () => {

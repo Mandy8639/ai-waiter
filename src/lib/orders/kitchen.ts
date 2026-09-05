@@ -12,6 +12,10 @@ export interface KitchenOrderItem {
   itemName: string;
   quantity: number;
   modifiers: KitchenOrderModifier[];
+  /** The heat this diner asked for, or null for "as you normally make it". */
+  spicePreference: string | null;
+  /** The diner's free-text request for this line, or null. */
+  notes: string | null;
   ticketGroupId: string | null;
 }
 
@@ -90,7 +94,9 @@ export async function getActiveOrdersForRestaurant(
   const [{ data: items }, { data: tables }] = await Promise.all([
     supabase
       .from("order_items")
-      .select("id, order_id, item_name, quantity, ticket_group_id")
+      .select(
+        "id, order_id, item_name, quantity, ticket_group_id, spice_preference, notes",
+      )
       .in("order_id", orderIds)
       .order("created_at", { ascending: true }),
     supabase
@@ -160,6 +166,8 @@ export async function getActiveOrdersForRestaurant(
       itemName: item.item_name,
       quantity: item.quantity,
       modifiers: modifiersByItemId.get(item.id) ?? [],
+      spicePreference: item.spice_preference,
+      notes: item.notes,
       ticketGroupId,
     });
     itemsByOrderId.set(item.order_id, list);

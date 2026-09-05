@@ -240,6 +240,18 @@ instructs the model never to invent an ingredient, allergen, price, availability
 review, rating, or "chef recommendation" that isn't in that returned data — and to say the menu
 doesn't specify it when a customer asks something the data doesn't cover.
 
+### Recommending, without knowing what's popular
+
+"What do you recommend?" has no honest answer from menu data alone, and the order history that would answer it doesn't exist for a restaurant on its first day. So the waiter answers the question a waiter actually asks back: what is your appetite saying — something light or a proper meal, spicy or gentle, savoury or sweet, just a drink? One question, then it listens.
+
+The answer is routed through `search_menu`'s `category` filter, and the categories are the **restaurant's own grouping of its food** — read from `get_restaurant_info`, never assumed, because "Chaat" and "Fasting Food" mean nothing at a pizzeria. That grouping is the only vocabulary for "something light" that isn't the model's opinion about somebody else's cooking.
+
+Why a filter and not a text search: a menu of 22 snacks contains **one** item with the word "snack" in its name or description. `query: "snack"` therefore reads as "this restaurant has no snacks" — the same shape of failure as the missing-ingredients bug above, where a tool returns a valid, empty-looking answer and the waiter reports absence. An unrecognised category returns an explicit note listing the real ones rather than silently dropping the filter.
+
+### Prices carry their currency
+
+Every tool that returns a price also returns the restaurant's currency code, and the prompt forbids inferring one. This is not hypothetical: asked to recommend from an Indian menu priced in USD, the model quoted **₹9.99** for dishes the app displays at $9.99. A bare number invites the model to supply the symbol from context, and cuisine is the context it reaches for.
+
 ### Talking about how a dish is made
 
 Grounding rules of this kind have a failure mode in the opposite direction: a waiter that answers

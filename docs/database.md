@@ -122,6 +122,9 @@ why `category_id` is safe). `price >= 0`, `preparation_time` nullable but `>= 0`
 `is_vegetarian`, `is_vegan`, `is_spicy`, `contains_nuts`, `contains_dairy`, `contains_gluten` —
 see "AI readiness" below for why these are individual columns rather than a free-text field.
 
+`spice_level_source` (`restaurant | ai_draft`) records whether the heat level was confirmed by a person or suggested at import — separate from `details_source` on purpose, see
+[`docs/menu-import.md`](menu-import.md#why-spice-has-its-own-source-column). Note the distinction from `cart_items.spice_preference`: `menu_items.spice_level` is how hot the dish IS, the cart column is how hot this diner wants THIS plate.
+
 `portion_note` is nullable free text (`<= 200` chars) answering "how many people does this feed?" —
 deliberately not a `serves` integer, because the honest answer depends on appetite and a number
 cannot say so. `details_source` (`restaurant | ai_draft`) records whether the description,

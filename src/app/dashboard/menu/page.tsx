@@ -45,6 +45,16 @@ export default async function MenuPage() {
     .eq("restaurant_id", restaurant.id)
     .is("confirmed_at", null);
 
+  // Dishes whose heat was guessed at import and never looked at. Nudged
+  // for a different reason than allergens: these ARE visible to diners
+  // already, so the prompt is "check what we published", not "publish it".
+  const { count: draftSpice } = await supabase
+    .from("menu_items")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurant.id)
+    .eq("spice_level_source", "ai_draft")
+    .not("spice_level", "is", null);
+
   const categoryNameById = new Map(
     (categories ?? []).map((c) => [c.id, c.name]),
   );
@@ -83,6 +93,14 @@ export default async function MenuPage() {
                 className={buttonVariants({ variant: "outline" })}
               >
                 Confirm allergens ({pendingAllergens})
+              </Link>
+            )}
+            {(draftSpice ?? 0) > 0 && (
+              <Link
+                href="/dashboard/menu/spice-review"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Review spice ({draftSpice})
               </Link>
             )}
             <Link

@@ -81,6 +81,34 @@ describe("database constraints", () => {
       expect(rows.rows[1].portion_note).toBeNull();
     });
 
+    it("rejects an unknown spice_level_source", async () => {
+      const a = await fullRestaurantFixture(db);
+
+      await expect(
+        db.admin.query(
+          "insert into public.menu_items (restaurant_id, category_id, name, slug, price, spice_level_source) values ($1, $2, 'Bad', 'bad-spice-src', 5.00, 'guessed');",
+          [a.restaurantId, a.categoryId],
+        ),
+      ).rejects.toThrow(/check constraint/i);
+    });
+
+    it("treats an untouched item's spice level as the restaurant's own", async () => {
+      // The default matters: every row that existed before the import
+      // feature was typed in by staff, so nothing should appear in the
+      // review queue retroactively.
+      const a = await fullRestaurantFixture(db);
+
+      await db.admin.query(
+        "insert into public.menu_items (restaurant_id, category_id, name, slug, price, spice_level) values ($1, $2, 'Vindaloo', 'vindaloo', 9.00, 'hot');",
+        [a.restaurantId, a.categoryId],
+      );
+      const rows = await db.admin.query<{ spice_level_source: string }>(
+        "select spice_level_source from public.menu_items where restaurant_id = $1 and slug = 'vindaloo';",
+        [a.restaurantId],
+      );
+      expect(rows.rows[0].spice_level_source).toBe("restaurant");
+    });
+
     it("rejects an out-of-range tax_rate", async () => {
       await expect(
         db.admin.query(

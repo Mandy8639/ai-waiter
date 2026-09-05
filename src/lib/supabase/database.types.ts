@@ -255,6 +255,8 @@ export interface Database {
           preparation_time: number | null;
           /** Plain-language "how many people does this feed?", or null. Free text, not a number, on purpose. */
           portion_note: string | null;
+          /** 'ai_draft' means spice_level was guessed from the dish name and nobody has confirmed it. */
+          spice_level_source: "restaurant" | "ai_draft";
           /** 'ai_draft' means the description/prep time were generated and not yet reviewed. */
           details_source: "restaurant" | "ai_draft";
           display_order: number;
@@ -280,6 +282,7 @@ export interface Database {
           contains_gluten?: boolean;
           preparation_time?: number | null;
           portion_note?: string | null;
+          spice_level_source?: "restaurant" | "ai_draft";
           details_source?: "restaurant" | "ai_draft";
           display_order?: number;
           created_at?: string;
@@ -487,6 +490,11 @@ export interface Database {
           unit_price: number;
           modifiers_price: number;
           line_total: number;
+          /** How this diner wants THIS line cooked. Not the dish's own spice_level. */
+          spice_preference:
+            "none" | "mild" | "medium" | "hot" | "very_hot" | null;
+          /** Free-text request for this line, e.g. "no onions". Max 200 chars. */
+          notes: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -499,6 +507,9 @@ export interface Database {
           unit_price: number;
           modifiers_price?: number;
           line_total: number;
+          spice_preference?:
+            "none" | "mild" | "medium" | "hot" | "very_hot" | null;
+          notes?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -611,6 +622,9 @@ export interface Database {
           modifier_total: number;
           line_total: number;
           notes: string | null;
+          /** The heat this diner asked for, captured at submission. */
+          spice_preference:
+            "none" | "mild" | "medium" | "hot" | "very_hot" | null;
           ticket_group_id: string | null;
           created_at: string;
         };
