@@ -62,6 +62,49 @@ describe("estimateOrderPrep", () => {
     expect(e.totalMinutes).toBe(12);
   });
 
+  it("widens the estimate when other tables are already waiting", () => {
+    // The case a real kitchen has and a per-order estimate misses: Table 1
+    // orders a 15-minute thali, Table 2 orders one a minute later, and
+    // both were being told fifteen minutes. Table 2 is not eating in
+    // fifteen minutes.
+    const e = estimateOrderPrep({
+      itemPrepMinutes: [15],
+      status: "preparing",
+      placedAt,
+      queueMinutesAhead: 15,
+      ordersAhead: 1,
+      now: at(0),
+    });
+    expect(e.minutesRemaining).toBe(15);
+    expect(e.minutesRemainingAtWorst).toBe(30);
+    expect(e.ordersAhead).toBe(1);
+  });
+
+  it("gives one number, not a range, when the kitchen is clear", () => {
+    const e = estimateOrderPrep({
+      itemPrepMinutes: [15],
+      status: "preparing",
+      placedAt,
+      queueMinutesAhead: 0,
+      now: at(0),
+    });
+    expect(e.minutesRemaining).toBe(e.minutesRemainingAtWorst);
+  });
+
+  it("does not shrink the queue as this order waits", () => {
+    // The orders ahead are cooking during the same minutes, so their work
+    // does not go away just because this one has been sitting there.
+    const e = estimateOrderPrep({
+      itemPrepMinutes: [15],
+      status: "preparing",
+      placedAt,
+      queueMinutesAhead: 15,
+      now: at(10),
+    });
+    expect(e.minutesRemaining).toBe(5);
+    expect(e.minutesRemainingAtWorst).toBe(20);
+  });
+
   it("stops estimating once the kitchen says it is ready", () => {
     const e = estimateOrderPrep({
       itemPrepMinutes: [15],

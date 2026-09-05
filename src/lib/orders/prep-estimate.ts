@@ -17,8 +17,15 @@ import type { OrderStatus } from "./status";
 export interface PrepEstimate {
   /** Minutes the whole order takes from placement, or null if unknown. */
   totalMinutes: number | null;
-  /** Minutes still to wait, or null when unknown or no longer waiting. */
+  /** Soonest it could be ready, if the kitchen starts it now. Null if unknown. */
   minutesRemaining: number | null;
+  /**
+   * Latest it could be ready, if the kitchen works through everything
+   * ahead of it first. Equal to minutesRemaining when nothing is queued.
+   */
+  minutesRemainingAtWorst: number | null;
+  /** Active orders placed before this one. 0 when the kitchen is clear. */
+  ordersAhead: number;
   /** True once the kitchen says it's ready or served — no estimate applies. */
   finished: boolean;
 }
@@ -40,9 +47,15 @@ export function estimateOrderPrep(params: {
   itemPrepMinutes: Array<number | null>;
   status: OrderStatus | string;
   placedAt: string;
+  /** Combined preparation minutes of active orders placed earlier. */
+  queueMinutesAhead?: number;
+  /** How many those were, for wording rather than arithmetic. */
+  ordersAhead?: number;
   now?: Date;
 }): PrepEstimate {
   const { itemPrepMinutes, status, placedAt } = params;
+  const queueMinutesAhead = Math.max(0, params.queueMinutesAhead ?? 0);
+  const ordersAhead = Math.max(0, params.ordersAhead ?? 0);
   const now = params.now ?? new Date();
 
   const finished =
@@ -57,23 +70,55 @@ export function estimateOrderPrep(params: {
   const totalMinutes = known.length > 0 ? Math.max(...known) : null;
 
   if (finished || totalMinutes === null) {
-    return { totalMinutes, minutesRemaining: null, finished };
+    return {
+      totalMinutes,
+      minutesRemaining: null,
+      minutesRemainingAtWorst: null,
+      ordersAhead,
+      finished,
+    };
   }
 
   const placed = new Date(placedAt).getTime();
   // An unparseable timestamp means we cannot say how long is left, but the
   // total is still true and worth returning.
   if (!Number.isFinite(placed)) {
-    return { totalMinutes, minutesRemaining: null, finished };
+    return {
+      totalMinutes,
+      minutesRemaining: null,
+      minutesRemainingAtWorst: null,
+      ordersAhead,
+      finished,
+    };
   }
 
   const elapsedMinutes = (now.getTime() - placed) / 60_000;
   const remaining = totalMinutes - elapsedMinutes;
   // Clamped at zero rather than going negative: an order that has run over
   // is "any moment now", not "minus four minutes".
+  const soonest = Math.max(0, Math.round(remaining));
+
+  // A RANGE, because the truth is between two things we can each state
+  // plainly, and a single number would have to invent the bit in between.
+  //
+  //   soonest — the kitchen picks this order up now.
+  //   latest  — the kitchen finishes everything ahead of it first.
+  //
+  // A real kitchen runs several dishes at once, so it lands between the
+  // two. The alternative was a "how parallel is this kitchen" constant,
+  // which is a number nobody can measure and everybody would have to
+  // tune per restaurant. Two honest bounds beat one invented middle.
+  //
+  // Queue time is NOT reduced by elapsed time: the orders ahead are being
+  // cooked during the same minutes, so their work does not shrink just
+  // because this order has been waiting.
+  const latest = Math.max(soonest, Math.round(soonest + queueMinutesAhead));
+
   return {
     totalMinutes,
-    minutesRemaining: Math.max(0, Math.round(remaining)),
+    minutesRemaining: soonest,
+    minutesRemainingAtWorst: latest,
+    ordersAhead,
     finished,
   };
 }
