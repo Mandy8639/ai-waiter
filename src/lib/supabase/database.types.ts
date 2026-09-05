@@ -176,6 +176,64 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["categories"]["Insert"]>;
         Relationships: [];
       };
+      menu_imports: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          created_by: string | null;
+          status: "uploaded" | "extracting" | "review" | "committed" | "failed";
+          source_paths: string[];
+          extraction_model: string | null;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          restaurant_id: string;
+          created_by?: string | null;
+          status?:
+            "uploaded" | "extracting" | "review" | "committed" | "failed";
+          source_paths?: string[];
+          extraction_model?: string | null;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["menu_imports"]["Insert"]>;
+        Relationships: [];
+      };
+      menu_import_items: {
+        Row: {
+          id: string;
+          import_id: string;
+          restaurant_id: string;
+          category_name: string;
+          name: string;
+          /** null means the menu stated no price — never coerce this to 0. */
+          price: number | null;
+          include: boolean;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          import_id: string;
+          restaurant_id: string;
+          category_name: string;
+          name: string;
+          price?: number | null;
+          include?: boolean;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["menu_import_items"]["Insert"]
+        >;
+        Relationships: [];
+      };
       menu_items: {
         Row: {
           id: string;
@@ -348,11 +406,16 @@ export interface Database {
           restaurant_id: string;
           menu_item_id: string;
           allergen_id: string;
+          /** NULL means an unconfirmed suggestion — never show it to a diner. */
+          confirmed_at: string | null;
+          confirmed_by: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           restaurant_id: string;
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
           menu_item_id: string;
           allergen_id: string;
           created_at?: string;
@@ -958,6 +1021,21 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      confirm_menu_item_allergens: {
+        Args: { p_menu_item_id: string; p_allergen_ids: string[] };
+        Returns: number;
+      };
+      confirmed_allergen_ids: {
+        Args: { target_menu_item_id: string };
+        Returns: string[];
+      };
+      commit_menu_import: {
+        Args: { p_import_id: string };
+        Returns: {
+          categories_created: number;
+          items_created: number;
+        }[];
+      };
       get_table_by_token: {
         Args: { p_public_token: string };
         Returns: {

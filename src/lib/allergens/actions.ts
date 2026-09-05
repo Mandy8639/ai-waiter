@@ -114,10 +114,16 @@ export async function setAllergenMenuItemLink(
   if (!auth.ok) return;
 
   if (linked) {
+    // A person ticking this box in the dashboard IS the confirmation —
+    // there is no weaker state to record. Suggestions arrive unconfirmed
+    // through a different path (menu import) and must be confirmed
+    // per-item before any diner sees them.
     await auth.context.supabase.from("menu_item_allergens").insert({
       restaurant_id: restaurantId,
       menu_item_id: menuItemId,
       allergen_id: allergenId,
+      confirmed_at: new Date().toISOString(),
+      confirmed_by: auth.context.userId,
     });
   } else {
     await auth.context.supabase
