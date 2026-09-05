@@ -156,6 +156,20 @@ number.
 
 Most dishes need no portion note at all. A samosa is a samosa; null is the normal state.
 
+## Spice levels: suggested, pre-ticked, confirmed
+
+Heat is the one attribute a diner filters on before they even pick a dish, and it was the emptiest thing in the schema — on a 153-item Pakistani/Indian menu, `is_spicy` was false on every row and `spice_level` was null on every row. "Something spicy" returned nothing.
+
+So the import pass suggests a level from the fixed ladder (`none / mild / medium / hot / very_hot`), writes it immediately, and marks it `spice_level_source = 'ai_draft'`. `/dashboard/menu/spice-review` lists exactly those, with the suggestion **already selected** — the reviewer's job is a glance and a click, not a decision from scratch. Confirming and correcting are the same gesture, so there is no incentive to skip the ones that look right.
+
+`is_spicy` is kept in step with the level wherever the level is written, because `search_menu`'s `spicyOnly` filter reads the boolean, not the ladder — letting them disagree makes a hot dish invisible to a customer asking for one.
+
+### Why spice has its own source column
+
+`spice_level_source` is deliberately not folded into `details_source`. That column covers the description, preparation time and portion note, which a restaurant reviews together by opening an item and saving it. Heat is reviewed elsewhere, in one pass over the whole menu, and reusing `details_source` would mean confirming a dish's heat silently claims somebody also read its description — quietly emptying a review queue that still has work in it.
+
+Nor is it gated like allergens. An unconfirmed allergen is hidden from diners because acting on a wrong one is dangerous; a wrong heat level spoils a meal. The suggestion is visible immediately and the column exists to show the restaurant what still wants a glance.
+
 ### Why there is no "confirm all"
 
 The realistic failure is not the model. It is a tired owner clearing 150 items

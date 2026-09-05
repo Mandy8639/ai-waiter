@@ -240,6 +240,26 @@ describe("searchMenuSchema", () => {
       searchMenuSchema.safeParse({ query: "x".repeat(1000) }).success,
     ).toBe(false);
   });
+
+  it("accepts a category name, since categories differ per restaurant", () => {
+    // Not an enum: "Chaat" and "Fasting Food" mean nothing at a pizzeria,
+    // so the vocabulary comes from the restaurant's own rows at runtime.
+    expect(searchMenuSchema.safeParse({ category: "Snacks" }).success).toBe(
+      true,
+    );
+    expect(
+      searchMenuSchema.safeParse({ category: "x".repeat(200) }).success,
+    ).toBe(false);
+  });
+
+  it("tells the model that a category name will not be found by query text", () => {
+    // The trap this describe-text exists to prevent: a menu of 22 snacks
+    // contains exactly one item with "snack" in its name or description,
+    // so query: "snack" reads as "this restaurant has no snacks".
+    const shape = searchMenuSchema.shape.category.description ?? "";
+    expect(shape).toMatch(/get_restaurant_info/);
+    expect(shape).toMatch(/returns nothing/);
+  });
 });
 
 describe("submitOrderSchema", () => {

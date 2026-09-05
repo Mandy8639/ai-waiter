@@ -6,7 +6,12 @@ import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { toFriendlyError } from "@/lib/errors/database-error";
 import { aiConfig } from "@/lib/ai/config";
 import { visionModel } from "./vision";
-import { parseSuggestions, SUGGESTION_PROMPT } from "./suggestions";
+import {
+  parseSuggestions,
+  SUGGESTION_PROMPT,
+  SPICE_LEVELS,
+  type SpiceLevel,
+} from "./suggestions";
 
 /**
  * Suggests ingredients, allergens and detail text for existing dishes.
@@ -128,11 +133,12 @@ export async function suggestForMenu(
     if (
       suggestion.description ||
       suggestion.prepTimeMinutes !== null ||
-      suggestion.portionNote
+      suggestion.portionNote ||
+      suggestion.spiceLevel
     ) {
       const { data: existing } = await supabase
         .from("menu_items")
-        .select("description, preparation_time, portion_note")
+        .select("description, preparation_time, portion_note, spice_level")
         .eq("id", menuItemId)
         .maybeSingle();
 
@@ -140,6 +146,9 @@ export async function suggestForMenu(
         description?: string;
         preparation_time?: number;
         portion_note?: string;
+        spice_level?: SpiceLevel;
+        is_spicy?: boolean;
+        spice_level_source?: "ai_draft";
         details_source?: "ai_draft";
       } = {};
       if (suggestion.description && !existing?.description) {
@@ -150,6 +159,15 @@ export async function suggestForMenu(
       }
       if (suggestion.portionNote && !existing?.portion_note) {
         patch.portion_note = suggestion.portionNote;
+      }
+      if (suggestion.spiceLevel && !existing?.spice_level) {
+        patch.spice_level = suggestion.spiceLevel;
+        // is_spicy is what search_menu's spicyOnly filter reads, so it has
+        // to be kept in step with the level or "something spicy" returns
+        // nothing on a menu full of chaat. Anything above "none" counts:
+        // a customer avoiding heat wants to know about a mild dish too.
+        patch.is_spicy = suggestion.spiceLevel !== "none";
+        patch.spice_level_source = "ai_draft";
       }
       if (Object.keys(patch).length > 0) {
         patch.details_source = "ai_draft";
@@ -211,6 +229,48 @@ export async function suggestForMenu(
       `check the ones marked “Draft text”. ` +
       `${allergensSuggested} allergen suggestions need your confirmation before any diner sees them.`,
   };
+}
+
+/**
+ * Confirms — or corrects — one dish's heat level.
+ *
+ * Unlike the allergen equivalent this is a plain UPDATE rather than a
+ * SECURITY DEFINER function, because there is nothing here that RLS
+ * doesn't already express: a manager updating a column on their own
+ * restaurant's menu item is the ordinary write path, and the allergen
+ * function exists to enforce the confirmed_at semantics that heat has no
+ * equivalent of.
+ */
+export async function setSpiceLevelForItem(
+  restaurantId: string,
+  menuItemId: string,
+  spiceLevel: SpiceLevel,
+): Promise<SuggestState> {
+  const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
+  if (!auth.ok) return { error: auth.error };
+
+  if (!(SPICE_LEVELS as readonly string[]).includes(spiceLevel)) {
+    return { error: "That isn't a spice level." };
+  }
+
+  const { error } = await auth.context.supabase
+    .from("menu_items")
+    .update({
+      spice_level: spiceLevel,
+      // Kept in step: search_menu's spicyOnly filter reads is_spicy, not
+      // the level, so letting them disagree makes a hot dish invisible to
+      // "something spicy".
+      is_spicy: spiceLevel !== "none",
+      spice_level_source: "restaurant",
+    })
+    .eq("id", menuItemId)
+    .eq("restaurant_id", restaurantId);
+
+  if (error) return { error: toFriendlyError(error, "spice level") };
+
+  revalidatePath("/dashboard/menu/spice-review");
+  revalidatePath("/dashboard/menu");
+  return { notice: "Saved." };
 }
 
 export async function confirmAllergensForItem(

@@ -22,6 +22,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   parseSuggestions,
   PORTION_PROMPT,
+  SPICE_PROMPT,
   SUGGESTION_PROMPT,
 } from "../src/lib/menu-import/suggestions";
 
@@ -160,10 +161,96 @@ async function fillPortionNotes(
   );
 }
 
+/**
+ * Fills spice levels only, on items that have none.
+ *
+ * Same reasoning as fillPortionNotes: re-running the full prompt over a
+ * menu that already has ingredients, allergens and descriptions writes
+ * almost nothing while generating a fresh crop of unconfirmed allergen
+ * rows for a human who has already reviewed those dishes.
+ */
+async function fillSpiceLevels(
+  db: SupabaseClient,
+  restaurantId: string,
+  apply: boolean,
+): Promise<void> {
+  const { data: items } = await db
+    .from("menu_items")
+    .select("id, name")
+    .eq("restaurant_id", restaurantId)
+    .is("spice_level", null)
+    .order("name");
+
+  const all = items ?? [];
+  console.log(`${all.length} items without a spice level\n`);
+
+  let written = 0;
+  let failedBatches = 0;
+  const tally = new Map<string, number>();
+
+  for (let i = 0; i < all.length; i += PORTION_BATCH) {
+    const batch = all.slice(i, i + PORTION_BATCH);
+    process.stdout.write(
+      `batch ${i / PORTION_BATCH + 1} (${batch.length} items)… `,
+    );
+
+    let result = await ask(
+      batch.map((b) => b.name),
+      SPICE_PROMPT,
+    );
+    if (!result.ok) {
+      process.stdout.write("retrying… ");
+      result = await ask(
+        batch.map((b) => b.name),
+        SPICE_PROMPT,
+      );
+    }
+    if (!result.ok) {
+      console.log(`FAILED: ${result.error}`);
+      failedBatches += 1;
+      continue;
+    }
+
+    const byName = new Map(batch.map((b) => [b.name.toLowerCase(), b.id]));
+    let batchWritten = 0;
+
+    for (const s of result.suggestions) {
+      const menuItemId = byName.get(s.name.toLowerCase());
+      if (!menuItemId || !s.spiceLevel) continue;
+      tally.set(s.spiceLevel, (tally.get(s.spiceLevel) ?? 0) + 1);
+      if (!apply) {
+        batchWritten += 1;
+        continue;
+      }
+      const { error } = await db
+        .from("menu_items")
+        .update({
+          spice_level: s.spiceLevel,
+          is_spicy: s.spiceLevel !== "none",
+          spice_level_source: "ai_draft",
+        })
+        .eq("id", menuItemId);
+      if (!error) batchWritten += 1;
+    }
+
+    written += batchWritten;
+    console.log(`${batchWritten} spice levels`);
+  }
+
+  console.log(
+    `\n${written} spice levels` +
+      (failedBatches ? `, ${failedBatches} batch(es) failed after retry` : ""),
+  );
+  console.log(
+    [...tally.entries()].map(([k, v]) => `  ${k}: ${v}`).join("\n") || "",
+  );
+}
+
 async function main(): Promise<void> {
   const slug = process.argv[2];
   const apply = process.argv.includes("--apply");
   const portionsOnly = process.argv.includes("--portions-only");
+  const spiceOnly = process.argv.includes("--spice-only");
   const db = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SECRET_KEY!,
@@ -185,6 +272,11 @@ async function main(): Promise<void> {
 
   if (portionsOnly) {
     await fillPortionNotes(db, restaurant.id, apply);
+    return;
+  }
+
+  if (spiceOnly) {
+    await fillSpiceLevels(db, restaurant.id, apply);
     return;
   }
 
@@ -249,14 +341,21 @@ async function main(): Promise<void> {
       // Only written when the model actually produced something, and only
       // over an EMPTY field: a description someone has already written by
       // hand must never be overwritten by a guess from a dish name.
-      if (s.description || s.prepTimeMinutes !== null) {
+      if (s.description || s.prepTimeMinutes !== null || s.spiceLevel) {
         const { data: existing } = await db
           .from("menu_items")
-          .select("description, preparation_time")
+          .select("description, preparation_time, spice_level")
           .eq("id", menuItemId)
           .single();
 
         const patch: Record<string, unknown> = {};
+        if (s.spiceLevel && !existing?.spice_level) {
+          patch.spice_level = s.spiceLevel;
+          // Kept in step with the level: is_spicy is what the AI's
+          // spicyOnly filter reads.
+          patch.is_spicy = s.spiceLevel !== "none";
+          patch.spice_level_source = "ai_draft";
+        }
         if (s.description && !existing?.description) {
           patch.description = s.description;
         }

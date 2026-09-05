@@ -114,6 +114,10 @@ export async function updateMenuItem(
       // being flagged as an unreviewed AI draft. Set on save rather than on
       // change: opening the form and pressing save IS the review.
       details_source: "restaurant",
+      // Same reasoning, separate column: the spice review lists drafts,
+      // and someone who has just chosen a spice level in this form has
+      // reviewed it whether or not they came from that page.
+      spice_level_source: "restaurant",
       is_available: parsed.data.isAvailable,
       is_vegetarian: parsed.data.isVegetarian,
       is_vegan: parsed.data.isVegan,

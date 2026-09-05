@@ -71,6 +71,10 @@ async function addItemToCart(
   for (const optionId of args.selectedOptionIds) {
     formData.append("optionId", optionId);
   }
+  if (args.spicePreference) {
+    formData.set("spicePreference", args.spicePreference);
+  }
+  if (args.notes) formData.set("notes", args.notes);
 
   const result = await addToCart({}, formData);
   if (result.error) return { ok: false, error: result.error };
@@ -117,7 +121,7 @@ export const cartTools: ToolDefinition[] = [
   {
     name: "add_item_to_cart",
     description:
-      "Add a menu item (with any selected modifier option ids) to the customer's cart. The server re-validates availability and modifier rules and computes the price — you never supply a price. Only call this once you have all required modifier selections for the item.",
+      'Add a menu item (with any selected modifier option ids) to the customer\'s cart. The server re-validates availability and modifier rules and computes the price — you never supply a price. Only call this once you have all required modifier selections for the item. If the customer said how they want this one cooked ("can I get that spicy?") pass spicePreference, and pass notes for any other short request they made for this line — both reach the kitchen ticket.',
     schema: addItemToCartSchema,
     execute: addItemToCart as ToolDefinition["execute"],
   },

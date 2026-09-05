@@ -8,6 +8,7 @@ import {
   touchCustomerSession,
 } from "@/lib/customer/session";
 import { toFriendlyError } from "@/lib/errors/database-error";
+import { getPublicOrderSettings } from "@/lib/customer/restaurant";
 import { addToCartSchema, updateQuantitySchema } from "./schema";
 import { validateAndPriceSelection } from "./validate";
 
@@ -51,10 +52,20 @@ export async function addToCart(
   if (!sessionResult.ok) return { error: sessionResult.error };
   const { session } = sessionResult;
 
+  const spiceRaw = formData.get("spicePreference");
+  const notesRaw = formData.get("notes");
+
   const parsed = addToCartSchema.safeParse({
     menuItemId: formData.get("menuItemId"),
     quantity: Number(formData.get("quantity") ?? 1),
     selectedOptionIds: formData.getAll("optionId").map(String),
+    // "" is the "however you normally make it" choice in the form, and is
+    // not the same as "none" — that would be a diner asking for no heat at
+    // all in a dish the kitchen makes mild.
+    spicePreference:
+      typeof spiceRaw === "string" && spiceRaw ? spiceRaw : undefined,
+    notes:
+      typeof notesRaw === "string" && notesRaw.trim() ? notesRaw : undefined,
   });
   if (!parsed.success)
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -70,6 +81,24 @@ export async function addToCart(
 
   const cartId = await getOrCreateCartId(session.restaurantId, session.id);
   if (!cartId) return { error: "Could not open your cart. Please try again." };
+
+  // A restaurant that has turned customer notes off has turned them off:
+  // the per-line note is the same channel as the order-level one, which
+  // submit_order already rejects on this setting, so honouring it in one
+  // place and not the other would just move the loophole. Dropped rather
+  // than rejected — the diner still gets their item, they just don't get
+  // to send a message this kitchen has said it won't read.
+  let notes = parsed.data.notes;
+  if (notes) {
+    // Through getPublicOrderSettings(), which goes via the SECURITY
+    // DEFINER get_public_order_settings(). restaurant_settings is
+    // member-only, so reading it directly from a diner's client returns
+    // null — and a null read here fails closed, silently dropping every
+    // note at a restaurant that allows them. Caught by adding a note in
+    // the browser and finding it absent from the row.
+    const settings = await getPublicOrderSettings(session.restaurantId);
+    if (!settings.allowCustomerNotes) notes = undefined;
+  }
 
   const { unitPrice, modifiersPrice, selectedOptions } = validation.priced;
   const lineTotal = Math.max(
@@ -87,6 +116,8 @@ export async function addToCart(
       unit_price: unitPrice,
       modifiers_price: modifiersPrice,
       line_total: lineTotal,
+      spice_preference: parsed.data.spicePreference ?? null,
+      notes: notes ?? null,
     })
     .select("id")
     .single();

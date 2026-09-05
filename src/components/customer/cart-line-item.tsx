@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button";
 import { removeCartItem, updateCartItemQuantity } from "@/lib/cart/actions";
 import type { CartLine } from "@/lib/cart/get-cart";
 
+const SPICE_WORDS: Record<string, string> = {
+  none: "without spice",
+  mild: "mild",
+  medium: "medium",
+  hot: "hot",
+  very_hot: "very hot",
+};
+
 const currency = new Intl.NumberFormat(undefined, {
   style: "currency",
   currency: "USD",
@@ -47,6 +55,17 @@ export function CartLineItem({ line }: { line: CartLine }) {
               {line.modifiers.map((m) => m.name).join(", ")}
             </p>
           )}
+          {/*
+            Shown back to the diner because it is the only chance they get
+            to notice a request that didn't land the way they meant — once
+            the order is submitted this line is immutable.
+          */}
+          {line.spicePreference && (
+            <p className="text-xs">
+              Cooked {SPICE_WORDS[line.spicePreference] ?? line.spicePreference}
+            </p>
+          )}
+          {line.notes && <p className="text-xs">Note: {line.notes}</p>}
           <p className="text-muted-foreground text-xs">
             {currency.format(line.unitPrice + line.modifiersPrice)} each
           </p>

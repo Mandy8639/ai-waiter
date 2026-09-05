@@ -14,7 +14,19 @@ import type { CartSummary } from "@/lib/cart/get-cart";
  * database reads that feed this function are done.
  */
 
-/** Content-based, not row-ID-based: two carts with the same items/quantities/modifiers fingerprint identically regardless of cart_item row churn. */
+/**
+ * Content-based, not row-ID-based: two carts with the same
+ * items/quantities/modifiers/requests fingerprint identically regardless
+ * of cart_item row churn.
+ *
+ * The per-line spice request and note are part of the content on purpose.
+ * They cost nothing and change nothing about the price, which is exactly
+ * why leaving them out would be easy to justify and wrong: the customer
+ * confirmed a summary that said "cooked hot", and a cart whose line is
+ * now cooked mild is not the cart they agreed to. Without them, removing
+ * a line and re-adding the same dish with different cooking instructions
+ * produces an identical fingerprint and sails through the gate.
+ */
 export function computeCartFingerprint(lines: CartSummary["lines"]): string {
   return lines
     .map((line) => {
@@ -22,7 +34,8 @@ export function computeCartFingerprint(lines: CartSummary["lines"]): string {
         .map((m) => `${m.name}:${m.priceAdjustment}`)
         .sort()
         .join(",");
-      return `${line.menuItemId}:${line.quantity}:${modifiers}`;
+      const request = `${line.spicePreference ?? ""}:${line.notes ?? ""}`;
+      return `${line.menuItemId}:${line.quantity}:${modifiers}:${request}`;
     })
     .sort()
     .join("|");

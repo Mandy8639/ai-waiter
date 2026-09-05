@@ -16,10 +16,37 @@ function line(overrides: Partial<CartLine> = {}): CartLine {
     modifiersPrice: 0,
     lineTotal: 8.99,
     modifiers: [],
+    spicePreference: null,
+    notes: null,
     stillAvailable: true,
     ...overrides,
   };
 }
+
+describe("computeCartFingerprint with per-line requests", () => {
+  it("changes when the same dish is asked for at a different heat", () => {
+    // The gap this closes: spice costs nothing and does not affect the
+    // price, so a fingerprint built from items/quantities/modifiers alone
+    // cannot tell "one paratha, hot" from "one paratha, mild". A customer
+    // who confirmed the first must not silently be served the second.
+    const mild = computeCartFingerprint([line({ spicePreference: "mild" })]);
+    const hot = computeCartFingerprint([line({ spicePreference: "hot" })]);
+    expect(mild).not.toBe(hot);
+  });
+
+  it("changes when a kitchen note is added to an otherwise identical cart", () => {
+    const plain = computeCartFingerprint([line()]);
+    const noted = computeCartFingerprint([line({ notes: "no onions" })]);
+    expect(plain).not.toBe(noted);
+  });
+
+  it("still ignores cart_item row churn", () => {
+    // The original property must survive: same content, different rows.
+    const a = computeCartFingerprint([line({ id: "row-a" })]);
+    const b = computeCartFingerprint([line({ id: "row-b" })]);
+    expect(a).toBe(b);
+  });
+});
 
 describe("computeCartFingerprint", () => {
   it("is content-based, not row-id-based — two carts with identical content fingerprint the same even with different cart_item ids", () => {

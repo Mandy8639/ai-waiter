@@ -3,7 +3,10 @@ import { TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ItemDetailForm } from "@/components/customer/item-detail-form";
 import { createClient } from "@/lib/supabase/server";
-import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
+import {
+  getPublicRestaurantBySlug,
+  getPublicOrderSettings,
+} from "@/lib/customer/restaurant";
 import { addToCart } from "@/lib/cart/actions";
 
 export async function generateMetadata({
@@ -41,7 +44,7 @@ export default async function MenuItemDetailPage({
   const { data: item } = await supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note",
+      "id, name, description, price, image_url, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, spice_level",
     )
     .eq("id", id)
     .eq("restaurant_id", restaurant.id)
@@ -80,6 +83,12 @@ export default async function MenuItemDetailPage({
       .eq("menu_item_id", item.id)
       .order("display_order", { ascending: true }),
   ]);
+
+  // Via the SECURITY DEFINER function, not a direct read: restaurant_settings
+  // is member-only and has no public SELECT policy, so a diner reading it
+  // directly gets null and silently loses the note box — which is exactly
+  // what happened the first time this was written.
+  const settings = await getPublicOrderSettings(restaurant.id);
 
   const ingredientIds = (ingredientLinks ?? []).map((l) => l.ingredient_id);
   const allergenIds = (allergenLinks ?? []).map((l) => l.allergen_id);
@@ -248,6 +257,8 @@ export default async function MenuItemDetailPage({
         basePrice={Number(item.price)}
         groups={groups}
         restaurantSlug={restaurantSlug}
+        dishSpiceLevel={item.spice_level}
+        allowNotes={settings.allowCustomerNotes}
       />
     </div>
   );

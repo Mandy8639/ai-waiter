@@ -35,6 +35,14 @@ export const searchMenuSchema = z
       .describe(
         "Filter to only items flagged spicy. Use this for spice-related requests instead of putting a spice-related word into `query`.",
       ),
+    category: z
+      .string()
+      .trim()
+      .max(100)
+      .optional()
+      .describe(
+        "Filter to one of this restaurant's menu categories, matched by name (case-insensitive, exact). Call get_restaurant_info first to see which categories exist — they differ per restaurant. Use this for any request about a KIND of food rather than a specific dish: 'something light', 'a snack', 'a proper meal', 'just a drink'. A category name will almost never appear in an item's own name or description, so putting it in `query` returns nothing — a menu of 22 snacks contains one item with the word 'snack' in it.",
+      ),
   })
   .strict();
 
@@ -63,6 +71,20 @@ export const addItemToCartSchema = z
       .array(z.string().trim().min(1).max(100))
       .max(20)
       .default([]),
+    spicePreference: z
+      .enum(["none", "mild", "medium", "hot", "very_hot"])
+      .optional()
+      .describe(
+        "How the customer asked for THIS line to be cooked, when they said something about heat. Leave it out unless they actually asked — omitting it means 'however the kitchen normally makes it', which is the right default and keeps the kitchen ticket clean. This is not the dish's own spice level from get_menu_item; that is what the dish IS, this is what this person wants.",
+      ),
+    notes: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .describe(
+        "A short kitchen request the customer made for this line, in their own words (e.g. 'no onions'). Only what they actually asked for — never your own summary of the dish, and never a note they did not ask you to pass on. The restaurant may have customer notes switched off, in which case it is silently dropped.",
+      ),
   })
   .strict();
 

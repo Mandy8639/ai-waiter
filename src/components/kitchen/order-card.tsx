@@ -22,6 +22,42 @@ import {
 } from "@/lib/orders/status";
 import { useElapsedLabel } from "./use-elapsed-label";
 
+const SPICE_WORDS: Record<string, string> = {
+  none: "no spice",
+  mild: "mild",
+  medium: "medium",
+  hot: "hot",
+  very_hot: "very hot",
+};
+
+/**
+ * A line the cook has to actually change something for.
+ *
+ * Rendered louder than the modifier list above it, because it is a
+ * different kind of information: a modifier is what was ordered, this is a
+ * deviation from how this kitchen normally makes the dish. It carries its
+ * meaning in words ("Make it hot") rather than in colour, so it survives a
+ * greyscale kitchen printer as well as SC 1.4.1.
+ */
+function SpecialRequest({
+  spicePreference,
+  notes,
+}: {
+  spicePreference: string | null;
+  notes: string | null;
+}) {
+  return (
+    <span className="text-foreground mt-1 block text-xs font-medium">
+      {spicePreference && (
+        <span className="block">
+          Make it {SPICE_WORDS[spicePreference] ?? spicePreference}
+        </span>
+      )}
+      {notes && <span className="block">Note: {notes}</span>}
+    </span>
+  );
+}
+
 type Role = "owner" | "manager" | "kitchen" | "staff";
 
 /** owner/manager/kitchen can split/merge (matches role_can_transition_order's own kitchen-workflow roles); staff cannot — see docs/security.md#order-splitting-and-merging. */
@@ -59,6 +95,12 @@ function TicketGroupRow({
               <span className="text-muted-foreground block text-xs">
                 {item.modifiers.map((m) => m.optionName).join(", ")}
               </span>
+            )}
+            {(item.spicePreference || item.notes) && (
+              <SpecialRequest
+                spicePreference={item.spicePreference}
+                notes={item.notes}
+              />
             )}
           </li>
         ))}
@@ -172,6 +214,12 @@ export function OrderCard({
                 <span className="text-muted-foreground block text-xs">
                   {item.modifiers.map((m) => m.optionName).join(", ")}
                 </span>
+              )}
+              {(item.spicePreference || item.notes) && (
+                <SpecialRequest
+                  spicePreference={item.spicePreference}
+                  notes={item.notes}
+                />
               )}
             </li>
           ))}

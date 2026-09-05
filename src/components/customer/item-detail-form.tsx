@@ -31,18 +31,37 @@ export interface ModifierGroupData {
 
 const initialState: CartActionState = {};
 
+function spiceWord(level: string): string {
+  if (level === "very_hot") return "very hot";
+  return level;
+}
+
+const SPICE_CHOICES = [
+  { value: "", label: "As you normally make it" },
+  { value: "none", label: "Not spicy" },
+  { value: "mild", label: "Mild" },
+  { value: "medium", label: "Medium" },
+  { value: "hot", label: "Hot" },
+] as const;
+
 export function ItemDetailForm({
   action,
   menuItemId,
   basePrice,
   groups,
   restaurantSlug,
+  dishSpiceLevel,
+  allowNotes,
 }: {
   action: (
     prevState: CartActionState,
     formData: FormData,
   ) => Promise<CartActionState>;
   menuItemId: string;
+  /** What the kitchen normally does, used to label the default choice. */
+  dishSpiceLevel?: string | null;
+  /** The restaurant's allow_customer_notes setting. */
+  allowNotes?: boolean;
   basePrice: number;
   groups: ModifierGroupData[];
   restaurantSlug: string;
@@ -183,6 +202,62 @@ export function ItemDetailForm({
           </Button>
         </div>
       </div>
+
+      {/*
+        How the DINER wants it, which is not the same question as how the
+        dish is normally made. The default is deliberately "as you normally
+        make it" rather than the dish's own level: pre-selecting "mild"
+        would make every order look like a special request, and a kitchen
+        that sees a heat request on all 200 tickets stops reading them.
+      */}
+      <div className="flex flex-col gap-2">
+        <fieldset>
+          <legend className="text-sm font-medium">
+            How spicy would you like it?
+          </legend>
+          {dishSpiceLevel && dishSpiceLevel !== "none" && (
+            <p className="text-muted-foreground mt-1 text-sm">
+              This dish is normally {spiceWord(dishSpiceLevel)}.
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+            {SPICE_CHOICES.map((choice) => (
+              <div key={choice.value} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  id={`spice-${choice.value || "default"}`}
+                  name="spicePreference"
+                  value={choice.value}
+                  defaultChecked={choice.value === ""}
+                  className="size-4"
+                />
+                <label
+                  htmlFor={`spice-${choice.value || "default"}`}
+                  className="text-sm"
+                >
+                  {choice.label}
+                </label>
+              </div>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+
+      {allowNotes && (
+        <div className="flex flex-col gap-2">
+          <label htmlFor="notes" className="text-sm font-medium">
+            Anything else for the kitchen?
+          </label>
+          <textarea
+            id="notes"
+            name="notes"
+            rows={2}
+            maxLength={200}
+            placeholder="e.g. no onions, extra chutney"
+            className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none"
+          />
+        </div>
+      )}
 
       {state.error && (
         <Alert variant="destructive">

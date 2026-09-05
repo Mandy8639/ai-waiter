@@ -17,6 +17,10 @@ export interface CartLine {
   modifiersPrice: number;
   lineTotal: number;
   modifiers: CartLineModifier[];
+  /** How this diner asked for THIS line to be cooked, or null for as-normal. */
+  spicePreference: string | null;
+  /** This line's free-text kitchen request, or null. */
+  notes: string | null;
   /** False if the menu item has gone unavailable since this was added — see docs/database.md#menu-availability-revalidation. */
   stillAvailable: boolean;
 }
@@ -90,7 +94,7 @@ export async function getCart(
   const { data: items } = await supabase
     .from("cart_items")
     .select(
-      "id, menu_item_id, quantity, unit_price, modifiers_price, line_total",
+      "id, menu_item_id, quantity, unit_price, modifiers_price, line_total, spice_preference, notes",
     )
     .eq("cart_id", cart.id)
     .order("created_at", { ascending: true });
@@ -143,6 +147,8 @@ export async function getCart(
       modifiersPrice: Number(item.modifiers_price),
       lineTotal: Number(item.line_total),
       modifiers: modifiersByCartItemId.get(item.id) ?? [],
+      spicePreference: item.spice_preference,
+      notes: item.notes,
       stillAvailable: menuItem?.is_available ?? false,
     };
   });

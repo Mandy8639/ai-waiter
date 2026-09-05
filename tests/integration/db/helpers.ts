@@ -245,6 +245,8 @@ export async function addCartItem(
     quantity?: number;
     unitPrice?: number;
     modifiersPrice?: number;
+    spicePreference?: string | null;
+    notes?: string | null;
   } = {},
 ): Promise<string> {
   const quantity = overrides.quantity ?? 1;
@@ -254,7 +256,7 @@ export async function addCartItem(
 
   const { rows } = await db.asUser(userId, (c) =>
     c.query<{ id: string }>(
-      "insert into public.cart_items (cart_id, restaurant_id, menu_item_id, quantity, unit_price, modifiers_price, line_total) values ($1, $2, $3, $4, $5, $6, $7) returning id;",
+      "insert into public.cart_items (cart_id, restaurant_id, menu_item_id, quantity, unit_price, modifiers_price, line_total, spice_preference, notes) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id;",
       [
         cartId,
         restaurantId,
@@ -263,6 +265,8 @@ export async function addCartItem(
         unitPrice,
         modifiersPrice,
         lineTotal,
+        overrides.spicePreference ?? null,
+        overrides.notes ?? null,
       ],
     ),
   );

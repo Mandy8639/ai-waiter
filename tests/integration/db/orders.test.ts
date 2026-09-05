@@ -94,6 +94,56 @@ describe("submit_order() happy path", () => {
     });
   });
 
+  it("carries each line's spice request and note onto the order", async () => {
+    // The whole point of the feature: a request the diner made in the cart
+    // has to survive the only path to an order, or the kitchen never sees
+    // it. order_items.notes existed for months and nothing ever wrote to
+    // it, which is exactly this failure with no test to catch it.
+    const fx = await fullCustomerFixture(db);
+    await addCartItem(
+      db,
+      fx.userId,
+      fx.cartId,
+      fx.restaurantId,
+      fx.menuItemId,
+      {
+        quantity: 1,
+        spicePreference: "hot",
+        notes: "no onions please",
+      },
+    );
+
+    const order = await submitOrder(db, fx.userId, "order-spice-1");
+
+    const { rows } = await db.admin.query<{
+      spice_preference: string | null;
+      notes: string | null;
+    }>(
+      "select spice_preference, notes from public.order_items where order_id = $1;",
+      [order.id],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].spice_preference).toBe("hot");
+    expect(rows[0].notes).toBe("no onions please");
+  });
+
+  it("leaves both null when the diner asked for nothing special", async () => {
+    const fx = await fullCustomerFixture(db);
+    await addCartItem(db, fx.userId, fx.cartId, fx.restaurantId, fx.menuItemId);
+
+    const order = await submitOrder(db, fx.userId, "order-spice-2");
+
+    const { rows } = await db.admin.query<{
+      spice_preference: string | null;
+      notes: string | null;
+    }>(
+      "select spice_preference, notes from public.order_items where order_id = $1;",
+      [order.id],
+    );
+    expect(rows[0].spice_preference).toBeNull();
+    expect(rows[0].notes).toBeNull();
+  });
+
   it("computes tax and service charge from the restaurant's current rates", async () => {
     const fx = await fullCustomerFixture(db);
     await db.admin.query(
