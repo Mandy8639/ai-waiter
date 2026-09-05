@@ -11,6 +11,22 @@
  * model that is best at one of those is not automatically good at another,
  * which is the whole reason this script takes a job argument.
  *
+ * THIS SCRIPT REJECTS MODELS. IT DOES NOT QUALIFY THEM.
+ *
+ * A failure here is real: 1/4 tool calls, an invented price, malformed
+ * JSON. A pass here means only "not obviously broken in a single clean
+ * turn". Two models passed every check in this file and then, in a real
+ * conversation, one dumped its chain-of-thought and the system prompt to
+ * the customer while the other made zero tool calls and took 54 seconds.
+ *
+ * Neither failure is reproducible here, and that is structural rather
+ * than a bug to fix: the leak was triggered by the factuality guard's
+ * corrective note being injected MID-CONVERSATION, and the collapse
+ * needed several turns of history. This script sends one clean turn.
+ *
+ * So every model in the waiter list must additionally have held a real
+ * conversation in the running app. See aiConfig's openrouter list.
+ *
  * CORRECTNESS IS A GATE, SPEED IS THE RANKING — in that order, and the
  * order matters. Ranking by latency alone actively selects for the failure
  * this project keeps hitting: a model that skips the tool call and answers
@@ -32,6 +48,7 @@ import {
   addItemToCartSchema,
 } from "../src/lib/ai/tools/schemas";
 import { toOpenRouterTools } from "../src/lib/ai/providers/openrouter-mapping";
+import { buildSystemPrompt } from "../src/lib/ai/system-prompt";
 import {
   EXTRACTION_PROMPT,
   parseExtraction,
@@ -130,16 +147,48 @@ async function call(
   }
 }
 
+/**
+ * Phrases that mean the model narrated its own reasoning, or repeated its
+ * instructions, into a reply a DINER reads.
+ *
+ * Added after nemotron-3-super-120b scored 4/4 here and then, live,
+ * answered "what do you recommend?" with paragraphs of deliberation that
+ * quoted the system prompt and the factuality guard's internal note back
+ * at the customer. The prompt says never to reveal those; this checks it
+ * rather than trusting it.
+ */
+const LEAK_MARKERS = [
+  /system note/i,
+  /system prompt/i,
+  /\bthe instructions?\b/i,
+  /let me (re-?read|look at|check)/i,
+  /I should (follow|call|use)/i,
+  /according to the instructions/i,
+  /my instructions/i,
+];
+
 /** JOB 1 — the waiter. Does it actually call a tool, on every kind of question? */
 async function probeWaiter(model: string): Promise<Probe> {
+  // Questions that can ONLY be answered from a tool result. "What do you
+  // recommend?" is deliberately NOT among them — see RECOMMENDATION_PROBE.
   const prompts = [
     "What vegetarian dishes do you have?",
     "How much is the aloo paratha?",
-    "What do you recommend?",
     "How is the halwa puri made and how long does it take?",
   ];
+  // The APP's real system prompt, not a one-line stand-in. This is the
+  // most important line in this probe: a short prompt made two models look
+  // excellent that both collapse on the real one — one leaks its
+  // reasoning, the other stops calling tools entirely and takes 54 seconds
+  // to do it. Measuring against a toy prompt measures a fiction.
+  const systemPrompt = buildSystemPrompt({
+    restaurantName: "Nashta",
+    allowUpselling: false,
+  });
+
   let called = 0;
   let total = 0;
+  let leaked = "";
   for (const content of prompts) {
     const r = await call(
       model,
@@ -147,15 +196,11 @@ async function probeWaiter(model: string): Promise<Probe> {
         max_tokens: 800,
         tools: TOOLS,
         messages: [
-          {
-            role: "system",
-            content:
-              "You are a waiter. You have NO built-in knowledge of this restaurant's menu. Every menu fact must come from a tool call.",
-          },
+          { role: "system", content: systemPrompt },
           { role: "user", content },
         ],
       },
-      90_000,
+      120_000,
     );
     if (r.status === 429)
       return { ok: false, detail: "rate limited", ms: 0, unavailable: true };
@@ -167,15 +212,68 @@ async function probeWaiter(model: string): Promise<Probe> {
         unavailable: true,
       };
     total += r.ms;
-    const calls =
-      (r.json as { choices?: Array<{ message?: { tool_calls?: unknown[] } }> })
-        ?.choices?.[0]?.message?.tool_calls ?? [];
+    const message = (
+      r.json as {
+        choices?: Array<{
+          message?: { tool_calls?: unknown[]; content?: string };
+        }>;
+      }
+    )?.choices?.[0]?.message;
+    const calls = message?.tool_calls ?? [];
     if (calls.length > 0) called += 1;
+    const text = message?.content ?? "";
+    if (!leaked) {
+      const marker = LEAK_MARKERS.find((re) => re.test(text));
+      if (marker) leaked = String(marker);
+    }
   }
+  // The recommendation turn is scored on OPPOSITE terms to the others.
+  // The system prompt tells the waiter that "what do you recommend?"
+  // cannot be answered yet — it must ask what the customer feels like
+  // eating first. So the correct reply here is a QUESTION, with or
+  // without a tool call, and a model that instead lists dishes has
+  // disobeyed. Scoring this one like the factual questions inverted the
+  // whole ranking: it failed every model that asks properly and passed
+  // the one model that ignores the instruction and searches anyway.
+  const rec = await call(
+    model,
+    {
+      max_tokens: 800,
+      tools: TOOLS,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "What do you recommend?" },
+      ],
+    },
+    120_000,
+  );
+  let asksBack = false;
+  if (rec.status === 200) {
+    total += rec.ms;
+    const m = (
+      rec.json as {
+        choices?: Array<{
+          message?: { tool_calls?: unknown[]; content?: string };
+        }>;
+      }
+    )?.choices?.[0]?.message;
+    const text = m?.content ?? "";
+    asksBack = text.includes("?");
+    if (!leaked) {
+      const marker = LEAK_MARKERS.find((re) => re.test(text));
+      if (marker) leaked = String(marker);
+    }
+  }
+
+  const turns = prompts.length + 1;
   return {
-    ok: called === prompts.length,
-    detail: `${called}/${prompts.length} tool calls`,
-    ms: Math.round(total / prompts.length),
+    // A leak disqualifies outright, however many tools it called: the
+    // customer is reading the model's private deliberation.
+    ok: called === prompts.length && asksBack && !leaked,
+    detail: leaked
+      ? `${called}/${prompts.length} tool calls, LEAKED reasoning (${leaked})`
+      : `${called}/${prompts.length} tool calls, ${asksBack ? "asks the mood question" : "did NOT ask back on 'what do you recommend?'"}`,
+    ms: Math.round(total / turns),
   };
 }
 

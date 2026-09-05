@@ -44,51 +44,48 @@ const defaultModelsByProvider: Record<AiProviderName, string[]> = {
   anthropic: ["claude-opus-5"],
   /**
    * The WAITER's list — holding a conversation and calling tools. Ordered
-   * preference, not just a default: OpenRouter accepts a `models` array
-   * and serves the first that answers, so a model hitting its free-tier
-   * rate limit degrades to the next instead of taking the waiter down.
+   * preference: OpenRouter serves the first that answers, so a model
+   * hitting its free-tier rate limit degrades to the next instead of
+   * taking the waiter down.
    *
-   * Vetted 2026-09-05 by scripts/vet-models-by-job.ts (job: waiter), which
-   * asks four questions answerable ONLY by a tool call and counts the
-   * tool_calls actually emitted. Correctness gates entry; latency orders
-   * what survives. Never the other way round: a model that skips the tool
-   * call and answers from memory is FASTER than one that does the work,
-   * and it is the one that tells a diner a dish is on the menu when it is
-   * not.
+   * EVERY ENTRY HERE HAS HELD A REAL CONVERSATION IN THIS APP. That bar
+   * exists because an automated probe could not see the two failures that
+   * disqualified the two fastest candidates on 2026-09-05:
    *
-   *   nvidia/nemotron-3-super-120b-a12b:free   4/4   240ms
-   *   nvidia/nemotron-3.5-lightning:free       4/4   299ms
-   *   dots-studio/dots-3-note-preview:free     4/4   524ms
-   *   minimax/minimax-m3:free                  4/4   777ms
-   *   nvidia/nemotron-3-ultra-550b-a55b:free   1/4   REMOVED — see below
-   *   nvidia/nemotron-3-nano-omni…:free        3/4   rejected here, but
-   *                                                  it is the FASTEST and
-   *                                                  most accurate model
-   *                                                  for the other two
-   *                                                  jobs below
+   *   nvidia/nemotron-3-super-120b-a12b:free  probe 4/4, 240ms
+   *     Live: dumped its chain-of-thought to the customer AND quoted the
+   *     system prompt back, including the factuality guard's internal
+   *     corrective note. A diner asking "what do you recommend?" got
+   *     paragraphs of the model arguing with its own instructions. It
+   *     scored 4/4 because it does call the tool — it just narrates the
+   *     deliberation into the reply.
    *
-   * nemotron-3-ultra was previously in this list and is removed: it called
-   * a tool on one of four menu questions. It passed an earlier, laxer
-   * probe, which is the argument for re-vetting rather than vetting once.
+   *   nvidia/nemotron-3.5-lightning:free      probe 4/4, 299ms
+   *     Live: zero tool calls, guard exhausted, 54 SECONDS. The probe
+   *     measured 299ms because it asked one short question with a one-line
+   *     system prompt; the real prompt is long and layered, and this model
+   *     falls apart on it.
    *
-   * Ordered by latency with one deliberate exception: minimax-m3 is kept
-   * ahead of nothing and behind everything, rather than dropped, because
-   * it is the only entry with a track record of real conversations in this
-   * app — every live waiter turn during development was served by it. A
-   * probe proves a model CAN call a tool; it does not prove the model
-   * holds a warm conversation, asks the mood question, or resists
-   * fabricating when a tool result is thin. Speed rankings favour small
-   * models, and small models are exactly where conversational quality
-   * degrades — liquid/lfm-2.5-2.6b calls tools in 1068ms and cannot return
-   * well-formed JSON for the suggestion job at all.
+   *   nvidia/nemotron-3-ultra-550b-a55b:free  probe 1/4
+   *     Removed on the probe alone — it was a shipping fallback that
+   *     answered three of four menu questions without calling anything.
    *
-   * Deliberately spread across vendors (NVIDIA, dots-studio, MiniMax):
-   * two models behind one provider tend to fail together.
+   * The lesson is in the ordering: latency measured on a toy prompt is not
+   * latency, and "calls a tool" is not "is a waiter". Speed rankings
+   * favour small models, and small models are where conversational
+   * quality and instruction-following collapse.
+   *
+   * Both survivors are vendor-distinct (dots-studio, MiniMax), since two
+   * models behind one provider tend to fail together.
    */
   openrouter: [
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "nvidia/nemotron-3.5-lightning:free",
+    // Live 2026-09-05: 2 tool calls, 24s, real dishes at the right prices
+    // in the right currency, and it closed by asking what the customer was
+    // in the mood for — the behaviour the prompt asks for.
     "dots-studio/dots-3-note-preview:free",
+    // The incumbent, and the only model with a long track record here:
+    // every live waiter turn during this feature's development was served
+    // by it, including the preparation, portion and spice conversations.
     "minimax/minimax-m3:free",
   ],
 };

@@ -347,6 +347,25 @@ That run also removed a model from production: `nvidia/nemotron-3-ultra-550b-a55
 
 **The suggester used to borrow the reader's model**, because the code sat beside it, despite sending no image at all. That was an accident rather than a decision, and it is the job with the strictest correctness bar in the app, since it proposes allergens.
 
+### What the probe can and cannot tell you
+
+`scripts/vet-models-by-job.ts` **rejects** models. It does not **qualify** them, and the distinction cost a merged-and-wrong configuration to learn.
+
+A failure is real and worth acting on: 1/4 tool calls, an invented price, malformed JSON. A pass means only "not obviously broken in a single clean turn".
+
+On 2026-09-05 the two fastest passing waiter candidates both failed the moment a person talked to them:
+
+| Model                    | Probe                                    | Live                                                                                              |
+| ------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `nemotron-3-super-120b`  | 3/3 tools, asks the mood question, 241ms | Dumped its chain-of-thought to the diner, quoting the system prompt and the guard's internal note |
+| `nemotron-3.5-lightning` | 3/3 tools, asks the mood question, 248ms | Zero tool calls, guard exhausted, **54 seconds**                                                  |
+
+Neither is reproducible in the probe, and that is structural rather than a bug: the leak was triggered by the factuality guard's corrective note being injected _mid-conversation_, and the collapse needed several turns of history. The probe sends one clean turn.
+
+**So every entry in the waiter list must also have held a real conversation in the running app**, and the list records which. The reader and suggester lists are safer to trust from the probe alone — their outputs are structured and checkable, where a conversation's quality is not.
+
+Five faults were found in this harness before any of its numbers were believed, each of which blamed a model for a mistake in the measurement: first-word price matching, a token budget that starved reasoning models, three jobs run in parallel against one key (generating the rate limits it then recorded as evidence), a one-line system prompt standing in for the real one, and — most instructive — scoring _"what do you recommend?"_ as requiring a tool call, which failed every model that correctly asks the customer's mood first and passed the one model that ignores the instruction and searches anyway.
+
 ### Re-vetting the list
 
 `scripts/vet-openrouter-models.ts` runs the check this section requires, as four questions that
