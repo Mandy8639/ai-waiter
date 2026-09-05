@@ -321,6 +321,32 @@ latency on the happy path.
 
 **Anthropic is unaffected** — it takes the first entry and ignores the rest.
 
+### Three jobs, three lists
+
+This app asks a model to do three different things, and the model that is best at one is not the model that is best at another. Each has its own preference list, its own env var, and its own probe:
+
+| Job                     | Env var                    | Fails when                                                       |
+| ----------------------- | -------------------------- | ---------------------------------------------------------------- |
+| Waiter conversation     | `AI_MODEL`                 | It answers a menu question without calling a tool                |
+| Reading menu photos     | `MENU_IMPORT_VISION_MODEL` | It invents a price                                               |
+| Suggesting item details | `MENU_SUGGESTION_MODEL`    | It returns malformed JSON, or an allergen outside the vocabulary |
+
+`scripts/vet-models-by-job.ts <job>` measures each against its own failure, over every free model OpenRouter lists with the right capability. **Correctness gates entry; latency orders what survives** — never the reverse, because a model that skips the tool call and answers from memory is _faster_ than one that does the work, and it is the one that tells a diner a dish is on the menu when it is not.
+
+The 2026-09-05 run makes the case for splitting better than any argument:
+
+| Model                    | Waiter       | Menu photos  | Suggestions             |
+| ------------------------ | ------------ | ------------ | ----------------------- |
+| `nemotron-3-nano-omni`   | **FAIL 3/4** | **#1** 568ms | **#1** 224ms            |
+| `nemotron-3.5-lightning` | #2 299ms     | n/a          | **FAIL** malformed JSON |
+| `liquid/lfm-2.5-2.6b`    | pass 1068ms  | n/a          | **FAIL** malformed JSON |
+
+One model is the best in the catalogue at two jobs and unfit for the third. Two more call tools reliably and cannot produce the JSON the suggester needs.
+
+That run also removed a model from production: `nvidia/nemotron-3-ultra-550b-a55b:free` was the waiter's second fallback and scored **1/4 tool calls**. It had passed an earlier, laxer probe — which is the argument for re-vetting rather than vetting once.
+
+**The suggester used to borrow the reader's model**, because the code sat beside it, despite sending no image at all. That was an accident rather than a decision, and it is the job with the strictest correctness bar in the app, since it proposes allergens.
+
 ### Re-vetting the list
 
 `scripts/vet-openrouter-models.ts` runs the check this section requires, as four questions that

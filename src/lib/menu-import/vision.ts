@@ -27,17 +27,6 @@ import {
  * necessarily the one that holds a conversation well.
  */
 
-/**
- * Vetted 2026-09-04 against a dense, slightly blurred board of 23 items
- * across 4 categories: 23/23 correct on three consecutive runs, with every
- * "ask at counter" item returned as null and nothing invented. ~20s.
- * Free tier.
- *
- * Re-vet the same way before changing this. "Supports image input" is not
- * the bar; "does not invent a price" is.
- */
-const DEFAULT_VISION_MODEL = "dots-studio/dots-3-note-preview:free";
-
 const OPENROUTER_ENDPOINT =
   process.env.OPENROUTER_ENDPOINT ??
   "https://openrouter.ai/api/v1/chat/completions";
@@ -48,8 +37,22 @@ const MAX_OUTPUT_TOKENS = 8000;
 /** Reading several photographs is slow; this is generous on purpose. */
 const REQUEST_TIMEOUT_MS = 180_000;
 
+/**
+ * The reader's preference list, primary first.
+ *
+ * A list rather than one pinned model for the same reason the waiter has
+ * one: these are free models, and the failure that matters is the whole
+ * feature going down when one of them rate-limits. Vetted per job — see
+ * aiConfig's DEFAULT_VISION_MODELS. "Supports image input" is not the
+ * bar; "reads every price and invents none" is.
+ */
+export function visionModels(): string[] {
+  return aiConfig.visionModels;
+}
+
+/** The primary, for callers that only need to name one (logging, tests). */
 export function visionModel(): string {
-  return process.env.MENU_IMPORT_VISION_MODEL || DEFAULT_VISION_MODEL;
+  return visionModels()[0];
 }
 
 export function isMenuImportConfigured(): boolean {
@@ -103,7 +106,10 @@ export async function extractMenuFromImages(
         "X-Title": "AI Waiter menu import",
       },
       body: JSON.stringify({
-        model,
+        // `models`, never `models` AND `model` together: the singular
+        // field wins and the fallback list is silently ignored, with no
+        // error — see docs/ai.md#model-fallback.
+        models: visionModels(),
         max_tokens: MAX_OUTPUT_TOKENS,
         messages: [
           {

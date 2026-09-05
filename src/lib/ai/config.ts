@@ -43,46 +43,116 @@ const provider: AiProviderName =
 const defaultModelsByProvider: Record<AiProviderName, string[]> = {
   anthropic: ["claude-opus-5"],
   /**
-   * An ordered preference list, not just a default: OpenRouter accepts a
-   * `models` array and transparently serves the first one that answers, so
-   * a free model hitting its provider's rate limit (or being delisted, as
-   * google/gemma-4-26b-a4b-it:free was) degrades to the next instead of
-   * taking the AI waiter down. Both entries were vetted by running this
-   * app's own tool sequence and checking the model actually emitted
-   * add_item_to_cart before claiming the item was added — see
-   * docs/ai.md#model-fallback. Deliberately different vendors (MiniMax,
-   * NVIDIA), since two models behind one provider tend to fail together.
+   * The WAITER's list — holding a conversation and calling tools. Ordered
+   * preference, not just a default: OpenRouter accepts a `models` array
+   * and serves the first that answers, so a model hitting its free-tier
+   * rate limit degrades to the next instead of taking the waiter down.
    *
-   * Only add a model here after it passes that same check. An unvetted
-   * entry reintroduces exactly the failure the curated list exists to
-   * prevent: see tools/cart-fact-detection.ts for what a model that
-   * fabricates tool calls does to a customer's order.
+   * Vetted 2026-09-05 by scripts/vet-models-by-job.ts (job: waiter), which
+   * asks four questions answerable ONLY by a tool call and counts the
+   * tool_calls actually emitted. Correctness gates entry; latency orders
+   * what survives. Never the other way round: a model that skips the tool
+   * call and answers from memory is FASTER than one that does the work,
+   * and it is the one that tells a diner a dish is on the menu when it is
+   * not.
    *
-   * Re-vetted 2026-09-05 with scripts/vet-openrouter-models.ts, which
-   * runs that check as four questions answerable only by a tool call:
+   *   nvidia/nemotron-3-super-120b-a12b:free   4/4   240ms
+   *   nvidia/nemotron-3.5-lightning:free       4/4   299ms
+   *   dots-studio/dots-3-note-preview:free     4/4   524ms
+   *   minimax/minimax-m3:free                  4/4   777ms
+   *   nvidia/nemotron-3-ultra-550b-a55b:free   1/4   REMOVED — see below
+   *   nvidia/nemotron-3-nano-omni…:free        3/4   rejected here, but
+   *                                                  it is the FASTEST and
+   *                                                  most accurate model
+   *                                                  for the other two
+   *                                                  jobs below
    *
-   *   minimax/minimax-m3:free                4/4
-   *   nvidia/nemotron-3-ultra-550b-a55b:free 4/4
-   *   dots-studio/dots-3-note-preview:free   4/4  (added)
-   *   poolside/laguna-s-2.1:free             3/4  REJECTED
+   * nemotron-3-ultra was previously in this list and is removed: it called
+   * a tool on one of four menu questions. It passed an earlier, laxer
+   * probe, which is the argument for re-vetting rather than vetting once.
    *
-   * dots-3 was added as a third vendor because the failure this list
-   * exists for actually happened again — a 429 mid-session — and two
-   * entries is thin cover. It is already this app's menu-import vision
-   * model, so it is a known quantity.
+   * Ordered by latency with one deliberate exception: minimax-m3 is kept
+   * ahead of nothing and behind everything, rather than dropped, because
+   * it is the only entry with a track record of real conversations in this
+   * app — every live waiter turn during development was served by it. A
+   * probe proves a model CAN call a tool; it does not prove the model
+   * holds a warm conversation, asks the mood question, or resists
+   * fabricating when a tool result is thin. Speed rankings favour small
+   * models, and small models are exactly where conversational quality
+   * degrades — liquid/lfm-2.5-2.6b calls tools in 1068ms and cannot return
+   * well-formed JSON for the suggestion job at all.
    *
-   * laguna-s is rejected, and instructively: it answered every factual
-   * question with a tool call and then answered "What do you recommend?"
-   * from nothing. A model can be reliable on the questions that look hard
-   * and fail on the one that looks easy, which is why the probe set
-   * includes it.
+   * Deliberately spread across vendors (NVIDIA, dots-studio, MiniMax):
+   * two models behind one provider tend to fail together.
    */
   openrouter: [
-    "minimax/minimax-m3:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3.5-lightning:free",
     "dots-studio/dots-3-note-preview:free",
+    "minimax/minimax-m3:free",
   ],
 };
+
+/**
+ * The MENU-PHOTO READER's list — one image in, JSON out, no tools.
+ *
+ * A different job with a different failure mode: not "did it call a tool"
+ * but "did it invent a price". Vetted 2026-09-05 by
+ * scripts/vet-models-by-job.ts (job: vision) against
+ * tests/fixtures/menu-board.jpg — a deliberately degraded photograph
+ * (rotated, lit from one side, slightly out of focus, lossy JPEG) whose
+ * last line reads "Market price today - ask at counter" and must come back
+ * with a null price.
+ *
+ *   nvidia/nemotron-3-nano-omni…:free      12/12   568ms
+ *   minimax/minimax-m3:free                12/12  1103ms
+ *   dots-studio/dots-3-note-preview:free   12/12  1122ms
+ *
+ * All three read every price and none invented one for the trap line.
+ * Three is the whole list, not a top-five cut: OpenRouter has seven free
+ * vision models, two are access-gated (403) and two rate-limit on every
+ * attempt.
+ */
+export const DEFAULT_VISION_MODELS = [
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+  "minimax/minimax-m3:free",
+  "dots-studio/dots-3-note-preview:free",
+];
+
+/**
+ * The SUGGESTER's list — dish names in, structured JSON out, no images and
+ * no tools.
+ *
+ * Until now this job borrowed the vision model, because the code sat next
+ * to it — an accident, not a decision, and the call contains no image at
+ * all. It is also the job with the strictest correctness bar in the app,
+ * since it proposes allergens.
+ *
+ * Vetted 2026-09-05 by scripts/vet-models-by-job.ts (job: suggestion):
+ * five dishes must all come back, each with ingredients, every allergen
+ * inside the fixed vocabulary and every spice level on the fixed ladder.
+ *
+ *   nvidia/nemotron-3-nano-omni…:free       5/5   224ms
+ *   z-ai/glm-5.2:free                       5/5   242ms
+ *   nvidia/nemotron-3-super-120b-a12b:free  5/5   284ms
+ *   cohere/north-mini-code:free             5/5   532ms
+ *   dots-studio/dots-3-note-preview:free    5/5   777ms
+ *
+ * dots-3 is kept last rather than dropped: it is the model that actually
+ * produced Nashta's 153 descriptions, portion notes and spice levels, so
+ * it is the one entry here with a real corpus behind it.
+ *
+ * liquid/lfm-2.5-2.6b and nvidia/nemotron-3.5-lightning both FAILED with
+ * malformed JSON despite passing the waiter job — the clearest evidence
+ * that these lists have to be separate.
+ */
+export const DEFAULT_SUGGESTION_MODELS = [
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+  "z-ai/glm-5.2:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "cohere/north-mini-code:free",
+  "dots-studio/dots-3-note-preview:free",
+];
 
 export const aiConfig = {
   provider,
@@ -110,6 +180,18 @@ export const aiConfig = {
   modelFallbacks: envList("AI_MODEL", defaultModelsByProvider[provider]).slice(
     1,
   ),
+
+  /**
+   * The menu-photo reader's preference list. Its own env var, because it
+   * is its own job — see DEFAULT_VISION_MODELS above.
+   */
+  visionModels: envList("MENU_IMPORT_VISION_MODEL", DEFAULT_VISION_MODELS),
+
+  /**
+   * The detail-suggester's preference list. Likewise its own env var; this
+   * job used to borrow the vision model despite sending no image.
+   */
+  suggestionModels: envList("MENU_SUGGESTION_MODEL", DEFAULT_SUGGESTION_MODELS),
 
   /**
    * Anthropic-only: Claude Opus 5 has adaptive thinking on by default;
