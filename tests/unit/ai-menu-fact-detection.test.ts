@@ -24,6 +24,27 @@ describe("looksLikeMenuFactQuestion — positives (must trigger the guard)", () 
   });
 });
 
+describe("looksLikeMenuFactQuestion — preparation, timing and portion", () => {
+  // Regression: these are the question shapes the waiter gained the
+  // ability to answer, and the guard's keyword list predated them. Both
+  // of the first two were answered live with ZERO tool calls, from the
+  // model's general knowledge of the cuisine, because nothing matched.
+  it.each([
+    "How is the Halwa Puri Thali made, how long does it take, and is it enough for two of us?",
+    "What about the Palak Paneer with 2 Paratha - how is it made, how long, and is it enough for two?",
+    "how is the biryani cooked?",
+    "How do you prepare the dosa?",
+    "What's the cooking process for this?",
+    "How long does the thali take?",
+    "How many people does the biryani feed?",
+    "Is that enough for two of us?",
+    "How many does it serve?",
+    "What's the portion like?",
+  ])("%s", (message) => {
+    expect(looksLikeMenuFactQuestion(message)).toBe(true);
+  });
+});
+
 describe("looksLikeMenuFactQuestion — negatives (must NOT trigger the guard)", () => {
   it.each([
     "Hi",
@@ -36,6 +57,11 @@ describe("looksLikeMenuFactQuestion — negatives (must NOT trigger the guard)",
     "What's my total?",
     "Where is my order?",
     "Cancel that",
+    // The widened patterns must not swallow ordinary ordering chat. "How
+    // long" is anchored to timing questions, not to any sentence with
+    // "long" in it, and cart/order talk stays out.
+    "How long have you been open?",
+    "Make it two please",
   ])("%s", (message) => {
     expect(looksLikeMenuFactQuestion(message)).toBe(false);
   });
