@@ -22,7 +22,7 @@ export default async function EditMenuItemPage({
     supabase
       .from("menu_items")
       .select(
-        "id, name, slug, category_id, description, price, image_url, is_available, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, display_order",
+        "id, name, slug, category_id, description, price, image_url, is_available, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, display_order",
       )
       .eq("id", id)
       .eq("restaurant_id", restaurant.id)
@@ -65,6 +65,7 @@ export default async function EditMenuItemPage({
               containsDairy: item.contains_dairy,
               containsGluten: item.contains_gluten,
               preparationTime: item.preparation_time,
+              portionNote: item.portion_note,
               displayOrder: item.display_order,
             }}
             submitLabel="Save changes"

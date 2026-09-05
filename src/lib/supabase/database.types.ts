@@ -253,6 +253,10 @@ export interface Database {
           contains_dairy: boolean;
           contains_gluten: boolean;
           preparation_time: number | null;
+          /** Plain-language "how many people does this feed?", or null. Free text, not a number, on purpose. */
+          portion_note: string | null;
+          /** 'ai_draft' means the description/prep time were generated and not yet reviewed. */
+          details_source: "restaurant" | "ai_draft";
           display_order: number;
           created_at: string;
           updated_at: string;
@@ -275,6 +279,8 @@ export interface Database {
           contains_dairy?: boolean;
           contains_gluten?: boolean;
           preparation_time?: number | null;
+          portion_note?: string | null;
+          details_source?: "restaurant" | "ai_draft";
           display_order?: number;
           created_at?: string;
           updated_at?: string;

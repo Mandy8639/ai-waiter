@@ -9,7 +9,7 @@ import { visionModel } from "./vision";
 import { parseSuggestions, SUGGESTION_PROMPT } from "./suggestions";
 
 /**
- * Suggests ingredients and allergens for a restaurant's existing dishes.
+ * Suggests ingredients, allergens and detail text for existing dishes.
  *
  * Ingredients are written straight in: a wrong one is an odd list.
  * Allergens are written UNCONFIRMED and stay invisible to diners until a
@@ -108,6 +108,7 @@ export async function suggestForMenu(
   const byName = new Map(items.map((i) => [i.name.toLowerCase(), i.id]));
   let ingredientsAdded = 0;
   let allergensSuggested = 0;
+  let detailsWritten = 0;
 
   for (const suggestion of result.suggestions) {
     const menuItemId = byName.get(suggestion.name.toLowerCase());
@@ -115,6 +116,51 @@ export async function suggestForMenu(
     // loosely — attaching an allergen to the wrong dish is the failure
     // this whole feature is built to avoid.
     if (!menuItemId) continue;
+
+    // Description, prep time and portion note go straight onto the item
+    // rather than into staging: prose that is wrong makes a menu read
+    // oddly, which the restaurant fixes, while an allergen that is wrong
+    // sends someone to hospital. details_source marks them unreviewed so
+    // the dashboard can flag them without hiding them from diners.
+    //
+    // Only ever over an EMPTY field. Text a person wrote by hand must
+    // never be replaced by a guess made from the dish's name.
+    if (
+      suggestion.description ||
+      suggestion.prepTimeMinutes !== null ||
+      suggestion.portionNote
+    ) {
+      const { data: existing } = await supabase
+        .from("menu_items")
+        .select("description, preparation_time, portion_note")
+        .eq("id", menuItemId)
+        .maybeSingle();
+
+      const patch: {
+        description?: string;
+        preparation_time?: number;
+        portion_note?: string;
+        details_source?: "ai_draft";
+      } = {};
+      if (suggestion.description && !existing?.description) {
+        patch.description = suggestion.description;
+      }
+      if (suggestion.prepTimeMinutes !== null && !existing?.preparation_time) {
+        patch.preparation_time = suggestion.prepTimeMinutes;
+      }
+      if (suggestion.portionNote && !existing?.portion_note) {
+        patch.portion_note = suggestion.portionNote;
+      }
+      if (Object.keys(patch).length > 0) {
+        patch.details_source = "ai_draft";
+        const { error } = await supabase
+          .from("menu_items")
+          .update(patch)
+          .eq("id", menuItemId)
+          .eq("restaurant_id", restaurantId);
+        if (!error) detailsWritten += 1;
+      }
+    }
 
     for (const ingredientName of suggestion.ingredients) {
       const { data: ingredient } = await supabase
@@ -158,9 +204,11 @@ export async function suggestForMenu(
   }
 
   revalidatePath("/dashboard/menu/allergen-review");
+  revalidatePath("/dashboard/menu");
   return {
     notice:
-      `Added ${ingredientsAdded} ingredients. ` +
+      `Added ${ingredientsAdded} ingredients and drafted details for ${detailsWritten} dishes — ` +
+      `check the ones marked “Draft text”. ` +
       `${allergensSuggested} allergen suggestions need your confirmation before any diner sees them.`,
   };
 }

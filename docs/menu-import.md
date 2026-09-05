@@ -123,6 +123,39 @@ The asymmetry driving this: **a missing allergen fails safe** (the AI already
 says "the menu doesn't specify — please check with staff"), while **a wrong
 allergen fails deadly**, because a diner with an allergy acts on it.
 
+## Description, preparation time and portion note
+
+The same pass also drafts the _prose_ on an item: a one-sentence menu description, a rough
+preparation time, and — where the question comes up at all — a plain-language portion note.
+
+These are written **directly onto the item**, not staged like allergens, and the asymmetry is the
+same one as above read from the other end: a description that is wrong makes a menu read oddly and
+the restaurant fixes it, while an allergen that is wrong sends someone to hospital. Gating prose
+behind per-dish confirmation would spend more of a restaurant's attention than the risk justifies.
+
+What replaces the gate is a flag. `menu_items.details_source` is set to `ai_draft` when this text
+is generated and back to `restaurant` the moment a person saves the item in the dashboard — opening
+the form and pressing save _is_ the review. The menu list shows a **Draft text** badge for anything
+still marked `ai_draft`, so a restaurant can see at a glance which words nobody has vouched for.
+Diners see the text either way; hiding it would leave the menu blank, which helps nobody.
+
+Only ever written over an **empty** field, so a re-run picks up failed batches without touching a
+description someone wrote by hand.
+
+### Why the portion note is a sentence and not a number
+
+The obvious design is `serves integer`. It is wrong, and it is worth writing down why, because
+every instinct in a schema pushes toward the number.
+
+Asked "how many does the biryani feed?", a waiter does not say "two". They say it depends on you —
+one big appetite finishes it, two smaller ones share it. `serves 2` is wrong for half the table,
+and an AI reading a number back either states it flatly (confidently wrong) or invents the hedging
+itself (a claim the restaurant never made). `portion_note` is free text capped at 200 characters,
+and both the import prompt and the waiter's prompt explicitly forbid collapsing it to a bare
+number.
+
+Most dishes need no portion note at all. A samosa is a samosa; null is the normal state.
+
 ### Why there is no "confirm all"
 
 The realistic failure is not the model. It is a tired owner clearing 150 items

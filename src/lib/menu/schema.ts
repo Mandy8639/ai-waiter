@@ -35,6 +35,14 @@ export const menuItemSchema = z.object({
     .int("Whole minutes only.")
     .min(0, "Preparation time must be 0 or more.")
     .optional(),
+  // Free text rather than a serves-N number: the honest answer to "how
+  // many does this feed?" is "depends how hungry you are", which a number
+  // cannot say. Capped to match the database check constraint.
+  portionNote: z
+    .string()
+    .trim()
+    .max(200, "Keep this to a sentence or two.")
+    .optional(),
   displayOrder: z
     .number()
     .int("Display order must be a whole number.")

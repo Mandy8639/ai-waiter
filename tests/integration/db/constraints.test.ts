@@ -41,6 +41,46 @@ describe("database constraints", () => {
       ).rejects.toThrow(/check constraint/i);
     });
 
+    it("rejects a portion note longer than two sentences' worth", async () => {
+      const a = await fullRestaurantFixture(db);
+
+      await expect(
+        db.admin.query(
+          "insert into public.menu_items (restaurant_id, category_id, name, slug, price, portion_note) values ($1, $2, 'Bad', 'bad-portion', 5.00, $3);",
+          [a.restaurantId, a.categoryId, "a".repeat(201)],
+        ),
+      ).rejects.toThrow(/check constraint/i);
+    });
+
+    it("accepts a portion note written as a sentence, and null", async () => {
+      // Null is the normal state — a samosa needs no portion note. The
+      // column exists for biryanis and thalis.
+      const a = await fullRestaurantFixture(db);
+
+      await db.admin.query(
+        "insert into public.menu_items (restaurant_id, category_id, name, slug, price, portion_note) values ($1, $2, 'Biryani', 'biryani', 12.00, $3);",
+        [
+          a.restaurantId,
+          a.categoryId,
+          "One hungry person will finish it, or two can share it.",
+        ],
+      );
+      await db.admin.query(
+        "insert into public.menu_items (restaurant_id, category_id, name, slug, price) values ($1, $2, 'Samosa', 'samosa', 2.00);",
+        [a.restaurantId, a.categoryId],
+      );
+
+      const rows = await db.admin.query<{
+        name: string;
+        portion_note: string | null;
+      }>(
+        "select name, portion_note from public.menu_items where restaurant_id = $1 and slug in ('biryani', 'samosa') order by name;",
+        [a.restaurantId],
+      );
+      expect(rows.rows[0].portion_note).toMatch(/two can share it/);
+      expect(rows.rows[1].portion_note).toBeNull();
+    });
+
     it("rejects an out-of-range tax_rate", async () => {
       await expect(
         db.admin.query(

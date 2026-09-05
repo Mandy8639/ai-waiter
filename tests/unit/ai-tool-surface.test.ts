@@ -85,6 +85,25 @@ describe("AI tool surface (spec section 4)", () => {
     );
   });
 
+  it("returns every kind of dish detail get_menu_item's description advertises", () => {
+    // A real bug this catches: get_menu_item's description promised
+    // ingredients for weeks while the query never selected them, so the
+    // waiter answered "the menu doesn't provide that" about 726 recorded
+    // ingredient links. The description is what the model plans against,
+    // so a promise it doesn't keep is worse than a missing feature.
+    const source = readToolSource("menu.ts");
+    for (const [column, key] of [
+      ["preparation_time", "preparationTimeMinutes"],
+      ["portion_note", "portionNote"],
+    ]) {
+      expect(source, `menu.ts must select ${column}`).toContain(column);
+      expect(source, `menu.ts must return ${key}`).toContain(`${key}:`);
+    }
+    expect(source).toContain("ingredients:");
+    expect(source).toContain("declaredAllergens:");
+    expect(source).toMatch(/portion size/);
+  });
+
   it("no tool's execute function accepts a restaurantId/tableId/customerSessionId argument by name in its schema (context is always derived server-side, never a tool argument)", () => {
     const schemaSource = stripComments(
       readFileSync(resolve(TOOLS_DIR, "schemas.ts"), "utf8"),
