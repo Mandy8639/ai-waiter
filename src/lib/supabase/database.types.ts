@@ -257,6 +257,8 @@ export interface Database {
           portion_note: string | null;
           /** 'ai_draft' means spice_level was guessed from the dish name and nobody has confirmed it. */
           spice_level_source: "restaurant" | "ai_draft";
+          /** What the restaurant's POS calls this item, or null. */
+          external_id: string | null;
           /** 'ai_draft' means the description/prep time were generated and not yet reviewed. */
           details_source: "restaurant" | "ai_draft";
           display_order: number;
@@ -283,12 +285,68 @@ export interface Database {
           preparation_time?: number | null;
           portion_note?: string | null;
           spice_level_source?: "restaurant" | "ai_draft";
+          external_id?: string | null;
           details_source?: "restaurant" | "ai_draft";
           display_order?: number;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["menu_items"]["Insert"]>;
+        Relationships: [];
+      };
+      restaurant_pos_integrations: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          provider: string;
+          external_location_id: string | null;
+          /** The NAME of a secret, never a secret. */
+          credentials_ref: string | null;
+          is_enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          restaurant_id: string;
+          provider: string;
+          external_location_id?: string | null;
+          credentials_ref?: string | null;
+          is_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["restaurant_pos_integrations"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      pos_outbox: {
+        Row: {
+          id: string;
+          restaurant_id: string;
+          order_id: string;
+          event_type: "order.created";
+          status: "pending" | "delivered" | "failed" | "abandoned";
+          attempts: number;
+          last_error: string | null;
+          next_attempt_at: string;
+          delivered_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          restaurant_id: string;
+          order_id: string;
+          event_type: "order.created";
+          status?: "pending" | "delivered" | "failed" | "abandoned";
+          attempts?: number;
+          last_error?: string | null;
+          next_attempt_at?: string;
+          delivered_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["pos_outbox"]["Insert"]>;
         Relationships: [];
       };
       menu_item_modifiers: {
