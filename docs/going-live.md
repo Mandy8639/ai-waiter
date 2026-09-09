@@ -139,8 +139,47 @@ There are **two** webhook endpoints, and both need recreating in live mode:
 > `events_from` is **create-only**. An existing destination cannot be edited to change its source —
 > it has to be created fresh. This is why the step is "recreate", not "update".
 
+The event lists each endpoint needs, taken from the handlers themselves:
+
+| `/api/webhooks/stripe` (`@accounts`)    | `/api/webhooks/stripe/platform` (`@self`) |
+| --------------------------------------- | ----------------------------------------- |
+| `account.updated`                       | `customer.subscription.created`           |
+| `checkout.session.completed`            | `customer.subscription.updated`           |
+| `checkout.session.expired`              | `customer.subscription.deleted`           |
+| `checkout.session.async_payment_failed` |                                           |
+| `charge.refund.updated`                 |                                           |
+| `refund.updated`                        |                                           |
+| `refund.failed`                         |                                           |
+
+`account.updated` on the first one is what tells the app a restaurant finished Connect onboarding.
+Without it, step 5 looks permanently stuck.
+
 Put each signing secret into Vercel → Production. Paste them straight from Stripe; never through an
 intermediary.
+
+#### Verify these through the v2 API, not v1
+
+These are **v2 event destinations**. The older `/v1/webhook_endpoints` API lists the same objects
+but does **not** populate `connect` on this API version, so a v1 check reports `undefined` for a
+destination whose source is perfectly correct.
+
+Read that as "your account" and you will conclude a correct endpoint is misconfigured. On
+2026-09-09 that is exactly what happened: a correctly-created destination was reported WRONG twice
+and deleted on the strength of it, then recreated — losing its signing secret for no reason.
+
+```bash
+curl -s https://api.stripe.com/v2/core/event_destinations \
+  -H "Authorization: Bearer $STRIPE_SECRET_KEY" \
+  -H "Stripe-Version: 2026-08-26.dahlia"
+```
+
+Each destination should report `"events_from": ["@accounts"]` or `["@self"]` and `"status":
+"enabled"`. That is the authoritative view; anything v1 says about the source is not.
+
+> Creating a destination — by API or dashboard — returns a **new signing secret**, and the old one
+> stops working immediately. Recreate one and you must update its Vercel variable, even if you did
+> not mean to change anything. This is a real cost of "just recreate it to be sure", and a reason
+> to verify properly before deleting.
 
 ### 5. Re-onboard the restaurant's Connect account
 
