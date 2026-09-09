@@ -44,7 +44,10 @@ stored in the database against it, listing what must be reset and why.
 
 ## The sequence
 
-Order matters. Each step is verifiable before moving on.
+Order matters, and two of these orderings are load-bearing rather than stylistic: the reset (2)
+must precede price creation (3) or the new prices land beside stale ids, and the redeploy (5) must
+precede Connect onboarding (6) or the account is created in the wrong mode. Each step is verifiable
+before moving on.
 
 ### 0. Know which Stripe account you are in
 
@@ -181,17 +184,40 @@ Each destination should report `"events_from": ["@accounts"]` or `["@self"]` and
 > not mean to change anything. This is a real cost of "just recreate it to be sure", and a reason
 > to verify properly before deleting.
 
-### 5. Re-onboard the restaurant's Connect account
+### 5. Redeploy
 
-With real business and bank details, through the app's own onboarding flow. The test-mode account
-is gone (step 2) and cannot be migrated — live Connect requires real identity verification.
+Redeploy so the live key and both signing secrets take effect.
 
-Verify `charges_enabled` and `payouts_enabled` are both true before taking a payment.
+**This has to happen before onboarding, not after.** `startPaymentOnboarding()` creates the Connect
+account with whatever key the _running process_ holds — so onboarding a still-deployed test build
+creates another **sandbox** account, silently undoing step 2 and leaving you to discover it when a
+real charge fails.
 
-### 6. Redeploy, then one real payment
+That is not hypothetical: this step used to be numbered 6, after onboarding, and following it in
+that order on 2026-09-09 would have recreated exactly the account the cutover had just deleted.
 
-Redeploy so the live keys and secrets take effect. Then take **one real card payment** — a small
-real amount on a real card, not a test card.
+Running the app locally with the live key in `.env.local` is a valid alternative — same database,
+same result — but it needs a staff login on `localhost`, which is a separate session from the
+deployed site. Redeploying first is simpler and has no such trap.
+
+### 6. Re-onboard the restaurant's Connect account
+
+With real business and bank details, through the app's own onboarding flow on the **deployed**
+site. The test-mode account is gone (step 2) and cannot be migrated — live Connect requires real
+identity verification.
+
+Verify `charges_enabled` and `payouts_enabled` are both true before taking a payment:
+
+```bash
+npm run billing:preflight
+```
+
+It resolves the stored `acct_...` against the live key, so a half-finished onboarding shows up here
+rather than as a failed charge in front of a customer.
+
+### 7. One real payment
+
+Take **one real card payment** — a small real amount on a real card, not a test card.
 
 Confirm afterwards:
 
