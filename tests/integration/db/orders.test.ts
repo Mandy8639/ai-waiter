@@ -1086,6 +1086,69 @@ describe("get_kitchen_queue_ahead()", () => {
     expect(Number(after[0].orders_ahead)).toBe(0);
   });
 
+  it("ignores orders whose prep time nobody recorded", async () => {
+    // Live, Nashta reported "12 orders / 24 minutes" ahead: both true,
+    // together nonsense. Those orders referenced dishes deleted from the
+    // menu, so the join found no preparation_time and coalesced it to
+    // zero — inflating the count while adding nothing to the minutes. The
+    // waiter would have called the kitchen slammed and the food nearly
+    // ready in the same breath.
+    const fx = await fullCustomerFixture(db);
+    await db.admin.query(
+      "update public.menu_items set preparation_time = null where id = $1;",
+      [fx.menuItemId],
+    );
+    await addCartItem(db, fx.userId, fx.cartId, fx.restaurantId, fx.menuItemId);
+    await submitOrder(db, fx.userId, "queue-unknown-1");
+
+    const { rows } = await db.admin.query<{
+      orders_ahead: number;
+      prep_minutes_ahead: number;
+    }>("select * from public.get_kitchen_queue_ahead($1, now());", [
+      fx.restaurantId,
+    ]);
+    // Unknown work, not zero work — absent from BOTH figures.
+    expect(Number(rows[0].orders_ahead)).toBe(0);
+    expect(Number(rows[0].prep_minutes_ahead)).toBe(0);
+  });
+
+  it("keeps the count and the minutes describing the same orders", async () => {
+    // One measurable order alongside one unmeasurable one: the count must
+    // follow the minutes, not the row count.
+    const fx = await fullCustomerFixture(db);
+    await db.admin.query(
+      "update public.menu_items set preparation_time = 12 where id = $1;",
+      [fx.menuItemId],
+    );
+    await addCartItem(db, fx.userId, fx.cartId, fx.restaurantId, fx.menuItemId);
+    await submitOrder(db, fx.userId, "queue-mixed-1");
+
+    const { rows: unpriced } = await db.admin.query<{ id: string }>(
+      `insert into public.menu_items (restaurant_id, category_id, name, slug, price, preparation_time)
+       values ($1, $2, 'Untimed', 'untimed', 4.00, null) returning id;`,
+      [fx.restaurantId, fx.categoryId],
+    );
+    // Same cart: submit_order clears its items but keeps the cart, so a
+    // second order needs nothing more than a second idempotency key.
+    await addCartItem(
+      db,
+      fx.userId,
+      fx.cartId,
+      fx.restaurantId,
+      unpriced[0].id,
+    );
+    await submitOrder(db, fx.userId, "queue-mixed-2");
+
+    const { rows } = await db.admin.query<{
+      orders_ahead: number;
+      prep_minutes_ahead: number;
+    }>("select * from public.get_kitchen_queue_ahead($1, now());", [
+      fx.restaurantId,
+    ]);
+    expect(Number(rows[0].orders_ahead)).toBe(1);
+    expect(Number(rows[0].prep_minutes_ahead)).toBe(12);
+  });
+
   it("does not count another restaurant's kitchen", async () => {
     const a = await fullCustomerFixture(db);
     const b = await fullCustomerFixture(db);

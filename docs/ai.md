@@ -270,6 +270,16 @@ The answer is routed through `search_menu`'s `category` filter, and the categori
 
 Why a filter and not a text search: a menu of 22 snacks contains **one** item with the word "snack" in its name or description. `query: "snack"` therefore reads as "this restaurant has no snacks" — the same shape of failure as the missing-ingredients bug above, where a tool returns a valid, empty-looking answer and the waiter reports absence. An unrecognised category returns an explicit note listing the real ones rather than silently dropping the filter.
 
+### Unknown work is not zero work
+
+`get_kitchen_queue_ahead()` excludes orders whose dishes have no recorded preparation time — from **both** the count and the minutes, so the two always describe the same set.
+
+Live, Nashta reported _"12 orders / 24 minutes"_ ahead of a new order. Both figures were true and together they were nonsense: twelve orders averaging two minutes each, because ten of them referenced dishes since deleted from the menu, and a `LEFT JOIN` coalesced the missing preparation time to zero. The waiter reads the count for wording and the minutes for the estimate, so it would have told a diner the kitchen was slammed and their snack nearly ready in one breath.
+
+The rule is the same one `prep-estimate.ts` already follows: a dish with no recorded prep time makes the estimate **null**, not instant. "Nobody recorded it" and "it takes no time" are different claims.
+
+The consequence, stated plainly: a restaurant that records no preparation times gets no queue estimate at all. That is correct — an invented one would be worse, and the waiter already knows how to say the kitchen has not given a time.
+
 ### Prices carry their currency
 
 Every tool that returns a price also returns the restaurant's currency code, and the prompt forbids inferring one. This is not hypothetical: asked to recommend from an Indian menu priced in USD, the model quoted **₹9.99** for dishes the app displays at $9.99. A bare number invites the model to supply the symbol from context, and cuisine is the context it reaches for.
