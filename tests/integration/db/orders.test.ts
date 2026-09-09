@@ -1149,6 +1149,34 @@ describe("get_kitchen_queue_ahead()", () => {
     expect(Number(rows[0].prep_minutes_ahead)).toBe(12);
   });
 
+  it("ignores orders older than the kitchen board's own window", async () => {
+    // The board shows 12 hours and nothing older, so a cook never sees an
+    // abandoned ticket from last week — and therefore has no way to clear
+    // it. When this function had no window it counted those anyway, and a
+    // diner ordering today was told there was work ahead of them that
+    // nobody could see and nobody was cooking.
+    const fx = await fullCustomerFixture(db);
+    await db.admin.query(
+      "update public.menu_items set preparation_time = 15 where id = $1;",
+      [fx.menuItemId],
+    );
+    await addCartItem(db, fx.userId, fx.cartId, fx.restaurantId, fx.menuItemId);
+    const stale = await submitOrder(db, fx.userId, "queue-stale-1");
+    await db.admin.query(
+      "update public.orders set created_at = now() - interval '3 days' where id = $1;",
+      [stale.id],
+    );
+
+    const { rows } = await db.admin.query<{
+      orders_ahead: number;
+      prep_minutes_ahead: number;
+    }>("select * from public.get_kitchen_queue_ahead($1, now());", [
+      fx.restaurantId,
+    ]);
+    expect(Number(rows[0].orders_ahead)).toBe(0);
+    expect(Number(rows[0].prep_minutes_ahead)).toBe(0);
+  });
+
   it("does not count another restaurant's kitchen", async () => {
     const a = await fullCustomerFixture(db);
     const b = await fullCustomerFixture(db);

@@ -43,6 +43,15 @@ export interface KitchenOrder {
 /** How long a served order stays visible on the board before it drops off — long enough to catch a mistake, short enough not to clutter the screen (spec: "recent served orders for a limited period"). */
 const RECENT_SERVED_WINDOW_MINUTES = 30;
 /** Upper bound on how far back the board looks at all — never load a whole shift's (or longer) history into a live display. */
+/**
+ * Also the window the ETA's kitchen queue uses — see
+ * get_kitchen_queue_ahead() in
+ * supabase/migrations/20260909180000_queue_matches_board_window.sql.
+ * Changing one without the other means the waiter quotes a wait for work
+ * no cook can see: that is what happened when the queue had no window at
+ * all and counted nine-day-old abandoned orders that the board, correctly,
+ * would not show and therefore gave nobody any way to clear.
+ */
 const BOARD_LOOKBACK_HOURS = 12;
 
 /**
