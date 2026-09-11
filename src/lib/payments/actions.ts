@@ -7,6 +7,8 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { getStripe, isStripeConfigured } from "./stripe";
 import { parsePaymentError } from "./errors";
+import { describeStripeError, stripeErrorDetails } from "./stripe-errors";
+import { reportError } from "@/lib/observability/report";
 import { paymentSettingsSchema } from "./schema";
 import { toBoolean } from "@/lib/forms/form-data";
 
@@ -16,6 +18,39 @@ export interface PaymentActionState {
 
 function toPaymentError(error: PostgrestError): PaymentActionState {
   return { error: parsePaymentError(error.message) };
+}
+
+type StripeCallResult<T> =
+  { ok: true; value: T } | { ok: false; error: string };
+
+/**
+ * Runs one Stripe API call and turns a thrown Stripe error into copy the
+ * form can show, reporting the full error first.
+ *
+ * Without this, a Stripe refusal escaped the server action, and the
+ * connect panel's useActionState never received an `error` to render: the
+ * whole Payments page was replaced by the generic "Something went wrong"
+ * boundary. During the live cutover on 2026-09-11 that hid three separate
+ * unfinished Stripe setup steps, each one findable only in Stripe's own
+ * request log.
+ *
+ * The try/catch wraps the Stripe call and nothing else, so redirect() and
+ * Next.js's other control-flow throws in the caller are never swallowed.
+ */
+async function callStripe<T>(
+  scope: string,
+  restaurantId: string,
+  call: () => Promise<T>,
+): Promise<StripeCallResult<T>> {
+  try {
+    return { ok: true, value: await call() };
+  } catch (thrown) {
+    reportError(thrown, {
+      scope,
+      extra: { restaurantId, ...stripeErrorDetails(thrown) },
+    });
+    return { ok: false, error: describeStripeError(thrown) };
+  }
 }
 
 /**
@@ -96,26 +131,32 @@ export async function startPaymentOnboarding(
       .eq("id", restaurantId)
       .maybeSingle();
 
-    const account = await stripe.v2.core.accounts.create({
-      display_name: restaurant?.name ?? undefined,
-      dashboard: "full",
-      // Required before a merchant configuration can be applied. Falls back
-      // to US only because restaurants.country is nullable; a restaurant
-      // that has set its country gets that instead.
-      identity: { country: restaurant?.country ?? "US" },
-      defaults: {
-        currency: (restaurant?.currency ?? "USD").toLowerCase(),
-        responsibilities: {
-          fees_collector: "stripe",
-          losses_collector: "stripe",
-        },
-      },
-      configuration: {
-        merchant: { capabilities: { card_payments: { requested: true } } },
-      },
-      metadata: { restaurant_id: restaurantId },
-    });
-    stripeAccountId = account.id;
+    const created = await callStripe(
+      "payments.onboarding.create_account",
+      restaurantId,
+      () =>
+        stripe.v2.core.accounts.create({
+          display_name: restaurant?.name ?? undefined,
+          dashboard: "full",
+          // Required before a merchant configuration can be applied. Falls back
+          // to US only because restaurants.country is nullable; a restaurant
+          // that has set its country gets that instead.
+          identity: { country: restaurant?.country ?? "US" },
+          defaults: {
+            currency: (restaurant?.currency ?? "USD").toLowerCase(),
+            responsibilities: {
+              fees_collector: "stripe",
+              losses_collector: "stripe",
+            },
+          },
+          configuration: {
+            merchant: { capabilities: { card_payments: { requested: true } } },
+          },
+          metadata: { restaurant_id: restaurantId },
+        }),
+    );
+    if (!created.ok) return { error: created.error };
+    stripeAccountId = created.value.id;
 
     // Persisted through the RPC, not a direct insert: the table has no
     // write policy, and the function re-checks the caller's role itself.
@@ -126,24 +167,32 @@ export async function startPaymentOnboarding(
     if (error) return toPaymentError(error);
   }
 
-  const link = await stripe.v2.core.accountLinks.create({
-    account: stripeAccountId,
-    use_case: {
-      type: "account_onboarding",
-      account_onboarding: {
-        configurations: ["merchant"],
-        // Stripe sends the user here if the link expired before they
-        // finished; pointing it back at our own page means they simply get
-        // a fresh link rather than a dead end.
-        refresh_url: `${origin}/dashboard/payments?refresh=1`,
-        return_url: returnUrl,
-      },
-    },
-  });
+  const link = await callStripe(
+    "payments.onboarding.account_link",
+    restaurantId,
+    () =>
+      stripe.v2.core.accountLinks.create({
+        account: stripeAccountId,
+        use_case: {
+          type: "account_onboarding",
+          account_onboarding: {
+            configurations: ["merchant"],
+            // Stripe sends the user here if the link expired before they
+            // finished; pointing it back at our own page means they simply get
+            // a fresh link rather than a dead end.
+            refresh_url: `${origin}/dashboard/payments?refresh=1`,
+            return_url: returnUrl,
+          },
+        },
+      }),
+  );
+  if (!link.ok) return { error: link.error };
 
   // Outside any try/catch on purpose: redirect() signals by throwing, and
   // swallowing that would turn a successful redirect into a silent no-op.
-  redirect(link.url);
+  // callStripe() keeps its try/catch around the Stripe call alone for the
+  // same reason.
+  redirect(link.value.url);
 }
 
 /**
@@ -184,16 +233,20 @@ export async function refreshPaymentAccountStatus(
   // The mapping to this app's three flags happens here, at the Stripe
   // boundary, so the database keeps a stable domain shape rather than
   // mirroring whatever Stripe's API looks like this year.
-  const stripeAccount = await getStripe().v2.core.accounts.retrieve(
-    account.stripe_account_id,
-    {
-      include: [
-        "configuration.merchant",
-        "configuration.recipient",
-        "requirements",
-      ],
-    },
+  const retrieved = await callStripe(
+    "payments.refresh.retrieve_account",
+    restaurantId,
+    () =>
+      getStripe().v2.core.accounts.retrieve(account.stripe_account_id, {
+        include: [
+          "configuration.merchant",
+          "configuration.recipient",
+          "requirements",
+        ],
+      }),
   );
+  if (!retrieved.ok) return { error: retrieved.error };
+  const stripeAccount = retrieved.value;
 
   const merchant = stripeAccount.configuration?.merchant;
   const chargesEnabled =
