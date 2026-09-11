@@ -55,15 +55,27 @@ This project's test-mode work was done in a **Stripe Sandbox**, which is a separ
 toggle on the real one. Sandboxes cannot be activated for live mode at all, so "turn off test
 mode" is not the move — you switch accounts.
 
-|         | Account                                                           | Use                             |
-| ------- | ----------------------------------------------------------------- | ------------------------------- |
-| Sandbox | `acct_1UA0T2PBja26BrVt` — "Beacon Digital Consulting **sandbox**" | everything done so far          |
-| Live    | `acct_1UA0SwPI26hGxVnb` — "Beacon Digital Consulting"             | the real one, already activated |
+|         | Account                                                           | Use                    |
+| ------- | ----------------------------------------------------------------- | ---------------------- |
+| Sandbox | `acct_1UA0T2PBja26BrVt` — "Beacon Digital Consulting **sandbox**" | everything done so far |
+| Live    | `acct_1UA0SwPI26hGxVnb` — "Beacon Digital Consulting"             | the real one           |
 
-Confirmed 2026-09-04: the live account is activated (a `pk_live_...` key is present on its
-dashboard) and Connect settings are available on it. If a future account is _not_ activated,
-Stripe's own "Go live" checklist on the dashboard is the path — identity verification first, keys
-after.
+> ⚠️ **Having live keys does not mean the account is activated.** This section used to say the
+> live account was "confirmed activated" on 2026-09-04, because a `pk_live_...` key was on its
+> dashboard. On 2026-09-11 the same account reported `charges_enabled: false` and
+> `details_submitted: false`, and Stripe refused to create Connect accounts until activation was
+> finished. Check the account, not the keys page:
+>
+> ```bash
+> curl -s https://api.stripe.com/v1/account -u "$STRIPE_SECRET_KEY:" \
+>   | grep -E '"(id|charges_enabled|payouts_enabled|details_submitted)"'
+> ```
+>
+> All three flags must be `true` before step 6, and step 6 lists further gates on top of these.
+
+**Always put the account id in dashboard URLs.** A link like `dashboard.stripe.com/connect/accounts`
+opens whichever account you used last. On 2026-09-11 that was the sandbox, which looks almost
+identical. Use `dashboard.stripe.com/acct_1UA0SwPI26hGxVnb/...` for everything in this runbook.
 
 This matters beyond fetching a key: because the two are different accounts, **every** Stripe id in
 the database belongs to the sandbox and none of them exist in live. That is exactly what step 2
@@ -74,6 +86,16 @@ resets.
 In Vercel → Production, replace `STRIPE_SECRET_KEY` with the live key (`sk_live_...`), taken from
 the **live** account above — not the sandbox.
 
+Vercel marks this variable **Sensitive**: it is write-only, `vercel env pull` returns
+`[SENSITIVE]` placeholders, and nobody can read the value back to check it. Check the timestamp
+instead: in Vercel → Settings → Environment Variables, the row must say **Updated** just now.
+`vercel env ls` shows when a variable was _created_, not updated, so it can't answer this.
+
+On 2026-09-11 both webhook secrets had been updated, but `STRIPE_SECRET_KEY` still said "Updated
+2d ago". Production was using a key from a different Stripe account, and the Connect account it
+created belonged to that account. See
+[Prove which account production uses](#prove-which-account-production-uses).
+
 Do not redeploy yet — the database still holds test-mode ids, and a deploy now would put a live key
 in front of them.
 
@@ -81,6 +103,10 @@ in front of them.
 
 With the live key in `.env.local`, run the preflight. It will now report the stored ids as STALE.
 Then, against production Postgres:
+
+> Run these in the **production** project, `dqypmprjcyxoeywsumxr`. Check the project id in the
+> SQL editor's URL: the disposable E2E project (`iriwghorcramhpmekktq`) also shows an orange
+> **PRODUCTION** badge, because that badge marks the `main` branch, not the live database.
 
 ```sql
 -- Plans: clear so setup-prices can create live ones (step 3).
@@ -110,7 +136,7 @@ delete from public.restaurant_subscriptions
 delete from public.restaurant_plans
  where restaurant_id in (select id from public.restaurants);
 
--- Connect accounts: delete so onboarding starts clean in live mode (step 5).
+-- Connect accounts: delete so onboarding starts clean in live mode (step 6).
 delete from public.restaurant_payment_accounts
  where stripe_account_id like 'acct_%';
 ```
@@ -120,6 +146,11 @@ unqualified `delete`/`update` is rejected — every statement above is qualified
 
 Leave `stripe_webhook_events` alone. It's the idempotency ledger; live event ids can't collide with
 test ones, and clearing it buys nothing.
+
+`order_payments` is not reset either, and that has a cost: test-mode payments stay marked
+`succeeded` and count as revenue in reports. You can spot them by a `cs_test_...` checkout session
+id. After this cutover Nashta still had two, from Sep 5 ($16.98) and Sep 9 ($10.47). Deleting them
+is a business decision, not a correctness one; nothing breaks either way.
 
 ### 3. Create the live prices
 
@@ -155,7 +186,7 @@ The event lists each endpoint needs, taken from the handlers themselves:
 | `refund.failed`                         |                                           |
 
 `account.updated` on the first one is what tells the app a restaurant finished Connect onboarding.
-Without it, step 5 looks permanently stuck.
+Without it, step 6 looks permanently stuck.
 
 Put each signing secret into Vercel → Production. Paste them straight from Stripe; never through an
 intermediary.
@@ -206,6 +237,57 @@ With real business and bank details, through the app's own onboarding flow on th
 site. The test-mode account is gone (step 2) and cannot be migrated — live Connect requires real
 identity verification.
 
+#### Stripe's gates come one at a time
+
+On 2026-09-11 **Connect with Stripe** failed six times before it worked. Every failure was the
+same `400 account_create_activation_required` on `POST /v2/core/accounts`, and the causes were
+different. None of them appeared in the account's `requirements` through the API. They only show
+in the dashboard, and each one only after the previous one is cleared:
+
+| #   | Gate                                                     | Where it shows                                                                                 | Who                                                 |
+| --- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| 1   | Activate the platform account (business, identity, bank) | `dashboard.stripe.com/account/onboarding`; the API shows `details_submitted: false`            | Owner                                               |
+| 2   | Upload an identity document **for Connect**              | Banner on `…/acct_1UA0SwPI26hGxVnb/connect/accounts`: "Provide a valid identity document"      | Owner                                               |
+| 3   | Confirm your integration choices                         | Same page: "Connect setup almost complete". The step itself is under Setup guide → **Go live** | Owner — this accepts the Connect Platform Agreement |
+
+After each one clears, reload the Connected accounts page before retrying; it's the only place the
+next gate appears. Gate 1 can also look finished early: `details_submitted` turned `true` a few
+minutes before `charges_enabled` did.
+
+For gate 3, answer to match what the code does:
+
+| Stripe asks             | Answer                            | Because                                                                                                      |
+| ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Funds flow              | Sellers collect payments directly | Checkout runs on the restaurant's account (`stripeAccount`) with an `application_fee_amount`: direct charges |
+| Account creation        | Onboarding hosted by Stripe       | `startPaymentOnboarding()` sends owners to Stripe-hosted account links                                       |
+| Account management      | Sellers use the Stripe Dashboard  | Accounts are created with `dashboard: "full"`; the app has no payouts or disputes screens                    |
+| Risk and loss liability | Stripe                            | Accounts are created with `losses_collector: "stripe"` and `fees_collector: "stripe"`                        |
+
+#### The app hides the error
+
+A failed **Connect with Stripe** or **Refresh status** shows only a generic "Something went wrong"
+page, because the Stripe error is thrown rather than returned to the form. Read the real error in
+the live account's API log (see
+[Prove which account production uses](#prove-which-account-production-uses)): open the failed
+`POST /v2/core/accounts` and read its response body.
+
+#### Delete a Connect row created with the wrong key
+
+`startPaymentOnboarding()` **reuses** a stored `stripe_account_id` rather than creating a new one.
+If production ever onboarded with the wrong key, that row points at an account the live key can't
+reach, and onboarding fails on it every time. The preflight shows the stored id not resolving. Delete
+that one row and start again:
+
+```sql
+delete from public.restaurant_payment_accounts where stripe_account_id = 'acct_...';
+```
+
+#### Onboarding can return early
+
+Stripe can send the owner back to the app before every field is collected. On 2026-09-11 the first
+pass left the representative's home address and SSN missing, and card payments stayed
+`restricted`. **Continue on Stripe** on the payments page reopens onboarding at the missing fields.
+
 Verify `charges_enabled` and `payouts_enabled` are both true before taking a payment:
 
 ```bash
@@ -215,18 +297,43 @@ npm run billing:preflight
 It resolves the stored `acct_...` against the live key, so a half-finished onboarding shows up here
 rather than as a failed charge in front of a customer.
 
+Onboarding is also the only real test of `STRIPE_WEBHOOK_SECRET`. The `@accounts` destination only
+receives events from connected accounts, so nothing can reach it until one exists. Each
+`account.updated` Stripe sends during onboarding should appear in `stripe_webhook_events`. The route
+records an event only after its signature verifies, so a row there proves the secret.
+
 ### 7. One real payment
 
 Take **one real card payment** — a small real amount on a real card, not a test card.
 
 Confirm afterwards:
 
-- the payment row lands in the database with the right amount
-- the platform fee matches the restaurant's plan `fee_bps`
+- an `order_payments` row with `status = succeeded`, a `paid_at`, and a `cs_live_...` checkout
+  session id
+- a `checkout.session.completed` row in `stripe_webhook_events`
+- the platform fee matches the restaurant's plan `fee_bps` (`GET /v1/application_fees` on the
+  platform key lists it)
 - both webhook destinations show a `200`, not a `400`
 - `npm run billing:preflight` reports all ids resolving in **live** mode
 
-Refund it if it was only a test of the pipeline.
+Refund it if it was only a test of the pipeline. Stripe keeps its processing fee on a refund.
+
+Done for real on 2026-09-11: a $1.99 card payment on Nashta's account, with a $0.01 platform fee
+at the Starter rate (1%).
+
+## Prove which account production uses
+
+Vercel won't show you the key, so ask Stripe instead. Trigger any Stripe call from production (the
+payments page's **Refresh status** or **Connect with Stripe** will do), then open the live account's
+API log:
+
+`https://dashboard.stripe.com/acct_1UA0SwPI26hGxVnb/workbench/logs/api`
+
+Click **Clear filters** first. The default filters hide GET requests, which is most of what the app
+sends. If your request appears there, production is using this account's key. If it doesn't,
+production's key belongs to another account.
+
+The same log shows the full response body for any failed call, which the app itself doesn't display.
 
 ## After cutover
 
