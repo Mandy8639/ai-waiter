@@ -1140,6 +1140,14 @@ export interface Database {
         Args: { actor_role: string; from_status: string; to_status: string };
         Returns: boolean;
       };
+      /** One order's table number and name, only to its own diner or the restaurant's staff. */
+      get_order_table: {
+        Args: { p_order_id: string };
+        Returns: {
+          table_number: string;
+          display_name: string | null;
+        }[];
+      };
       get_public_order_settings: {
         Args: { target_restaurant_id: string };
         Returns: {

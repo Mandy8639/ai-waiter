@@ -68,11 +68,10 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
         .select("name, slug")
         .eq("id", order.restaurant_id)
         .maybeSingle(),
-      supabase
-        .from("tables")
-        .select("table_number, display_name")
-        .eq("id", order.table_id)
-        .maybeSingle(),
+      // Through get_order_table(), not a read of `tables`: a diner can't
+      // read that table (its only SELECT policy is members-only), so this
+      // came back empty for every diner and the page showed "—".
+      supabase.rpc("get_order_table", { p_order_id: order.id }).maybeSingle(),
       supabase
         .from("order_items")
         .select(

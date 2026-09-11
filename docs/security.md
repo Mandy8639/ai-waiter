@@ -133,8 +133,13 @@ matters — writes, and reads of inactive/unavailable data — is untouched. See
 [`docs/database.md`](./database.md) for the full reasoning and the tests confirming it.
 
 Never exposed to a public/customer caller: restaurant management data (settings toggles,
-`restaurant_users`, other tables' `public_token`s), or any way to enumerate `tables` directly — the
-only public read path onto `tables` is the narrow `get_table_by_token()` RPC. Batch 5 follows the
+`restaurant_users`, other tables' `public_token`s), or any way to enumerate `tables` directly. A
+non-member can reach `tables` only through two narrow RPCs: `get_table_by_token()`, and
+`get_order_table(order_id)`, which returns one order's table number and display name only to the
+diner whose session placed it or to the restaurant's staff. Because a `SECURITY DEFINER` function
+bypasses RLS, `get_order_table()` repeats `orders_select_own_or_staff` itself. It exists because
+the diner's order page used to read `tables` directly, got nothing back, and showed "—" in place
+of the table. Batch 5 follows the
 same narrow-function pattern rather than widening `restaurant_settings`' RLS: the cart page needs
 to know whether a restaurant is currently accepting orders and whether it wants customer notes, so
 `get_public_order_settings(restaurant_id)` — another `SECURITY DEFINER` function, granted to `anon,
