@@ -4,10 +4,22 @@ An AI waiter for restaurants — a multi-tenant SaaS platform where an AI talks 
 answers menu questions, recommends food, takes customized orders, confirms them, and sends them
 to the kitchen, alongside dashboards for restaurant owners and kitchen staff.
 
-**Foundation, database, restaurant management, the full customer QR-to-order flow, a live kitchen
-workflow, a conversational AI waiter, production hardening, staff management, kitchen ticket
-splitting/merging, and reservations.** No payments yet — that is the one thing standing between
-this and a restaurant using it for real.
+**Live, taking real money.** On 2026-09-11 a real diner card payment went through a real
+restaurant's own Stripe account, with the platform fee collected correctly — so the whole path
+(QR scan → menu → AI waiter → order → kitchen board → card payment → payout) has now run
+end-to-end in production, not just in tests.
+
+Deployed at **https://order.beacondigitalconsulting.org**. `beacondigitalconsulting.org` and its
+`www` redirect there.
+
+Built since: **payments** — Stripe Connect onboarding per restaurant, card checkout for a single
+order or a whole table's tab, tips, cash recorded by staff, refunds, receipts, and three platform
+plans (Starter free at 1%, Standard $49/mo at 0.5%, Pro $149/mo at 0.25%) billed by Stripe
+subscription; a **customer-facing order tracker**; **kitchen alerts** that keep sounding until an
+order is accepted; per-line **spice preferences and kitchen notes**; **preparation-time estimates**;
+and the **seam a POS connector plugs into** (see [`docs/pos-integration.md`](docs/pos-integration.md))
+— no Toast/Square connector is built, deliberately.
+
 What exists: the Next.js foundation; the full multi-tenant database schema (restaurants, staff
 roles, menu, modifiers, ingredients, allergens, customer sessions, carts, orders, the order state
 machine, and AI conversation transcripts) with Row Level Security; email/password auth, restaurant
@@ -34,7 +46,7 @@ restaurant lose its last owner); kitchen ticket splitting and merging, where one
 fire as several independent tickets or several orders can share one, and the customer's status is
 derived as the least-advanced ticket so they are never told "served" early; and reservations
 (`/dashboard/reservations` — staff-entered bookings against a specific table, with 90-minute
-double-booking prevention and a confirmed → seated → completed lifecycle). 642 automated tests,
+double-booking prevention and a confirmed → seated → completed lifecycle). 1,301 automated tests,
 run by CI on every push. See
 [`docs/architecture.md`](docs/architecture.md) for the target architecture and what's actually
 implemented today versus planned, and [`docs/ai.md`](docs/ai.md) for the AI waiter's design.
@@ -231,7 +243,7 @@ npm test          # unit tests + DB/RLS integration tests (Vitest)
 npm run test:e2e  # end-to-end smoke test (Playwright)
 ```
 
-`npm test` runs 642 tests across 47 files: unit tests (including Zod schema validation for every dashboard/cart
+`npm test` runs 1,301 tests across 91 files: unit tests (including Zod schema validation for every dashboard/cart
 form, the AI tool schemas/surface, and the AI tool-calling loop) plus `tests/integration/db/` —
 tenant isolation, cross-tenant foreign key rejection, role-based authorization, constraint
 enforcement, QR token lifecycle, customer session/cart isolation (cross-restaurant, cross-table,
@@ -261,21 +273,18 @@ fixed.
 
 ## Deployment
 
-Deployed on Vercel at **https://ai-waiter-two.vercel.app**, against the production Supabase
-project. `GET /api/health` reports high-level readiness (Supabase/AI configured, never a secret)
-and currently answers `{"status":"ok","supabaseConfigured":true,"aiConfigured":false}` — see
+Deployed on Vercel at **https://order.beacondigitalconsulting.org**, against the production
+Supabase project. `GET /api/health` reports high-level readiness (Supabase/AI configured, never a
+secret) and currently answers `{"status":"ok","supabaseConfigured":true,"aiConfigured":true}` — see
 [`docs/security.md`](docs/security.md#health-check-endpoint--implemented-in-batch-8).
 
-Three things to know about that deployment as it stands:
+Three things to know about that deployment:
 
-- **It is not publicly reachable.** Vercel Deployment Protection is on, so the URL returns a
-  redirect to Vercel SSO for anyone but the project owner. That has to be turned off in Vercel's
-  project settings before a real diner can scan a QR code and order.
-- **Deploys are manual** (`vercel deploy --prod`). Connecting the GitHub repo for automatic
-  deployments needs a GitHub Login Connection on the Vercel account first.
-- **The AI waiter is off in production**, deliberately: only the two public `NEXT_PUBLIC_*`
-  variables are set. `SUPABASE_SECRET_KEY` is not, and does not need to be — nothing in the
-  request path imports the admin client. Set `AI_PROVIDER` and the matching key to enable the AI.
+- **It is public**, and it is the address printed on real QR codes. That hostname must not change:
+  the codes are stuck to tables.
+- **Deploys are automatic** — every merge to `main` builds and deploys via the GitHub integration.
+- **Stripe runs in live mode.** See [`docs/going-live.md`](docs/going-live.md) for the cutover
+  procedure and the traps found running it for real.
 
 The Node version is pinned in two places for two different readers: `.nvmrc` for CI
 (`actions/setup-node`) and `engines.node` in `package.json` for Vercel, which does not read
@@ -283,9 +292,10 @@ The Node version is pinned in two places for two different readers: `.nvmrc` for
 
 ## What's not built yet
 
-Payments, POS integration, inventory, loyalty, delivery, analytics, voice/phone ordering, and
-staff-facing AI. Nearer-term gaps a real restaurant would notice within a week: no order history or
-search (the kitchen board only looks back 12 hours), no email/SMS notifications, no reporting, no
+POS integration (the seam exists, no connector), inventory, loyalty, delivery, analytics,
+voice/phone ordering, and staff-facing AI. Nearer-term gaps a real restaurant would notice within a
+week: no order history or search (the kitchen board only looks back 12 hours), no email/SMS
+notifications, no reporting, no
 staff invitation flow (an invitee must already have an account), and menu images are URL-only
 because Supabase Storage is not wired up. Reservations are staff-entry only — there is no
 customer-facing booking page, and rescheduling means cancel-and-rebook. Everything else is built
