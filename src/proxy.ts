@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/supabase/database.types";
+import { decideRouteAccess, PROTECTED_PREFIXES } from "@/lib/auth/route-access";
 
 /**
  * Refreshes the Supabase auth session on every request (required for SSR —
@@ -15,9 +16,6 @@ import type { Database } from "@/lib/supabase/database.types";
  * Reads only NEXT_PUBLIC_* vars directly (not src/lib/env.ts), so this
  * never needs SUPABASE_SECRET_KEY to run.
  */
-const PROTECTED_PREFIXES = ["/dashboard", "/onboarding"];
-const AUTH_PAGES = ["/login", "/signup"];
-
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -65,19 +63,20 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
+  const decision = decideRouteAccess(request.nextUrl.pathname, {
+    signedIn: Boolean(user),
+    // `is_anonymous` is optional in the SDK's type, so anything not
+    // explicitly anonymous counts as a real account — the same
+    // conservative reading the QR route handler uses.
+    isAnonymous: user?.is_anonymous === true,
+  });
 
-  if (
-    PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix)) &&
-    !user
-  ) {
-    const redirectUrl = new URL("/login", request.url);
-    redirectUrl.searchParams.set("redirectTo", pathname);
+  if (decision.type === "redirect") {
+    const redirectUrl = new URL(decision.to, request.url);
+    if (decision.redirectTo) {
+      redirectUrl.searchParams.set("redirectTo", decision.redirectTo);
+    }
     return NextResponse.redirect(redirectUrl);
-  }
-
-  if (AUTH_PAGES.includes(pathname) && user) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return supabaseResponse;
