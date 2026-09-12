@@ -14,6 +14,8 @@
  *   the shape RLS policies actually touch — a users table or role checks
  *   this file makes, and `auth.uid()` backed by a Postgres session GUC we
  *   control from the test (`app.current_user_id`) instead of a real JWT.
+ *   `is_anonymous` is modelled too: create_restaurant() reads it to refuse
+ *   a diner's guest session, so tests need to be able to create one.
  *   Every policy in the schema is written purely in terms of `auth.uid()`,
  *   so this is a complete stand-in for RLS-testing purposes.
  * - `authenticated` / `anon` roles + default table grants: on a real
@@ -44,6 +46,8 @@ export interface TestDb {
   asServiceRole: <T>(fn: (client: PGlite) => Promise<T>) => Promise<T>;
   /** Inserts a row into the auth.users stub and returns its id. Give an explicit email to make that user findable via get_restaurant_staff()/add_restaurant_staff_by_email() — omitted, it gets a unique placeholder. */
   createAuthUser: (email?: string) => Promise<string>;
+  /** Inserts an anonymous (diner) identity — what scanning a table's QR code creates. */
+  createAnonymousAuthUser: () => Promise<string>;
   close: () => Promise<void>;
 }
 
@@ -55,7 +59,11 @@ export async function createTestDb(): Promise<TestDb> {
 
     create table auth.users (
       id uuid primary key default gen_random_uuid(),
-      email text unique
+      email text unique,
+      -- Real Supabase sets this for identities created via Anonymous
+      -- Auth — every diner who scans a table's QR code. Modelled here
+      -- because create_restaurant() reads it to refuse guest sessions.
+      is_anonymous boolean not null default false
     );
 
     create function auth.uid() returns uuid
@@ -157,6 +165,14 @@ export async function createTestDb(): Promise<TestDb> {
       const { rows } = await admin.query<{ id: string }>(
         "insert into auth.users (email) values ($1) returning id;",
         [email ?? `${crypto.randomUUID()}@example.com`],
+      );
+      return rows[0].id;
+    },
+    createAnonymousAuthUser: async () => {
+      // No email, is_anonymous true — what Supabase Anonymous Auth creates
+      // for a diner who scans a table's QR code.
+      const { rows } = await admin.query<{ id: string }>(
+        "insert into auth.users (email, is_anonymous) values (null, true) returning id;",
       );
       return rows[0].id;
     },
