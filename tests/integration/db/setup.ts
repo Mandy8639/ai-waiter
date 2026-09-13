@@ -8,6 +8,11 @@
  * supabase/migrations/, so what's under test is the real migration SQL,
  * not a re-description of it.
  *
+ * The stub itself now lives in src/lib/backup/supabase-stub.ts, shared with
+ * scripts/backup-database.ts and scripts/verify-backup.ts. It used to be a
+ * private copy in each of the three; the other two fell behind the
+ * migrations and broke, silently, until someone needed a backup.
+ *
  * What's stubbed, and why it's a faithful stand-in:
  * - `auth.users` / `auth.uid()`: real Supabase provides these via GoTrue: a
  *   users table plus a function reading the request JWT. We recreate just
@@ -32,6 +37,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { SUPABASE_PLATFORM_STUB_SQL } from "@/lib/backup/supabase-stub";
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "supabase/migrations");
 
@@ -54,63 +60,10 @@ export interface TestDb {
 export async function createTestDb(): Promise<TestDb> {
   const admin = new PGlite();
 
-  await admin.exec(`
-    create schema auth;
-
-    create table auth.users (
-      id uuid primary key default gen_random_uuid(),
-      email text unique,
-      -- Real Supabase sets this for identities created via Anonymous
-      -- Auth — every diner who scans a table's QR code. Modelled here
-      -- because create_restaurant() reads it to refuse guest sessions.
-      is_anonymous boolean not null default false
-    );
-
-    create function auth.uid() returns uuid
-    language sql stable as $$
-      select nullif(current_setting('app.current_user_id', true), '')::uuid
-    $$;
-
-    -- Supabase's storage schema, stubbed for the same reason auth is: the
-    -- migrations reference it (menu-import uploads live in a bucket with
-    -- its own RLS), and PGlite has no Supabase platform layer. Only the
-    -- pieces the migrations actually touch are modelled.
-    create schema storage;
-
-    create table storage.buckets (
-      id text primary key,
-      name text not null,
-      public boolean not null default false,
-      file_size_limit bigint,
-      allowed_mime_types text[]
-    );
-
-    create table storage.objects (
-      id uuid primary key default gen_random_uuid(),
-      bucket_id text references storage.buckets (id),
-      name text not null,
-      owner uuid,
-      created_at timestamptz not null default now()
-    );
-
-    alter table storage.objects enable row level security;
-
-    -- Matches Supabase's own helper: the path's folder segments, i.e.
-    -- everything before the final '/'. The storage policies scope on
-    -- [1], the restaurant id that namespaces each upload.
-    create function storage.foldername(name text) returns text[]
-    language sql immutable as $$
-      select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1]
-    $$;
-
-    create role authenticated nologin;
-    create role anon nologin;
-    -- The Stripe webhook writes as service_role, and migrations grant
-    -- execute on the settlement functions to it specifically. Modelled
-    -- here with bypassrls, as on a real Supabase project, so that "only
-    -- the webhook can settle a payment" is testable rather than assumed.
-    create role service_role nologin bypassrls;
-  `);
+  // The Supabase platform pieces, shared with scripts/backup-database.ts
+  // and scripts/verify-backup.ts. This used to be a private copy in each
+  // of the three; the other two fell behind the migrations and broke.
+  await admin.exec(SUPABASE_PLATFORM_STUB_SQL);
 
   const files = (await readdir(MIGRATIONS_DIR))
     .filter((f) => f.endsWith(".sql"))

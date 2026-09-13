@@ -21,33 +21,17 @@ import { PGlite } from "@electric-sql/pglite";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { introspectPublicTables } from "../src/lib/backup/introspect";
+import { SUPABASE_PLATFORM_STUB_SQL } from "../src/lib/backup/supabase-stub";
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "supabase/migrations");
 const OUT_DIR = path.resolve(process.cwd(), "backups");
 
 async function schemaFromMigrations(): Promise<PGlite> {
   const db = new PGlite();
-  // The platform pieces PGlite has no equivalent of — the auth schema the
-  // migrations reference, and the roles they GRANT to. Kept deliberately
-  // identical to tests/integration/db/setup.ts, which is the harness that
-  // proves these migrations actually apply.
-  await db.exec(`
-    create schema auth;
-
-    create table auth.users (
-      id uuid primary key default gen_random_uuid(),
-      email text unique
-    );
-
-    create function auth.uid() returns uuid
-    language sql stable as $$
-      select nullif(current_setting('app.current_user_id', true), '')::uuid
-    $$;
-
-    create role authenticated nologin;
-    create role anon nologin;
-    create role service_role nologin bypassrls;
-  `);
+  // The platform pieces PGlite has no equivalent of, shared with the
+  // verifier and the test harness. It used to be copy-pasted here, fell
+  // behind the migrations, and broke this script — see the module.
+  await db.exec(SUPABASE_PLATFORM_STUB_SQL);
   const files = (await readdir(MIGRATIONS_DIR))
     .filter((f) => f.endsWith(".sql"))
     .sort();

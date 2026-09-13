@@ -20,6 +20,7 @@ import {
   generatedColumns,
   columnsReferencingAuthUsers,
 } from "../src/lib/backup/introspect";
+import { SUPABASE_PLATFORM_STUB_SQL } from "../src/lib/backup/supabase-stub";
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "supabase/migrations");
 const BACKUP_DIR = path.resolve(process.cwd(), "backups");
@@ -40,20 +41,9 @@ async function newestBackup(): Promise<string> {
 
 async function migratedDb(): Promise<PGlite> {
   const db = new PGlite();
-  await db.exec(`
-    create schema auth;
-    create table auth.users (
-      id uuid primary key default gen_random_uuid(),
-      email text unique
-    );
-    create function auth.uid() returns uuid
-    language sql stable as $$
-      select nullif(current_setting('app.current_user_id', true), '')::uuid
-    $$;
-    create role authenticated nologin;
-    create role anon nologin;
-    create role service_role nologin bypassrls;
-  `);
+  // Shared with the backup script and the test harness: a stale private
+  // copy of this is what broke `npm run db:backup`.
+  await db.exec(SUPABASE_PLATFORM_STUB_SQL);
   const files = (await readdir(MIGRATIONS_DIR))
     .filter((f) => f.endsWith(".sql"))
     .sort();
