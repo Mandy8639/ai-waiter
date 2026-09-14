@@ -17,6 +17,9 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Kitchen", href: "/dashboard/kitchen" },
+  // No role restriction: a waiter settling a dispute needs order history
+  // as much as an owner does. Takings stay owner/manager-only (Reports).
+  { label: "Orders", href: "/dashboard/orders" },
   { label: "Settle up", href: "/dashboard/checkout" },
   { label: "Menu", href: "/dashboard/menu" },
   { label: "Categories", href: "/dashboard/categories" },
