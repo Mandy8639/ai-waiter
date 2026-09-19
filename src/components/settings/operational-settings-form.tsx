@@ -22,25 +22,38 @@ export interface OperationalSettingsValues {
 function Toggle({
   id,
   label,
+  description,
   defaultChecked,
   disabled,
 }: {
   id: string;
   label: string;
+  /** What switching this actually does, in the diner's terms. */
+  description: string;
   defaultChecked: boolean;
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-start gap-3 rounded-lg px-1 py-1.5">
       <Checkbox
         id={id}
         name={id}
         defaultChecked={defaultChecked}
         disabled={disabled}
+        aria-describedby={`${id}-description`}
+        className="mt-0.5"
       />
-      <Label htmlFor={id} className="font-normal">
-        {label}
-      </Label>
+      <div className="flex flex-col gap-0.5">
+        <Label htmlFor={id} className="font-medium">
+          {label}
+        </Label>
+        <p
+          id={`${id}-description`}
+          className="type-caption text-muted-foreground"
+        >
+          {description}
+        </p>
+      </div>
     </div>
   );
 }
@@ -77,24 +90,33 @@ export function OperationalSettingsForm({
       <Toggle
         id="acceptingOrders"
         label="Accepting orders"
+        description="When off, diners can still browse the menu but can't place orders."
         defaultChecked={defaultValues.acceptingOrders}
         disabled={readOnly}
       />
       <Toggle
         id="allowCustomerNotes"
-        label="Allow customer notes on orders"
+        label="Kitchen notes from diners"
+        description="Lets diners add a note to a dish or an order, such as “no onions”."
         defaultChecked={defaultValues.allowCustomerNotes}
         disabled={readOnly}
       />
+      {/*
+        The field is named allow_ai_recommendations for historical reasons,
+        but it switches the whole AI waiter on and off (src/lib/ai/actions.ts
+        refuses every message when it is false). The label says what it does.
+      */}
       <Toggle
         id="allowAiRecommendations"
-        label="Allow AI recommendations"
+        label="AI waiter"
+        description="Diners can ask the AI waiter about your menu and order through it. When off, the waiter is hidden from your menu."
         defaultChecked={defaultValues.allowAiRecommendations}
         disabled={readOnly}
       />
       <Toggle
         id="allowUpselling"
-        label="Allow AI upselling"
+        label="Let the AI waiter suggest an extra item"
+        description="At most one relevant, low-pressure suggestion per order — for example a drink with a meal. Never invented discounts or urgency."
         defaultChecked={defaultValues.allowUpselling}
         disabled={readOnly}
       />

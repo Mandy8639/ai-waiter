@@ -30,8 +30,8 @@ export default async function IngredientsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Ingredients</h1>
           <p className="text-muted-foreground text-sm">
-            Your ingredient catalog — used for menu composition and future
-            allergen/AI reasoning.
+            What your dishes are made of. Diners see them on each dish, and the
+            AI waiter uses them to describe your food.
           </p>
         </div>
         {canManage && (

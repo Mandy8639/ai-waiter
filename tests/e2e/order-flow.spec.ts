@@ -107,7 +107,9 @@ test.describe("customer QR-to-order flow", () => {
     // --- Add the item to cart (no modifiers on this item) and submit ---
     await customerPage.getByText("Paneer Tikka").click();
     await customerPage.waitForURL(/\/item\//);
-    await customerPage.getByRole("button", { name: /Add to cart/ }).click();
+    await customerPage
+      .getByRole("button", { name: /Add to order|Add another/ })
+      .click();
     // 15s, not the 5s default: this is a persistent <Alert> bound to the
     // form action's success state (item-detail-form.tsx) with no
     // auto-dismiss, so a longer timeout tolerates a loaded server without
@@ -115,11 +117,13 @@ test.describe("customer QR-to-order flow", () => {
     // Observed failing at 5s only when the suite ran fully parallel
     // alongside the 2-minute live-model AI spec, which is contention on
     // the shared dev server, not a product defect.
-    await expect(customerPage.getByText("Added to cart.")).toBeVisible({
+    await expect(customerPage.getByText("Added to your order")).toBeVisible({
       timeout: 15_000,
     });
 
-    await customerPage.getByRole("link", { name: "View cart" }).click();
+    await customerPage
+      .getByRole("link", { name: "View order", exact: true })
+      .click();
     await customerPage.waitForURL(/\/cart/);
 
     await customerPage.getByRole("button", { name: "Place order" }).click();

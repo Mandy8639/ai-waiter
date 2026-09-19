@@ -5,10 +5,10 @@ import { reportClientError } from "@/lib/observability/report-client";
 
 export default function GlobalError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     // Kept alongside the report: the console is what a developer sees with
@@ -34,7 +34,7 @@ export default function GlobalError({
             The application failed to load. You can try again.
           </p>
           <button
-            onClick={reset}
+            onClick={() => retry()}
             className="mt-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-neutral-50"
           >
             Try again

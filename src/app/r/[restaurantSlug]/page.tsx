@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
+import { CalendarDays, Phone, Store, UtensilsCrossed } from "lucide-react";
+import { AskWaiterCard } from "@/components/customer/ask-waiter-card";
+import { FilterChip } from "@/components/customer/filter-chip";
+import { RestaurantHero } from "@/components/customer/restaurant-hero";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 
@@ -34,16 +38,11 @@ export default async function RestaurantLandingPage({
 
   if (!restaurant.isActive) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center">
-        <Badge variant="outline">Currently unavailable</Badge>
-        <h1 className="text-xl font-semibold tracking-tight">
-          {restaurant.name}
-        </h1>
-        <p className="text-muted-foreground max-w-xs text-sm">
-          This restaurant isn&apos;t accepting online browsing or orders right
-          now. Please check back later.
-        </p>
-      </div>
+      <EmptyState
+        icon={<Store />}
+        title={`${restaurant.name} isn't open for orders right now`}
+        description="Online browsing and ordering are paused. Please check back later, or ask a member of staff."
+      />
     );
   }
 
@@ -56,79 +55,61 @@ export default async function RestaurantLandingPage({
 
   return (
     <div className="flex flex-1 flex-col gap-6">
-      {restaurant.coverImageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- restaurant-supplied remote URL, not a static asset
-        <img
-          src={restaurant.coverImageUrl}
-          alt=""
-          className="-mx-4 -mt-4 h-40 w-[calc(100%+2rem)] object-cover sm:rounded-b-lg"
-        />
-      )}
+      <RestaurantHero restaurant={restaurant} />
 
-      <div className="flex flex-col gap-2 text-center">
-        {restaurant.logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- restaurant-supplied remote URL
-          <img
-            src={restaurant.logoUrl}
-            alt={`${restaurant.name} logo`}
-            className="mx-auto size-16 rounded-full border object-cover"
-          />
-        )}
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {restaurant.name}
-        </h1>
-        {restaurant.description && (
-          <p className="text-muted-foreground text-sm">
-            {restaurant.description}
-          </p>
-        )}
-        {(restaurant.address || restaurant.city) && (
-          <p className="text-muted-foreground text-xs">
-            {[restaurant.address, restaurant.city, restaurant.state]
-              .filter(Boolean)
-              .join(", ")}
-          </p>
-        )}
-        {restaurant.phone && (
-          <p className="text-muted-foreground text-xs">{restaurant.phone}</p>
-        )}
+      <div className="flex flex-col gap-2.5 sm:flex-row">
+        <Link
+          href={`/r/${restaurantSlug}/menu`}
+          className={cn(buttonVariants({ size: "lg" }), "sm:flex-1")}
+        >
+          <UtensilsCrossed aria-hidden="true" />
+          See the menu
+        </Link>
+        {/* Secondary to the menu on purpose: most people reaching this page
+            scanned a code and are already sitting down. Booking is for the
+            ones who are not. */}
+        <Link
+          href={`/r/${restaurantSlug}/reserve`}
+          className={cn(
+            buttonVariants({ variant: "outline", size: "lg" }),
+            "sm:flex-1",
+          )}
+        >
+          <CalendarDays aria-hidden="true" />
+          Book a table
+        </Link>
       </div>
 
-      <Link
-        href={`/r/${restaurantSlug}/menu`}
-        className={buttonVariants({ variant: "default" })}
-      >
-        View full menu
-      </Link>
-
-      {/* Secondary to the menu on purpose: most people reaching this page
-          scanned a code and are already sitting down. Booking is for the
-          ones who are not. */}
-      <Link
-        href={`/r/${restaurantSlug}/reserve`}
-        className={buttonVariants({ variant: "outline" })}
-      >
-        Book a table
-      </Link>
+      <AskWaiterCard />
 
       {categories && categories.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Categories</h2>
-          <div className="grid grid-cols-2 gap-2">
+        <section
+          aria-labelledby="categories-heading"
+          className="flex flex-col gap-3"
+        >
+          <h2 id="categories-heading" className="type-heading">
+            On the menu
+          </h2>
+          <nav aria-label="Menu categories" className="flex flex-wrap gap-2">
             {categories.map((category) => (
-              <Link
+              <FilterChip
                 key={category.id}
                 href={`/r/${restaurantSlug}/menu?category=${category.id}`}
+                active={false}
+                scroll
               >
-                <Card className="hover:bg-secondary/50 transition-colors">
-                  <CardContent className="py-4 text-center text-sm font-medium">
-                    {category.name}
-                  </CardContent>
-                </Card>
-              </Link>
+                {category.name}
+              </FilterChip>
             ))}
-          </div>
-        </div>
+          </nav>
+        </section>
+      )}
+
+      {restaurant.phone && (
+        <p className="type-caption text-muted-foreground inline-flex items-center gap-1.5">
+          <Phone className="size-3.5" aria-hidden="true" />
+          {restaurant.phone}
+        </p>
       )}
     </div>
   );

@@ -74,6 +74,43 @@ function DialogContent({
   );
 }
 
+/**
+ * A dialog that behaves like a sheet: rises from the bottom edge on a
+ * phone, where a centred modal would cover the menu the diner is choosing
+ * from, and docks to the bottom-right corner as a panel from `sm` up.
+ * Same Base UI Popup underneath — focus trapping, Escape, the close button
+ * and the backdrop behave exactly like DialogContent.
+ */
+function DialogSheetContent({
+  className,
+  children,
+  ...props
+}: DialogPrimitive.Popup.Props) {
+  return (
+    <DialogPortal>
+      <DialogOverlay className="sm:bg-black/10" />
+      <DialogPrimitive.Popup
+        data-slot="dialog-content"
+        className={cn(
+          "bg-popover text-popover-foreground shadow-float ring-foreground/10 fixed inset-x-0 bottom-0 z-50 flex h-[88dvh] max-h-[88dvh] flex-col overflow-hidden rounded-t-2xl ring-1 outline-none",
+          "data-open:animate-in data-open:slide-in-from-bottom-6 data-open:fade-in-0 data-closed:animate-out data-closed:slide-out-to-bottom-6 data-closed:fade-out-0 ease-out-soft duration-200",
+          "sm:inset-x-auto sm:right-4 sm:bottom-4 sm:h-[min(680px,calc(100dvh-2rem))] sm:w-[420px] sm:rounded-2xl",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        <DialogClose
+          aria-label="Close"
+          className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring absolute top-3 right-3 flex size-9 items-center justify-center rounded-lg transition-colors focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <XIcon className="size-4" aria-hidden="true" />
+        </DialogClose>
+      </DialogPrimitive.Popup>
+    </DialogPortal>
+  );
+}
+
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -132,6 +169,7 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogSheetContent,
   DialogTitle,
   DialogTrigger,
 };

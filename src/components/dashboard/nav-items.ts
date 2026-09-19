@@ -1,8 +1,36 @@
+import {
+  CalendarDays,
+  Carrot,
+  ChartColumn,
+  ChefHat,
+  CreditCard,
+  HandCoins,
+  LayoutDashboard,
+  LayoutList,
+  QrCode,
+  ReceiptText,
+  Settings,
+  ShieldAlert,
+  SlidersHorizontal,
+  UtensilsCrossed,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import type { RestaurantRole } from "@/lib/restaurants/get-user-restaurants";
+
+/**
+ * Three groups, by what the person is doing: running service right now,
+ * shaping the menu, or running the business. The old flat list of fifteen
+ * links mixed "the kitchen is on fire" with "change the tax rate".
+ */
+export type NavGroup = "Service" | "Menu" | "Business";
+export const NAV_GROUPS: NavGroup[] = ["Service", "Menu", "Business"];
 
 export interface NavItem {
   label: string;
   href: string;
+  group: NavGroup;
+  icon: LucideIcon;
   /**
    * Roles that may open this page. Omitted means everyone in the
    * restaurant. Listing a link a viewer cannot open would send them to a
@@ -15,25 +43,92 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Kitchen", href: "/dashboard/kitchen" },
+  {
+    label: "Overview",
+    href: "/dashboard",
+    group: "Service",
+    icon: LayoutDashboard,
+  },
+  {
+    label: "Kitchen",
+    href: "/dashboard/kitchen",
+    group: "Service",
+    icon: ChefHat,
+  },
   // No role restriction: a waiter settling a dispute needs order history
   // as much as an owner does. Takings stay owner/manager-only (Reports).
-  { label: "Orders", href: "/dashboard/orders" },
-  { label: "Settle up", href: "/dashboard/checkout" },
-  { label: "Menu", href: "/dashboard/menu" },
-  { label: "Categories", href: "/dashboard/categories" },
-  { label: "Modifiers", href: "/dashboard/modifiers" },
-  { label: "Ingredients", href: "/dashboard/ingredients" },
-  { label: "Allergens", href: "/dashboard/allergens" },
-  { label: "Tables", href: "/dashboard/tables" },
-  { label: "Reservations", href: "/dashboard/reservations" },
-  { label: "Staff", href: "/dashboard/staff" },
-  { label: "Payments", href: "/dashboard/payments" },
+  {
+    label: "Orders",
+    href: "/dashboard/orders",
+    group: "Service",
+    icon: ReceiptText,
+  },
+  {
+    label: "Settle up",
+    href: "/dashboard/checkout",
+    group: "Service",
+    icon: HandCoins,
+  },
+  {
+    label: "Reservations",
+    href: "/dashboard/reservations",
+    group: "Service",
+    icon: CalendarDays,
+  },
+  {
+    label: "Menu",
+    href: "/dashboard/menu",
+    group: "Menu",
+    icon: UtensilsCrossed,
+  },
+  {
+    label: "Categories",
+    href: "/dashboard/categories",
+    group: "Menu",
+    icon: LayoutList,
+  },
+  {
+    label: "Modifiers",
+    href: "/dashboard/modifiers",
+    group: "Menu",
+    icon: SlidersHorizontal,
+  },
+  {
+    label: "Ingredients",
+    href: "/dashboard/ingredients",
+    group: "Menu",
+    icon: Carrot,
+  },
+  {
+    label: "Allergens",
+    href: "/dashboard/allergens",
+    group: "Menu",
+    icon: ShieldAlert,
+  },
+  {
+    label: "Tables & QR",
+    href: "/dashboard/tables",
+    group: "Business",
+    icon: QrCode,
+  },
+  { label: "Staff", href: "/dashboard/staff", group: "Business", icon: Users },
+  {
+    label: "Payments",
+    href: "/dashboard/payments",
+    group: "Business",
+    icon: CreditCard,
+  },
   {
     label: "Reports",
     href: "/dashboard/reports",
+    group: "Business",
+    icon: ChartColumn,
     roles: ["owner", "manager"],
   },
-  { label: "Settings", href: "/dashboard/settings" },
+  {
+    label: "Settings",
+    href: "/dashboard/settings",
+    group: "Business",
+    icon: Settings,
+  },
 ];

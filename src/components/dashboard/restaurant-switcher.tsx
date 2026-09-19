@@ -14,7 +14,11 @@ export function RestaurantSwitcher({
   const formRef = useRef<HTMLFormElement>(null);
 
   if (restaurants.length <= 1) {
-    return <span className="text-sm font-medium">{restaurants[0]?.name}</span>;
+    return (
+      <span className="type-label truncate text-[0.9375rem] font-semibold">
+        {restaurants[0]?.name}
+      </span>
+    );
   }
 
   return (
@@ -27,7 +31,7 @@ export function RestaurantSwitcher({
         name="restaurantId"
         defaultValue={currentId}
         onChange={() => formRef.current?.requestSubmit()}
-        className="border-input bg-background rounded-md border px-2 py-1.5 text-sm font-medium"
+        className="border-input bg-card focus-visible:ring-ring/50 h-9 rounded-lg border px-2.5 text-sm font-medium focus-visible:ring-3 focus-visible:outline-none"
       >
         {restaurants.map((r) => (
           <option key={r.id} value={r.id}>

@@ -16,6 +16,10 @@ import {
 import { CART_STATE_GUARD_FALLBACK_TEXT } from "./tools/cart-fact-detection";
 import { CART_STATE_GUARD_ID } from "./providers/text-acceptance-guards";
 import type { ToolContext } from "./tools/types";
+import {
+  selectMentionedItems,
+  type MentionedMenuItem,
+} from "./recommendations";
 
 export interface SendAiMessageParams {
   restaurantId: string;
@@ -32,6 +36,13 @@ export interface SendAiMessageResult {
   error?: string;
   /** Set only when a submit_order tool call succeeded this turn — the UI uses this to offer/navigate to the confirmation page, never trusting the model's own claim that an order went through. */
   orderId?: string;
+  /**
+   * Real menu rows this turn's menu tools returned AND the reply names —
+   * see src/lib/ai/recommendations.ts. Empty whenever the reply is one of
+   * the safe fallbacks, so a card never sits under a message that did not
+   * come from the model.
+   */
+  mentionedItems?: MentionedMenuItem[];
 }
 
 const userMessageSchema = z.string().trim().min(1);
@@ -241,7 +252,19 @@ export async function sendAiMessage(
       });
     }
 
-    return { ok: true, reply: finalText, orderId: orderId?.orderId };
+    const repliedNormally =
+      !loopResult.toolLimitExceeded &&
+      !loopResult.guardCorrectionExhausted &&
+      loopResult.finalText.length > 0;
+
+    return {
+      ok: true,
+      reply: finalText,
+      orderId: orderId?.orderId,
+      mentionedItems: repliedNormally
+        ? selectMentionedItems(finalText, loopResult.toolOutcomes)
+        : [],
+    };
   } catch (error) {
     logAiError({
       restaurantId,

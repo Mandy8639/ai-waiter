@@ -8,11 +8,19 @@ import {
 import { sendAiMessage } from "./orchestrator";
 import { isAiConfigured } from "./client";
 import { getRecentMessages } from "./conversation";
+import {
+  buildRecommendationCards,
+  type RecommendationCard,
+} from "./recommendation-cards";
+
+export type { RecommendationCard };
 
 export interface SendChatMessageResult {
   error?: string;
   reply?: string;
   orderId?: string;
+  /** Dish cards for the menu items this reply names — see src/lib/ai/recommendations.ts. */
+  recommendations?: RecommendationCard[];
 }
 
 /**
@@ -60,7 +68,15 @@ export async function sendChatMessage(
   });
 
   if (!result.ok) return { error: result.error };
-  return { reply: result.reply, orderId: result.orderId };
+
+  // Best effort: a card is a convenience on top of a reply the diner
+  // already has, so a failed lookup drops the cards, never the reply.
+  const recommendations = await buildRecommendationCards(
+    restaurant.id,
+    result.mentionedItems ?? [],
+  ).catch(() => []);
+
+  return { reply: result.reply, orderId: result.orderId, recommendations };
 }
 
 export interface ChatHistoryEntry {

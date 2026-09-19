@@ -351,23 +351,33 @@ export function KitchenBoard({
         </div>
       )}
 
-      <div className="flex flex-1 gap-4 overflow-x-auto pb-2">
+      {/*
+        Five columns never fit a phone, so the board scrolls sideways and
+        snaps a column at a time — each column is its own panel, so a partly
+        visible next column reads as "there's more", not as clipping.
+      */}
+      <div className="-mx-4 flex flex-1 snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:snap-none sm:px-0">
         {BOARD_COLUMNS.map((status) => {
           const columnOrders = orders.filter((o) => o.status === status);
           return (
-            <div
+            <section
               key={status}
-              className="flex w-72 shrink-0 flex-col gap-3 sm:w-80"
+              aria-label={`${STATUS_LABELS[status]} orders`}
+              className="bg-muted/50 flex w-[85vw] max-w-80 shrink-0 snap-start flex-col gap-3 rounded-xl border p-3 sm:w-80"
             >
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold tracking-wide uppercase">
+              <div className="flex items-center justify-between gap-2 px-1">
+                <h2 className="type-overline text-foreground">
                   {STATUS_LABELS[status]}
                 </h2>
-                <Badge variant="outline">{columnOrders.length}</Badge>
+                <Badge variant="outline" className="bg-card">
+                  {columnOrders.length}
+                </Badge>
               </div>
               <div className="flex flex-col gap-3">
                 {columnOrders.length === 0 && (
-                  <p className="text-muted-foreground text-xs">No orders.</p>
+                  <p className="type-caption text-muted-foreground px-1 py-4 text-center">
+                    No orders.
+                  </p>
                 )}
                 {columnOrders.map((order) => (
                   <OrderCard
@@ -387,7 +397,7 @@ export function KitchenBoard({
                   />
                 ))}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>

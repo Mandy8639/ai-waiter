@@ -6,10 +6,10 @@ import { reportClientError } from "@/lib/observability/report-client";
 
 export default function Error({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error(error);
@@ -28,7 +28,7 @@ export default function Error({
         <p className="text-muted-foreground text-sm">
           An unexpected error occurred. You can try again.
         </p>
-        <Button onClick={reset} className="mt-2">
+        <Button onClick={() => retry()} className="mt-2">
           Try again
         </Button>
       </main>

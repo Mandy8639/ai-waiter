@@ -1,7 +1,11 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { TriangleAlert } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ChevronLeft, Clock } from "lucide-react";
+import { AllergenNote } from "@/components/customer/allergen-note";
+import { AskWaiterButton } from "@/components/customer/ask-waiter-card";
+import { DietBadges } from "@/components/customer/diet-badges";
 import { ItemDetailForm } from "@/components/customer/item-detail-form";
+import { formatPrice } from "@/lib/format/price";
 import { createClient } from "@/lib/supabase/server";
 import {
   getPublicRestaurantBySlug,
@@ -14,9 +18,21 @@ export async function generateMetadata({
 }: {
   params: Promise<{ restaurantSlug: string; id: string }>;
 }) {
-  const { restaurantSlug } = await params;
+  const { restaurantSlug, id } = await params;
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
-  return { title: restaurant ? `Menu item — ${restaurant.name}` : "Menu item" };
+  if (!restaurant) return { title: "Menu item" };
+  const supabase = await createClient();
+  const { data: item } = await supabase
+    .from("menu_items")
+    .select("name")
+    .eq("id", id)
+    .eq("restaurant_id", restaurant.id)
+    .maybeSingle();
+  return {
+    title: item
+      ? `${item.name} — ${restaurant.name}`
+      : `Menu item — ${restaurant.name}`,
+  };
 }
 
 const spiceLevelLabels: Record<string, string> = {
@@ -142,31 +158,70 @@ export default async function MenuItemDetailPage({
       })),
   }));
 
-  const currency = new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-  });
+  // The dish's own yes/no flags, folded into the same "Contains …" line as
+  // the confirmed allergens so the page never says "no allergens listed"
+  // while a flag says it contains dairy. Skipped when a confirmed allergen
+  // already says the same thing more precisely.
+  const allergenNames = (allergens ?? []).map((a) => a.name);
+  const lower = allergenNames.map((n) => n.toLowerCase());
+  const flagged = [
+    item.contains_dairy && !lower.includes("milk") && "Dairy",
+    item.contains_nuts && !lower.some((n) => n.includes("nut")) && "Nuts",
+    item.contains_gluten && !lower.includes("gluten") && "Gluten",
+  ].filter((v): v is string => Boolean(v));
+  const containsList = [...allergenNames, ...flagged];
 
   return (
-    <div className="flex flex-1 flex-col gap-5">
+    <div className="flex flex-1 flex-col gap-6">
+      <Link
+        href={`/r/${restaurantSlug}/menu`}
+        className="type-label text-muted-foreground hover:text-foreground -ml-1 inline-flex w-fit items-center gap-1 rounded-lg px-1 py-1 transition-colors"
+      >
+        <ChevronLeft className="size-4" aria-hidden="true" />
+        Menu
+      </Link>
+
       {item.image_url && (
         // eslint-disable-next-line @next/next/no-img-element -- restaurant-supplied remote URL
         <img
           src={item.image_url}
-          alt=""
-          className="-mx-4 -mt-4 h-48 w-[calc(100%+2rem)] object-cover"
+          alt={item.name}
+          width={800}
+          height={600}
+          fetchPriority="high"
+          className="bg-muted aspect-[4/3] w-full rounded-2xl object-cover"
         />
       )}
 
-      <div className="flex flex-col gap-2">
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{item.name}</h1>
-          <p className="shrink-0 text-lg font-semibold">
-            {currency.format(Number(item.price))}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="type-title text-balance">{item.name}</h1>
+          <p className="type-price shrink-0 pt-0.5 text-xl">
+            {formatPrice(Number(item.price), restaurant.currency)}
           </p>
         </div>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <DietBadges
+            isVegetarian={item.is_vegetarian}
+            isVegan={item.is_vegan}
+            isSpicy={item.is_spicy}
+            spiceLabel={
+              item.spice_level ? spiceLevelLabels[item.spice_level] : null
+            }
+          />
+          {item.preparation_time != null && (
+            <span className="type-caption text-muted-foreground inline-flex items-center gap-1 font-medium">
+              <Clock className="size-3.5" aria-hidden="true" />
+              About {item.preparation_time} min
+            </span>
+          )}
+        </div>
+
         {item.description && (
-          <p className="text-muted-foreground text-sm">{item.description}</p>
+          <p className="type-body text-muted-foreground text-pretty">
+            {item.description}
+          </p>
         )}
         {/*
           Sits with the description rather than among the badges: it is a
@@ -175,89 +230,64 @@ export default async function MenuItemDetailPage({
           this moment, not scanning chips.
         */}
         {item.portion_note && (
-          <p className="text-muted-foreground text-sm">
+          <p className="type-body-sm text-muted-foreground">
             <span className="text-foreground font-medium">Portion: </span>
             {item.portion_note}
           </p>
         )}
-
-        <div className="flex flex-wrap gap-1.5">
-          {item.is_vegetarian && <Badge variant="secondary">Vegetarian</Badge>}
-          {item.is_vegan && <Badge variant="secondary">Vegan</Badge>}
-          {item.is_spicy && item.spice_level && (
-            <Badge variant="outline">
-              {spiceLevelLabels[item.spice_level] ?? item.spice_level}
-            </Badge>
-          )}
-          {item.contains_nuts && <Badge variant="outline">Contains nuts</Badge>}
-          {item.contains_dairy && (
-            <Badge variant="outline">Contains dairy</Badge>
-          )}
-          {item.contains_gluten && (
-            <Badge variant="outline">Contains gluten</Badge>
-          )}
-          {item.preparation_time != null && (
-            <Badge variant="outline">~{item.preparation_time} min</Badge>
-          )}
-        </div>
       </div>
 
       {/*
-        Only ever CONFIRMED allergens reach this point — the query above
-        filters unconfirmed suggestions out. So this is the restaurant's own
-        statement, not the platform's, and it is worded that way.
-
-        Presented as a caution rather than a grey line of metadata: someone
-        avoiding an allergen is scanning for exactly this, and it should not
-        look like the preparation time. The word "Contains" carries the
-        meaning, not the colour or the icon (SC 1.4.1).
+        Only CONFIRMED allergens reach this point — the query above filters
+        unconfirmed suggestions out — so this is the restaurant's own
+        statement, and AllergenNote words it that way.
       */}
-      <div className="flex flex-col gap-1">
-        <h2 className="text-sm font-medium">Allergens</h2>
-        {allergens && allergens.length > 0 ? (
-          <div
-            className="border-destructive/40 bg-destructive/5 text-foreground flex items-start gap-2 rounded-md border px-3 py-2 text-sm"
-            role="note"
-          >
-            <TriangleAlert
-              className="text-destructive mt-0.5 size-4 shrink-0"
-              aria-hidden="true"
-            />
-            <p>
-              <strong>
-                Contains {allergens.map((a) => a.name).join(", ")}
-              </strong>
-              <span className="text-muted-foreground">
-                {" "}
-                — as stated by the restaurant. If you have an allergy, please
-                check with staff before ordering.
-              </span>
-            </p>
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-sm">
-            This restaurant hasn&apos;t provided allergen information for this
-            item. Please ask a member of staff if you have an allergy.
-          </p>
-        )}
-      </div>
+      <section
+        aria-labelledby="allergens-heading"
+        className="flex flex-col gap-2"
+      >
+        <h2
+          id="allergens-heading"
+          className="type-overline text-muted-foreground"
+        >
+          Allergens
+        </h2>
+        <AllergenNote allergens={containsList} />
+      </section>
 
       {ingredients && ingredients.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <h2 className="text-sm font-medium">Ingredients</h2>
-          <p className="text-muted-foreground text-sm">
+        <section
+          aria-labelledby="ingredients-heading"
+          className="flex flex-col gap-2"
+        >
+          <h2
+            id="ingredients-heading"
+            className="type-overline text-muted-foreground"
+          >
+            Ingredients
+          </h2>
+          <p className="type-body-sm">
             {ingredients.map((i) => i.name).join(", ")}
           </p>
-        </div>
+        </section>
       )}
+
+      <AskWaiterButton prompt={`Tell me about the ${item.name}.`}>
+        Ask the waiter about this dish
+      </AskWaiterButton>
 
       <ItemDetailForm
         action={addToCart}
         menuItemId={item.id}
         basePrice={Number(item.price)}
+        currency={restaurant.currency}
         groups={groups}
         restaurantSlug={restaurantSlug}
         dishSpiceLevel={item.spice_level}
+        offerSpiceChoice={
+          item.is_spicy ||
+          (item.spice_level !== null && item.spice_level !== "none")
+        }
         allowNotes={settings.allowCustomerNotes}
       />
     </div>
