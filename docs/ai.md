@@ -232,21 +232,22 @@ passed a single idempotency key the orchestrator generates once per turn
 (`crypto.randomUUID()`), never a model-supplied key or one reused across turns — so an LLM retry,
 a tool retry, or a duplicate customer message within the same turn can never produce two orders.
 
-## The 11 tools
+## The 12 tools
 
-| Tool                         | Boundary it calls                                  | Notes                                                                                                       |
-| ---------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `search_menu`                | `menu_items` (public read, RLS-scoped)             | Query/dietary/spicy filters; always scoped to `context.restaurantId`, never a model-supplied restaurant id. |
-| `get_menu_item`              | `menu_items` + allergens + modifier groups         | Scoped by both `id` and `context.restaurantId` — a cross-tenant id returns "not found."                     |
-| `get_restaurant_info`        | `getPublicRestaurantBySlug()` (Batch 4)            | Only stored data — never invents hours, reviews, or policies.                                               |
-| `get_cart`                   | `getCart()` (Batch 4)                              | Reshapes to a lean summary for the model.                                                                   |
-| `add_item_to_cart`           | `addToCart()` Server Action (Batch 4)              | Adapter constructs the `FormData` this action expects — zero duplicated validation logic.                   |
-| `update_cart_item`           | `updateCartItemQuantity()` (Batch 4)               |                                                                                                             |
-| `remove_cart_item`           | `removeCartItem()` (Batch 4)                       |                                                                                                             |
-| `clear_cart`                 | `clearCart()` (Batch 4)                            |                                                                                                             |
-| `submit_order`               | `submitOrder()` → `submit_order()` RPC (Batch 5)   | Idempotency key is orchestrator-generated, never a model argument.                                          |
-| `get_order_status`           | `getOrdersForSession()`/`getOrderById()` (Batch 5) | Always the customer's own most recent order — no order id accepted from the model.                          |
-| `get_customer_order_history` | `getOrdersForSession()` (Batch 5)                  |                                                                                                             |
+| Tool                         | Boundary it calls                                  | Notes                                                                                                                                         |
+| ---------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_menu`                | `menu_items` (public read, RLS-scoped)             | Query/dietary/spicy filters; always scoped to `context.restaurantId`, never a model-supplied restaurant id.                                   |
+| `get_menu_item`              | `menu_items` + allergens + modifier groups         | Scoped by both `id` and `context.restaurantId` — a cross-tenant id returns "not found."                                                       |
+| `get_restaurant_info`        | `getPublicRestaurantBySlug()` (Batch 4)            | Only stored data — never invents hours, reviews, or policies.                                                                                 |
+| `get_cart`                   | `getCart()` (Batch 4)                              | Reshapes to a lean summary for the model.                                                                                                     |
+| `add_item_to_cart`           | `addToCart()` Server Action (Batch 4)              | Adapter constructs the `FormData` this action expects — zero duplicated validation logic.                                                     |
+| `update_cart_item`           | `updateCartItemQuantity()` (Batch 4)               |                                                                                                                                               |
+| `remove_cart_item`           | `removeCartItem()` (Batch 4)                       |                                                                                                                                               |
+| `clear_cart`                 | `clearCart()` (Batch 4)                            |                                                                                                                                               |
+| `request_order_confirmation` | `getCart()` (Batch 4)                              | Shows the real summary and records a cart fingerprint; `submit_order` is rejected without it — see [Order confirmation](#order-confirmation). |
+| `submit_order`               | `submitOrder()` → `submit_order()` RPC (Batch 5)   | Idempotency key is orchestrator-generated, never a model argument.                                                                            |
+| `get_order_status`           | `getOrdersForSession()`/`getOrderById()` (Batch 5) | Always the customer's own most recent order — no order id accepted from the model.                                                            |
+| `get_customer_order_history` | `getOrdersForSession()` (Batch 5)                  |                                                                                                                                               |
 
 None of these accept `unit_price`, `modifier_price`, `subtotal`, `tax`, `service_charge`,
 `total`, `restaurant_id`, `table_id`, `customer_session_id`, `idempotencyKey`, or `orderId` as
@@ -486,6 +487,19 @@ service charge, total, and any customer note, and get a clear confirmation from 
 before calling `submit_order` — never on an ambiguous reply. Once confirmed, `submit_order` is
 the single AI-facing path to order creation; there is no second, AI-specific order-insertion path
 anywhere in this codebase.
+
+The prompt is not the control, though. A live test showed a model treating "Place the order" as
+confirmation and calling `submit_order` at once, so confirmation is enforced server-side
+(`src/lib/ai/tools/order-confirmation.ts`). `submit_order` is rejected unless:
+
+1. `request_order_confirmation` succeeded **before** the customer message that started the current
+   turn — so both tools chained in one turn never counts;
+2. the cart's content fingerprint (items, quantities, modifiers, spice preference and notes) still
+   matches the one recorded when the summary was shown.
+
+A rejection comes back to the model as an ordinary failed tool result with a customer-safe reason
+("The cart has changed since I last confirmed it with you…"), so the model can recover by showing
+the summary again.
 
 ## Customer order status
 
