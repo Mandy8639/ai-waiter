@@ -65,6 +65,23 @@ export async function createTestDb(): Promise<TestDb> {
   // of the three; the other two fell behind the migrations and broke.
   await admin.exec(SUPABASE_PLATFORM_STUB_SQL);
 
+  // Supabase's platform default privileges for FUNCTIONS, applied before
+  // the migrations run, exactly as on a real project: every function a
+  // migration creates in `public` is immediately executable by anon,
+  // authenticated and service_role — not merely by PUBLIC. A migration
+  // that only does `revoke execute ... from public` therefore still leaves
+  // the function callable through the API by anyone holding the anon key.
+  //
+  // Without this, a test asserting "permission denied" for anon or
+  // authenticated passed for the wrong reason (PGlite has no such defaults)
+  // — which is how the four webhook-only payment functions stayed callable
+  // by anyone holding the anon key on the live database until
+  // 20260919090000_revoke_anon_from_server_functions.sql.
+  await admin.exec(`
+    alter default privileges in schema public
+      grant execute on functions to anon, authenticated, service_role;
+  `);
+
   const files = (await readdir(MIGRATIONS_DIR))
     .filter((f) => f.endsWith(".sql"))
     .sort();
