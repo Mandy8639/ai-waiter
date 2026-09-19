@@ -292,20 +292,28 @@ The Node version is pinned in two places for two different readers: `.nvmrc` for
 
 ## What's not built yet
 
-POS integration (the seam exists, no connector), inventory, loyalty, delivery, analytics,
-voice/phone ordering, and staff-facing AI. Nearer-term gaps a real restaurant would notice within a
-week: no order history or search (the kitchen board only looks back 12 hours), no email/SMS
-notifications, no reporting, no
-staff invitation flow (an invitee must already have an account), and menu images are URL-only
-because Supabase Storage is not wired up. Reservations are staff-entry only — there is no
-customer-facing booking page, and rescheduling means cancel-and-rebook. Everything else is built
-and tested: restaurant management (auth, onboarding, menu/table/QR CRUD), the customer-facing
-browse-and-cart flow, real order submission (cart → immutable, server-priced order →
-confirmation), the full kitchen workflow (live order board, role-scoped status transitions,
-Realtime updates for both staff and the customer), a conversational AI waiter that can browse the
-menu, build a cart, and place a confirmed order in natural language through the exact same
-validated boundaries as the deterministic UI, abuse throttling across every public-facing surface,
-staff management, kitchen ticket splitting/merging, and reservations. See
+Nearer-term gaps a real restaurant would notice within a week:
+
+- **No email or SMS.** Nothing sends a message outside the app. A pending booking request shows as
+  a badge in the dashboard nav, and that is the only alert.
+- **No staff invitation flow.** An owner can only add someone who has already signed up.
+- **Menu images are URL-only**, because Supabase Storage is not wired up.
+- **Rescheduling a reservation means cancel-and-rebook** — a booking's table and time are immutable
+  after creation.
+
+Further out: POS integration (the seam exists in `src/lib/pos/`, no connector yet — Clover is the
+likely first one, see [`docs/pos-integration.md`](docs/pos-integration.md)), inventory, loyalty,
+delivery, deeper analytics, voice/phone ordering, and staff-facing AI.
+
+Everything else is built and tested: restaurant management (auth, onboarding, menu/table/QR CRUD,
+AI menu import from a photo), the customer-facing browse-and-cart flow, real order submission (cart
+→ immutable, server-priced order → confirmation), the full kitchen workflow (live order board,
+role-scoped status transitions, Realtime updates for both staff and the customer, ticket
+splitting/merging), a conversational AI waiter that can browse the menu, build a cart, and place a
+confirmed order in natural language through the exact same validated boundaries as the
+deterministic UI, card payments through Stripe Connect in live mode (tips, tabs, cash, refunds) with
+platform billing, takings reports with CSV export, order history and search
+(`/dashboard/orders`), reservations including customer booking requests at `/r/<slug>/reserve`,
+staff management, and abuse throttling across every public-facing surface. See
 [`docs/architecture.md`](docs/architecture.md) for the full batch-by-batch history and
-[`docs/production-audit.md`](docs/production-audit.md) for what remains genuinely unvalidated — now
-mostly the Anthropic provider, which has never served a live conversation.
+[`docs/production-audit.md`](docs/production-audit.md) for what remains genuinely unvalidated.

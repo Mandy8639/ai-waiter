@@ -1,9 +1,9 @@
 # Production audit
 
-**Last rewritten 2026-09-03.** This document states what has actually been validated against real
-services and what has not. Its one job is to be honest about that boundary, so read the
-[Not validated](#not-validated) section as carefully as the passing one — an item's absence from
-the passing list is meaningful.
+**Last updated 2026-09-19** (fully rewritten 2026-09-03). This document states what has actually
+been validated against real services and what has not. Its one job is to be honest about that
+boundary, so read the [Not validated](#not-validated) section as carefully as the passing one —
+an item's absence from the passing list is meaningful.
 
 Two rules this file is written under, carried over from the Batch 8 audit that started it and
 worth keeping:
@@ -14,14 +14,14 @@ worth keeping:
 
 ## Current state
 
-|                                   |                                                                                                                                                              |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Unit + integration tests          | **1118 passing** (79 files: 53 unit, 26 PGlite integration)                                                                                                  |
-| E2E                               | `npm run test:e2e` **17 passed / 1 skipped / 0 failed**; `npm run test:e2e:disposable` **1 passed** (9 specs total)                                          |
-| Migrations                        | 61 applied to production since 2026-08-28                                                                                                                    |
-| Production                        | https://ai-waiter-two.vercel.app, auto-deployed from `main`                                                                                                  |
-| Supabase (production)             | ref `dqypmprjcyxoeywsumxr` — a separate disposable project exists for `dashboard-flow.spec.ts`, see [`docs/development.md`](./development.md#e2e-disposable) |
-| Lint / typecheck / format / build | clean                                                                                                                                                        |
+|                                   |                                                                                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit + integration tests          | **1366 passing** (95 files: 63 unit, 32 PGlite integration)                                                                                                              |
+| E2E                               | Last full run 2026-09-03: `npm run test:e2e` **17 passed / 1 skipped / 0 failed**; `npm run test:e2e:disposable` **1 passed**. Not re-run for this update (10 specs now) |
+| Migrations                        | 75, all applied to production (checked 2026-09-19 with `npx supabase migration list`)                                                                                    |
+| Production                        | https://order.beacondigitalconsulting.org, auto-deployed from `main`; the apex and `www` 307-redirect to it                                                              |
+| Supabase (production)             | ref `dqypmprjcyxoeywsumxr` — a separate disposable project exists for `dashboard-flow.spec.ts`, see [`docs/development.md`](./development.md#e2e-disposable)             |
+| Lint / typecheck / format / build | clean                                                                                                                                                                    |
 
 ## What exists now that didn't at the last audit
 
@@ -43,6 +43,16 @@ no error monitoring. All of the following shipped after it, across 45 commits:
 - **Reporting** — takings reporting with CSV export, and diner receipts that outlive the session.
 - **AI hardening** — a cart-state guard, a replaced default model, and model fallback (below).
 
+And since the 2026-09-03 rewrite:
+
+- **Stripe live mode** — cutover completed 2026-09-11 (below), plus owner-facing messages for
+  Stripe errors on the Payments page instead of a crash page.
+- **Diner/operator separation** — a QR scan creates a real anonymous auth user; the owner routes
+  and `create_restaurant()` now both refuse anonymous callers.
+- **Order history and search** — `/dashboard/orders`, by date range, status, order number or dish.
+- **A working logical backup** — `npm run db:backup` was broken by drift between three copies of
+  the Supabase platform stub; now one shared stub, with CI replaying every migration against it.
+
 ## Validated against real services
 
 Each item here was exercised against a live service, not a mock or PGlite.
@@ -56,6 +66,19 @@ kitchen/staff status-transition permission matrix with real staff logins; cross-
 cross-customer isolation checks; and Realtime `UPDATE` delivery on both the customer order page and
 the kitchen board.
 
+### Payments — live mode (validated 2026-09-11)
+
+The live cutover in [`docs/going-live.md`](./going-live.md) was run for real. The first real
+payment: a **$1.99 card charge** on a live connected account, with the platform fee ($0.01, 1% on
+the Starter plan) collected, the `checkout.session.completed` webhook recorded, and the
+`order_payments` row marked succeeded. Connect onboarding completed end to end, and the Connect
+webhook endpoint's signing secret is proven by real `account.updated` events that passed signature
+verification. Test-mode payment rows were removed from production on 2026-09-13, so takings
+reports now match Stripe.
+
+One payment is one payment: refunds, tabs, cash reversal and subscriptions have been proven in
+test mode only (next section), never with real money.
+
 ### Payments and platform billing (test mode)
 
 Proven end to end in Stripe **test mode**: a tab of 3 orders settled from a single webhook
@@ -63,8 +86,7 @@ Proven end to end in Stripe **test mode**: a tab of 3 orders settled from a sing
 `status=active` on the `standard` plan, and — the part worth checking — **the per-payment fee
 dropped from 1% to 0.5% automatically when the plan changed**.
 
-> ⚠️ **This is test mode. No real money has ever moved through this application.** Live-mode
-> cutover is listed under [Not validated](#not-validated).
+> These runs were test mode. For live mode, see the section above.
 
 ### Error monitoring
 
@@ -113,16 +135,11 @@ they were covered.
 
 ### Blocking a real launch
 
-1. **No real payment has ever been taken.** Everything is `sk_test_`. The full sequence is in
-   [`docs/going-live.md`](./going-live.md) — note it is **not** just an env-var change: test-mode
-   Stripe ids are stored in Postgres (`platform_plans.stripe_price_id`,
-   `restaurant_payment_accounts.stripe_account_id`, `restaurant_subscriptions`) and must be reset,
-   or a leftover "active" test subscription keeps granting a paid plan's fee rate in live mode.
-   Run `npm run billing:preflight` to see the current state. Until a real payment completes, the
-   payments system is unproven against real money regardless of how thoroughly test mode passes.
-2. **The Anthropic provider has never served a live turn.** Every live AI turn to date has gone
+1. **The Anthropic provider has never served a live turn.** Every live AI turn to date has gone
    through OpenRouter. `AI_PROVIDER=anthropic` is wired and typechecked but unexercised — the one
    attempt returned a credit-balance error.
+2. **No real restaurant has used it.** Every order, payment and AI conversation to date came from
+   the people building it. A pilot service is the largest remaining unknown.
 
 ### Known open, non-blocking
 
@@ -148,11 +165,12 @@ they were covered.
 7. **There are no backups of the production database.** Not "untested" — absent. The project is on
    the Free plan, which includes no scheduled backups ("Free Plan does not include project
    backups"), and point-in-time recovery is a Pro add-on from $100/month. A logical backup you
-   control now exists and its restore is verified end to end — 1,574/1,574 rows, every foreign key
-   satisfied — see [`docs/backup-and-restore.md`](./backup-and-restore.md). It covers the `public`
-   schema only, so it restores every restaurant, menu, order and payment record and **no logins**:
-   Supabase's `auth` schema is not in it. Managed backups, or a separate auth export, remain
-   genuinely open.
+   control now exists and its restore is verified end to end — most recently 2026-09-13, 5,633 rows
+   across 37 tables, every foreign key satisfied — see
+   [`docs/backup-and-restore.md`](./backup-and-restore.md). Two limits: it runs only when someone
+   runs `npm run db:backup` (nothing schedules it), and it covers the `public` schema only, so it
+   restores every restaurant, menu, order and payment record and **no logins** — Supabase's `auth`
+   schema is not in it. Scheduled or managed backups, and an auth export, remain genuinely open.
 
 ## Why not IP address (both rate limiters)
 
