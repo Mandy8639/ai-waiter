@@ -7,7 +7,9 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
+import { ConciergeBell } from "lucide-react";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
+import { MobileNav } from "@/components/dashboard/mobile-nav";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { RestaurantSwitcher } from "@/components/dashboard/restaurant-switcher";
 import { getDashboardContext } from "@/lib/restaurants/require-current-restaurant";
@@ -95,13 +97,23 @@ export default async function DashboardLayout({
     : undefined;
 
   return (
-    <div className="flex flex-1 flex-col md:flex-row">
-      <aside className="hidden w-60 shrink-0 flex-col gap-6 border-r px-4 py-6 md:flex">
-        <Link
-          href="/dashboard"
-          className="text-lg font-semibold tracking-tight"
-        >
-          AI Waiter
+    <div className="flex flex-1">
+      <aside className="bg-sidebar sticky top-0 hidden h-dvh w-62 shrink-0 flex-col gap-6 overflow-y-auto border-r px-3 py-5 lg:flex">
+        <Link href="/dashboard" className="flex items-center gap-2.5 px-3">
+          <span
+            aria-hidden="true"
+            className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg"
+          >
+            <ConciergeBell className="size-4" />
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="type-label text-sidebar-foreground truncate text-[0.875rem] font-semibold">
+              {restaurant.name}
+            </span>
+            <span className="type-caption text-muted-foreground">
+              AI Waiter
+            </span>
+          </span>
         </Link>
         <DashboardNav
           role={restaurant.role}
@@ -110,21 +122,15 @@ export default async function DashboardLayout({
         />
       </aside>
 
-      <div className="flex flex-1 flex-col">
-        <header className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <details className="relative md:hidden">
-              <summary className="border-input cursor-pointer list-none rounded-md border px-3 py-1.5 text-sm font-medium">
-                Menu
-              </summary>
-              <div className="bg-popover absolute z-10 mt-2 w-56 rounded-md border p-2 shadow-md">
-                <DashboardNav
-                  role={restaurant.role}
-                  restaurantId={canSeeReservations ? restaurant.id : undefined}
-                  pendingRequestCount={pendingRequestCount}
-                />
-              </div>
-            </details>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="bg-background/90 supports-backdrop-filter:bg-background/75 sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b px-4 backdrop-blur-md sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <MobileNav
+              role={restaurant.role}
+              restaurantId={canSeeReservations ? restaurant.id : undefined}
+              pendingRequestCount={pendingRequestCount}
+              restaurantName={restaurant.name}
+            />
             <RestaurantSwitcher
               restaurants={state.all}
               currentId={restaurant.id}
@@ -132,9 +138,11 @@ export default async function DashboardLayout({
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="text-muted-foreground hidden text-sm sm:block">
-              <span className="text-foreground font-medium">{user.email}</span>
-              <Badge variant="secondary" className="ml-2 capitalize">
+            <div className="type-caption text-muted-foreground hidden items-center gap-2 md:flex">
+              <span className="text-foreground max-w-56 truncate font-medium">
+                {user.email}
+              </span>
+              <Badge variant="secondary" className="capitalize">
                 {restaurant.role}
               </Badge>
             </div>
@@ -142,7 +150,9 @@ export default async function DashboardLayout({
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 sm:px-6">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+          {children}
+        </main>
       </div>
     </div>
   );

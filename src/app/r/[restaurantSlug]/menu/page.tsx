@@ -1,12 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { MenuItemCard } from "@/components/customer/menu-item-card";
+import { Flame, Leaf, Search, SearchX, Sprout, Wind, X } from "lucide-react";
+import {
+  AskWaiterButton,
+  AskWaiterCard,
+} from "@/components/customer/ask-waiter-card";
+import { FilterChip } from "@/components/customer/filter-chip";
+import {
+  MenuItemCard,
+  type MenuItemCardData,
+} from "@/components/customer/menu-item-card";
+import { RestaurantHero } from "@/components/customer/restaurant-hero";
+import { EmptyState } from "@/components/ui/empty-state";
+import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
-import { cn } from "@/lib/utils";
+import {
+  availableDietFilters,
+  menuHref,
+  parseDietFilters,
+  toggleDietFilter,
+  type DietFilterKey,
+} from "@/lib/menu/diet-filters";
 
 export async function generateMetadata({
   params,
@@ -18,21 +33,34 @@ export async function generateMetadata({
   return { title: restaurant ? `Menu — ${restaurant.name}` : "Menu" };
 }
 
+const DIET_ICONS: Record<DietFilterKey, React.ReactNode> = {
+  vegetarian: <Leaf className="size-3.5" aria-hidden="true" />,
+  vegan: <Sprout className="size-3.5" aria-hidden="true" />,
+  spicy: <Flame className="size-3.5" aria-hidden="true" />,
+  mild: <Wind className="size-3.5" aria-hidden="true" />,
+};
+
 export default async function MenuPage({
   params,
   searchParams,
 }: {
   params: Promise<{ restaurantSlug: string }>;
-  searchParams: Promise<{ category?: string; q?: string }>;
+  searchParams: Promise<{
+    category?: string;
+    q?: string;
+    diet?: string | string[];
+  }>;
 }) {
   const { restaurantSlug } = await params;
-  const { category: categoryId, q } = await searchParams;
+  const { category: categoryId, q, diet: dietParam } = await searchParams;
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
 
   if (!restaurant || !restaurant.isActive) {
     notFound();
   }
 
+  const search = q?.trim() ?? "";
+  const diet = parseDietFilters(dietParam);
   const supabase = await createClient();
 
   let itemsQuery = supabase
@@ -47,7 +75,6 @@ export default async function MenuPage({
   if (categoryId) {
     itemsQuery = itemsQuery.eq("category_id", categoryId);
   }
-  const search = q?.trim();
   if (search) {
     // Deterministic name/description search — no AI, no embeddings, just a
     // plain ILIKE (see spec's "menu search" requirement).
@@ -56,18 +83,47 @@ export default async function MenuPage({
       `name.ilike.%${escaped}%,description.ilike.%${escaped}%`,
     );
   }
+  // Mirrors matchesDietFilter() in src/lib/menu/diet-filters.ts, in SQL.
+  for (const key of diet) {
+    if (key === "vegetarian") {
+      itemsQuery = itemsQuery.or("is_vegetarian.eq.true,is_vegan.eq.true");
+    } else if (key === "vegan") {
+      itemsQuery = itemsQuery.eq("is_vegan", true);
+    } else if (key === "spicy") {
+      itemsQuery = itemsQuery.eq("is_spicy", true);
+    } else if (key === "mild") {
+      itemsQuery = itemsQuery.eq("is_spicy", false);
+    }
+  }
 
-  // Independent queries (neither depends on the other's result) — run
-  // concurrently rather than round-tripping twice sequentially (Batch 8
-  // performance audit, docs/production-audit.md).
-  const [{ data: categories }, { data: menuItems }] = await Promise.all([
-    supabase
-      .from("categories")
-      .select("id, name")
-      .eq("restaurant_id", restaurant.id)
-      .order("display_order", { ascending: true }),
-    itemsQuery,
-  ]);
+  // Independent queries — run concurrently (Batch 8 performance audit).
+  // The flags query reads three booleans for the whole menu so the page
+  // only offers dietary filters that would actually narrow it.
+  const [{ data: categories }, { data: menuItems }, { data: flagRows }] =
+    await Promise.all([
+      supabase
+        .from("categories")
+        .select("id, name")
+        .eq("restaurant_id", restaurant.id)
+        .order("display_order", { ascending: true }),
+      itemsQuery,
+      supabase
+        .from("menu_items")
+        .select("is_vegetarian, is_vegan, is_spicy")
+        .eq("restaurant_id", restaurant.id)
+        .limit(500),
+    ]);
+
+  const flags = (flagRows ?? []).map((row) => ({
+    isVegetarian: row.is_vegetarian,
+    isVegan: row.is_vegan,
+    isSpicy: row.is_spicy,
+  }));
+  const dietChoices = availableDietFilters(flags);
+  // Said once, in the restaurant's own terms (its flags), instead of a
+  // "Vegetarian" label repeated on every one of a hundred-odd cards.
+  const menuIsAllVegetarian =
+    flags.length > 0 && flags.every((f) => f.isVegetarian || f.isVegan);
 
   // Confirmed allergens for everything on this page, in two queries rather
   // than one per dish. RLS already restricts these rows to this restaurant;
@@ -101,102 +157,250 @@ export default async function MenuPage({
     }
   }
 
+  const cards: Array<MenuItemCardData & { categoryId: string }> = (
+    menuItems ?? []
+  ).map((item) => ({
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    price: Number(item.price),
+    imageUrl: item.image_url,
+    isVegetarian: item.is_vegetarian,
+    isVegan: item.is_vegan,
+    isSpicy: item.is_spicy,
+    allergens: allergensByItem.get(item.id) ?? [],
+    categoryId: item.category_id,
+  }));
+
+  const isFiltered = Boolean(categoryId || search || diet.length > 0);
+  const activeCategory = categories?.find((c) => c.id === categoryId);
+
+  // Browsing the whole menu: group by the restaurant's own categories, in
+  // its own order, so the page reads like a menu rather than a feed. A
+  // search or a single category is shown as one list.
+  const knownCategoryIds = new Set((categories ?? []).map((c) => c.id));
+  const uncategorised = cards.filter(
+    (card) => !knownCategoryIds.has(card.categoryId),
+  );
+  const sections =
+    !categoryId && !search
+      ? [
+          ...(categories ?? []).map((category) => ({
+            id: category.id,
+            name: category.name,
+            items: cards.filter((card) => card.categoryId === category.id),
+          })),
+          // Never silently drop a dish the flat list used to show: anything
+          // whose category this page can't see still gets listed.
+          { id: "more", name: "More dishes", items: uncategorised },
+        ].filter((section) => section.items.length > 0)
+      : [
+          {
+            id: "results",
+            name: activeCategory?.name ?? "",
+            items: cards,
+          },
+        ];
+
+  const currentParams = { category: categoryId, q: search, diet };
+
   return (
-    <div className="flex flex-1 flex-col gap-4">
-      {/*
-        Visually hidden, not visually added: the restaurant name is already
-        in the header and a visible duplicate would be redundant. But this
-        page had NO heading at all — the only page in the diner flow that
-        didn't — which left screen reader users nothing to navigate by on
-        the app's busiest screen. SC 1.3.1 / 2.4.6.
-      */}
-      <h1 className="sr-only">{restaurant.name} menu</h1>
-
-      <form
-        className="flex gap-2"
-        action={`/r/${restaurantSlug}/menu`}
-        method="get"
-      >
-        {categoryId && (
-          <input type="hidden" name="category" value={categoryId} />
-        )}
-        <Input
-          type="search"
-          name="q"
-          placeholder="Search the menu…"
-          defaultValue={q ?? ""}
-          className="flex-1"
-        />
-        <Button type="submit" variant="outline">
-          Search
-        </Button>
-      </form>
-
-      {categories && categories.length > 0 && (
-        <nav
-          aria-label="Menu categories"
-          className="-mx-4 flex scrollbar-none gap-2 overflow-x-auto px-4 pb-1"
-        >
-          <Link
-            href={`/r/${restaurantSlug}/menu${q ? `?q=${encodeURIComponent(q)}` : ""}`}
-            className={cn(
-              "shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap",
-              !categoryId
-                ? "bg-primary text-primary-foreground border-transparent"
-                : "bg-background",
-            )}
-          >
-            All
-          </Link>
-          {categories.map((category) => {
-            const params = new URLSearchParams();
-            params.set("category", category.id);
-            if (q) params.set("q", q);
-            return (
-              <Link
-                key={category.id}
-                href={`/r/${restaurantSlug}/menu?${params.toString()}`}
-                className={cn(
-                  "shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap",
-                  categoryId === category.id
-                    ? "bg-primary text-primary-foreground border-transparent"
-                    : "bg-background",
-                )}
-              >
-                {category.name}
-              </Link>
-            );
-          })}
-        </nav>
+    <div className="flex flex-1 flex-col gap-6">
+      {!isFiltered ? (
+        <>
+          <RestaurantHero restaurant={restaurant} eyebrow="Menu" />
+          {menuIsAllVegetarian && (
+            <p className="type-label text-success -mt-2 inline-flex items-center gap-1.5">
+              <Leaf className="size-4" aria-hidden="true" />
+              Everything on this menu is vegetarian
+            </p>
+          )}
+          <AskWaiterCard />
+        </>
+      ) : (
+        <h1 className="sr-only">{restaurant.name} menu</h1>
       )}
 
-      {!menuItems || menuItems.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center">
-          <Badge variant="outline">No results</Badge>
-          <p className="text-muted-foreground text-sm">
-            {search
-              ? `No items match "${search}".`
-              : "No items in this category yet."}
-          </p>
+      <div className="flex flex-col gap-3">
+        <form
+          role="search"
+          action={`/r/${restaurantSlug}/menu`}
+          method="get"
+          className="relative"
+        >
+          {categoryId && (
+            <input type="hidden" name="category" value={categoryId} />
+          )}
+          {diet.length > 0 && (
+            <input type="hidden" name="diet" value={diet.join(",")} />
+          )}
+          <Search
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2"
+            aria-hidden="true"
+          />
+          <label htmlFor="menu-search" className="sr-only">
+            Search the menu
+          </label>
+          <input
+            id="menu-search"
+            type="search"
+            name="q"
+            defaultValue={search}
+            placeholder="Search dishes or ingredients"
+            enterKeyHint="search"
+            autoComplete="off"
+            className="bg-card placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/40 type-body shadow-card h-11 w-full rounded-xl border pr-11 pl-10 transition-colors focus-visible:ring-3 focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden"
+          />
+          {search ? (
+            <Link
+              href={menuHref(restaurantSlug, { ...currentParams, q: null })}
+              aria-label="Clear search"
+              className="text-muted-foreground hover:text-foreground hover:bg-muted absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg transition-colors"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </Link>
+          ) : (
+            <button type="submit" className="sr-only">
+              Search
+            </button>
+          )}
+        </form>
+
+        {dietChoices.length > 0 && (
+          <nav aria-label="Dietary filters" className="flex flex-wrap gap-2">
+            {dietChoices.map((choice) => (
+              <FilterChip
+                key={choice.key}
+                href={menuHref(restaurantSlug, {
+                  ...currentParams,
+                  diet: toggleDietFilter(diet, choice.key),
+                })}
+                active={diet.includes(choice.key)}
+                icon={DIET_ICONS[choice.key]}
+              >
+                {choice.label}
+              </FilterChip>
+            ))}
+          </nav>
+        )}
+      </div>
+
+      {categories && categories.length > 0 && (
+        <div className="bg-background/90 supports-backdrop-filter:bg-background/80 sticky top-14 z-10 -mx-4 border-b px-4 py-2.5 backdrop-blur-md sm:-mx-6 sm:px-6">
+          <nav
+            aria-label="Menu categories"
+            className="-mx-4 flex scrollbar-none gap-2 overflow-x-auto px-4 sm:-mx-6 sm:px-6"
+          >
+            <FilterChip
+              href={menuHref(restaurantSlug, {
+                ...currentParams,
+                category: null,
+              })}
+              active={!categoryId}
+              scroll
+            >
+              All
+            </FilterChip>
+            {categories.map((category) => (
+              <FilterChip
+                key={category.id}
+                href={menuHref(restaurantSlug, {
+                  ...currentParams,
+                  category: category.id,
+                })}
+                active={categoryId === category.id}
+                scroll
+              >
+                {category.name}
+              </FilterChip>
+            ))}
+          </nav>
         </div>
+      )}
+
+      {isFiltered && cards.length > 0 && (
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="type-body-sm text-muted-foreground" aria-live="polite">
+            {search ? (
+              <>
+                {cards.length} {cards.length === 1 ? "dish" : "dishes"} for{" "}
+                <span className="text-foreground font-medium">
+                  &ldquo;{search}&rdquo;
+                </span>
+              </>
+            ) : (
+              <>
+                {cards.length} {cards.length === 1 ? "dish" : "dishes"}
+              </>
+            )}
+          </p>
+          <Link
+            href={menuHref(restaurantSlug, {})}
+            className="type-label text-primary shrink-0 hover:underline"
+          >
+            Clear all
+          </Link>
+        </div>
+      )}
+
+      {cards.length === 0 ? (
+        <EmptyState
+          icon={<SearchX />}
+          title={search ? `Nothing matches “${search}”` : "No dishes here"}
+          description={
+            isFiltered
+              ? "Try a different word, or clear the filters to see the whole menu."
+              : "This restaurant hasn't added any dishes yet."
+          }
+        >
+          {isFiltered && (
+            <Link
+              href={menuHref(restaurantSlug, {})}
+              className={buttonVariants({ variant: "outline", size: "lg" })}
+            >
+              See the whole menu
+            </Link>
+          )}
+          {search && (
+            <AskWaiterButton prompt={`Do you have anything like ${search}?`}>
+              Ask the waiter
+            </AskWaiterButton>
+          )}
+        </EmptyState>
       ) : (
-        <div className="flex flex-col gap-2">
-          {menuItems.map((item) => (
-            <MenuItemCard
-              key={item.id}
-              restaurantSlug={restaurantSlug}
-              item={{
-                id: item.id,
-                name: item.name,
-                description: item.description,
-                price: Number(item.price),
-                imageUrl: item.image_url,
-                isVegetarian: item.is_vegetarian,
-                isVegan: item.is_vegan,
-                isSpicy: item.is_spicy,
-                allergens: allergensByItem.get(item.id) ?? [],
-              }}
-            />
+        <div className="flex flex-col gap-8">
+          {sections.map((section) => (
+            <section
+              key={section.id}
+              aria-labelledby={
+                section.name ? `section-${section.id}` : undefined
+              }
+              aria-label={section.name ? undefined : "Menu results"}
+              className="flex scroll-mt-32 flex-col gap-3"
+            >
+              {section.name && (
+                <h2
+                  id={`section-${section.id}`}
+                  className="type-heading flex items-baseline justify-between gap-3"
+                >
+                  {section.name}
+                  <span className="type-caption text-muted-foreground font-normal">
+                    {section.items.length}
+                  </span>
+                </h2>
+              )}
+              <div className="grid gap-3 md:grid-cols-2">
+                {section.items.map((item) => (
+                  <MenuItemCard
+                    key={item.id}
+                    restaurantSlug={restaurantSlug}
+                    currency={restaurant.currency}
+                    menuIsAllVegetarian={menuIsAllVegetarian}
+                    item={item}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}

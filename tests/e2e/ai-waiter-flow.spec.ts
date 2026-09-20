@@ -145,22 +145,22 @@ test.describe("AI waiter: full conversational order flow", () => {
     await customerPage.waitForURL(new RegExp(`/r/${slug}/menu`));
 
     await customerPage
-      .getByRole("button", { name: "Open AI waiter chat" })
+      .getByRole("button", { name: "Ask the waiter", exact: true })
       .click();
     // Scoped to the AI chat dialog (Base UI Dialog.Popup, role="dialog",
     // named via Dialog.Title — see ai-waiter-panel.tsx) — reused below so
     // Turn-1's own assertion can't be satisfied by the customer menu page
     // rendered behind it, which also lists "Paneer Dosa" as a menu item.
-    const aiDialog = customerPage.getByRole("dialog", { name: "AI Waiter" });
+    const aiDialog = customerPage.getByRole("dialog", { name: "Your waiter" });
     await expect(
-      aiDialog.getByRole("heading", { name: "AI Waiter" }),
+      aiDialog.getByRole("heading", { name: "Your waiter" }),
     ).toBeVisible();
 
-    const chatInput = customerPage.getByLabel("Message the AI waiter");
+    const chatInput = customerPage.getByLabel("Message your waiter");
 
     // --- "What vegetarian dishes do you have?" -> AI searches the real menu ---
     await chatInput.fill("What vegetarian dishes do you have?");
-    await customerPage.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send message" }).click();
     // Scoped to the dialog (not a bare page-wide getByText) — the
     // customer's own menu page, rendered behind this dialog, also shows
     // "Paneer Dosa" as a menu item, so an unscoped text match can be
@@ -189,13 +189,13 @@ test.describe("AI waiter: full conversational order flow", () => {
 
     // --- Ask for it; the item has a required modifier, so the AI must ask ---
     await chatInput.fill("I'll have the Paneer Dosa");
-    await customerPage.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send message" }).click();
     await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
     await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
 
     // --- Answer the required modifier ---
     await chatInput.fill("Medium please");
-    await customerPage.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send message" }).click();
     await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
     await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
 
@@ -214,16 +214,16 @@ test.describe("AI waiter: full conversational order flow", () => {
 
     // --- Back to the AI waiter: ask what's in the cart, then place the order ---
     await customerPage
-      .getByRole("button", { name: "Open AI waiter chat" })
+      .getByRole("button", { name: "Ask the waiter", exact: true })
       .click();
     await chatInput.fill("What's in my cart?");
-    await customerPage.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send message" }).click();
     await expect(customerPage.getByText(/paneer dosa/i).last()).toBeVisible({
       timeout: 60_000,
     });
 
     await chatInput.fill("Please place the order");
-    await customerPage.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send message" }).click();
     // Wait for the turn to actually finish (not a fixed sleep — a fixed
     // 2s wait here was observed to check for a confirmation prompt and
     // then navigate away before the model's real turn had finished, since
@@ -248,7 +248,7 @@ test.describe("AI waiter: full conversational order flow", () => {
     // pointing at the assertion rather than at the turn that never
     // happened.
     await chatInput.fill("Yes, place it");
-    await customerPage.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send message" }).click();
     await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
     await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
 
@@ -269,10 +269,10 @@ test.describe("AI waiter: full conversational order flow", () => {
         break;
       }
       await customerPage
-        .getByRole("button", { name: "Open AI waiter chat" })
+        .getByRole("button", { name: "Ask the waiter", exact: true })
         .click();
       await chatInput.fill("Yes — please place the order now.");
-      await customerPage.getByRole("button", { name: "Send" }).click();
+      await customerPage.getByRole("button", { name: "Send message" }).click();
       await expect(typingIndicator).toBeVisible({ timeout: 5_000 });
       await expect(typingIndicator).toBeHidden({ timeout: 60_000 });
     }
@@ -282,10 +282,10 @@ test.describe("AI waiter: full conversational order flow", () => {
 
     // --- Ask the AI for status; it must reflect the real order ---
     await customerPage
-      .getByRole("button", { name: "Open AI waiter chat" })
+      .getByRole("button", { name: "Ask the waiter", exact: true })
       .click();
     await chatInput.fill("Where is my order?");
-    await customerPage.getByRole("button", { name: "Send" }).click();
+    await customerPage.getByRole("button", { name: "Send message" }).click();
     await expect(
       customerPage.getByText(/received|confirmed|preparing|ready/i).last(),
     ).toBeVisible({
@@ -368,8 +368,12 @@ test.describe("AI waiter: never blocks normal ordering", () => {
     await customerPage.waitForURL(new RegExp(`/r/${slug}/menu`));
     await customerPage.getByText("Veg Thali").click();
     await customerPage.waitForURL(/\/item\//);
-    await customerPage.getByRole("button", { name: /Add to cart/ }).click();
-    await customerPage.getByRole("link", { name: "View cart" }).click();
+    await customerPage
+      .getByRole("button", { name: /Add to order|Add another/ })
+      .click();
+    await customerPage
+      .getByRole("link", { name: "View order", exact: true })
+      .click();
     await customerPage.waitForURL(/\/cart/);
     await customerPage.getByRole("button", { name: "Place order" }).click();
     await customerPage.waitForURL(/\/order\/.+/);

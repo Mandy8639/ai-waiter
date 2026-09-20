@@ -138,7 +138,9 @@ test.describe("customer QR-to-cart flow", () => {
     await customerPage.getByText("Masala Dosa").click();
     await customerPage.waitForURL(/\/item\//);
     await customerPage.getByText("Extra Chutney").click();
-    await customerPage.getByRole("button", { name: /Add to cart/ }).click();
+    await customerPage
+      .getByRole("button", { name: /Add to order|Add another/ })
+      .click();
     // 15s, not the 5s default: this is a persistent <Alert> bound to the
     // form action's success state (item-detail-form.tsx) with no
     // auto-dismiss, so a longer timeout tolerates a loaded server without
@@ -146,19 +148,19 @@ test.describe("customer QR-to-cart flow", () => {
     // Observed failing at 5s only when the suite ran fully parallel
     // alongside the 2-minute live-model AI spec, which is contention on
     // the shared dev server, not a product defect.
-    await expect(customerPage.getByText("Added to cart.")).toBeVisible({
+    await expect(customerPage.getByText("Added to your order")).toBeVisible({
       timeout: 15_000,
     });
 
     // --- Cart: view, change quantity, remove, clear ---
-    await customerPage.getByRole("link", { name: "View cart" }).click();
+    await customerPage
+      .getByRole("link", { name: "View order", exact: true })
+      .click();
     await customerPage.waitForURL(/\/cart/);
     await expect(customerPage.getByText("Masala Dosa")).toBeVisible();
     await expect(customerPage.getByText("Extra Chutney")).toBeVisible();
 
-    await customerPage
-      .getByRole("button", { name: "Increase quantity" })
-      .click();
+    await customerPage.getByRole("button", { name: /One more/ }).click();
     // "2" alone is ambiguous once the header cart badge also shows the new
     // item count — scope to the cart page's main content.
     await expect(
@@ -166,22 +168,26 @@ test.describe("customer QR-to-cart flow", () => {
     ).toBeVisible();
 
     await customerPage.getByRole("button", { name: "Remove" }).click();
-    await expect(customerPage.getByText("Your cart is empty.")).toBeVisible();
+    await expect(customerPage.getByText("Your order is empty")).toBeVisible();
 
     // Add it back once more so "Clear cart" has something real to clear.
     await customerPage.goto(`/r/${slug}/menu`);
     await customerPage.getByText("Masala Dosa").click();
     await customerPage.waitForURL(/\/item\//);
-    await customerPage.getByRole("button", { name: /Add to cart/ }).click();
-    await customerPage.getByRole("link", { name: "View cart" }).click();
+    await customerPage
+      .getByRole("button", { name: /Add to order|Add another/ })
+      .click();
+    await customerPage
+      .getByRole("link", { name: "View order", exact: true })
+      .click();
     await customerPage.waitForURL(/\/cart/);
 
     // DeleteButton's trigger reads "Clear cart"; the dialog's confirm button
     // is always labeled "Delete" regardless of the trigger's own label.
-    await customerPage.getByRole("button", { name: "Clear cart" }).click();
+    await customerPage.getByRole("button", { name: "Clear order" }).click();
     await customerPage
       .getByRole("button", { name: "Delete", exact: true })
       .click();
-    await expect(customerPage.getByText("Your cart is empty.")).toBeVisible();
+    await expect(customerPage.getByText("Your order is empty")).toBeVisible();
   });
 });

@@ -2,15 +2,11 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CircleCheck, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatPrice } from "@/lib/format/price";
 import { cn } from "@/lib/utils";
 import type { CartActionState } from "@/lib/cart/actions";
-
-const currency = new Intl.NumberFormat(undefined, {
-  style: "currency",
-  currency: "USD",
-});
 
 export interface ModifierOptionData {
   id: string;
@@ -52,7 +48,16 @@ export function ItemDetailForm({
   restaurantSlug,
   dishSpiceLevel,
   allowNotes,
+  currency,
+  offerSpiceChoice = true,
 }: {
+  /**
+   * False for dishes the restaurant marks as neither spicy nor given a
+   * heat level — a cold coffee should not ask how hot you'd like it.
+   */
+  offerSpiceChoice?: boolean;
+  /** The restaurant's currency code — see src/lib/format/price.ts. */
+  currency: string;
   action: (
     prevState: CartActionState,
     formData: FormData,
@@ -107,6 +112,8 @@ export function ItemDetailForm({
     return count >= effectiveMin && count <= group.maxSelections;
   });
 
+  const price = (amount: number) => formatPrice(amount, currency);
+
   return (
     <form action={formAction} className="flex flex-col gap-6">
       <input type="hidden" name="menuItemId" value={menuItemId} />
@@ -115,35 +122,50 @@ export function ItemDetailForm({
       {groups.map((group) => {
         const groupSelected = selected[group.id] ?? new Set();
         return (
-          <fieldset key={group.id} className="flex flex-col gap-2">
-            <legend className="flex items-center gap-1.5 text-sm font-medium">
-              {group.name}
-              {group.isRequired && <span className="text-destructive">*</span>}
-            </legend>
-            {group.description && (
-              <p className="text-muted-foreground text-xs">
-                {group.description}
-              </p>
-            )}
-            <p className="text-muted-foreground text-xs">
-              {group.maxSelections === 1
-                ? "Choose 1"
-                : `Choose up to ${group.maxSelections}`}
-              {group.isRequired ? " — required" : " — optional"}
-            </p>
-            <div className="flex flex-col gap-1.5">
+          <fieldset
+            key={group.id}
+            className="bg-card shadow-card flex flex-col gap-3 rounded-xl border p-4"
+          >
+            <legend className="sr-only">{group.name}</legend>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-0.5">
+                <p className="type-dish" aria-hidden="true">
+                  {group.name}
+                </p>
+                <p className="type-caption text-muted-foreground">
+                  {group.description ? `${group.description} · ` : ""}
+                  {group.maxSelections === 1
+                    ? "Choose 1"
+                    : `Choose up to ${group.maxSelections}`}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "type-overline shrink-0 rounded-full px-2 py-1",
+                  group.isRequired
+                    ? "bg-foreground text-background"
+                    : "bg-secondary text-muted-foreground",
+                )}
+              >
+                {group.isRequired ? "Required" : "Optional"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-2">
               {group.options.map((option) => {
                 const checked = groupSelected.has(option.id);
                 return (
                   <label
                     key={option.id}
                     className={cn(
-                      "flex cursor-pointer items-center justify-between rounded-md border px-3 py-2.5 text-sm transition-colors",
-                      checked && "border-primary bg-accent",
+                      "type-body-sm flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 transition-colors duration-150",
+                      "has-focus-visible:ring-ring/50 has-focus-visible:ring-3",
+                      checked
+                        ? "border-primary bg-primary/5"
+                        : "hover:bg-secondary/60",
                       !option.isAvailable && "cursor-not-allowed opacity-50",
                     )}
                   >
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-2.5">
                       <input
                         type="checkbox"
                         name="optionId"
@@ -155,15 +177,15 @@ export function ItemDetailForm({
                       />
                       {option.name}
                       {!option.isAvailable && (
-                        <span className="text-muted-foreground text-xs">
+                        <span className="type-caption text-muted-foreground">
                           (unavailable)
                         </span>
                       )}
                     </span>
                     {option.priceAdjustment !== 0 && (
-                      <span className="text-muted-foreground text-xs">
+                      <span className="type-price type-caption text-muted-foreground">
                         {option.priceAdjustment > 0 ? "+" : ""}
-                        {currency.format(option.priceAdjustment)}
+                        {price(option.priceAdjustment)}
                       </span>
                     )}
                   </label>
@@ -174,35 +196,6 @@ export function ItemDetailForm({
         );
       })}
 
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Quantity</span>
-        <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            disabled={quantity <= 1 || isPending}
-            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-            aria-label="Decrease quantity"
-          >
-            −
-          </Button>
-          <span className="w-6 text-center text-sm tabular-nums">
-            {quantity}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            disabled={quantity >= 99 || isPending}
-            onClick={() => setQuantity((q) => Math.min(99, q + 1))}
-            aria-label="Increase quantity"
-          >
-            +
-          </Button>
-        </div>
-      </div>
-
       {/*
         How the DINER wants it, which is not the same question as how the
         dish is normally made. The default is deliberately "as you normally
@@ -210,42 +203,41 @@ export function ItemDetailForm({
         would make every order look like a special request, and a kitchen
         that sees a heat request on all 200 tickets stops reading them.
       */}
-      <div className="flex flex-col gap-2">
-        <fieldset>
-          <legend className="text-sm font-medium">
-            How spicy would you like it?
-          </legend>
+      {offerSpiceChoice && (
+        <fieldset className="flex flex-col gap-2.5">
+          <legend className="type-dish">How spicy would you like it?</legend>
           {dishSpiceLevel && dishSpiceLevel !== "none" && (
-            <p className="text-muted-foreground mt-1 text-sm">
+            <p className="type-caption text-muted-foreground -mt-1">
               This dish is normally {spiceWord(dishSpiceLevel)}.
             </p>
           )}
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+          <div className="flex flex-wrap gap-2">
             {SPICE_CHOICES.map((choice) => (
-              <div key={choice.value} className="flex items-center gap-2">
+              <label
+                key={choice.value}
+                className={cn(
+                  "type-label flex h-10 cursor-pointer items-center rounded-full border px-4 transition-colors duration-150",
+                  "hover:bg-secondary has-checked:bg-foreground has-checked:text-background has-checked:border-transparent",
+                  "has-focus-visible:ring-ring/50 has-focus-visible:ring-3",
+                )}
+              >
                 <input
                   type="radio"
-                  id={`spice-${choice.value || "default"}`}
                   name="spicePreference"
                   value={choice.value}
                   defaultChecked={choice.value === ""}
-                  className="size-4"
+                  className="sr-only"
                 />
-                <label
-                  htmlFor={`spice-${choice.value || "default"}`}
-                  className="text-sm"
-                >
-                  {choice.label}
-                </label>
-              </div>
+                {choice.label}
+              </label>
             ))}
           </div>
         </fieldset>
-      </div>
+      )}
 
       {allowNotes && (
         <div className="flex flex-col gap-2">
-          <label htmlFor="notes" className="text-sm font-medium">
+          <label htmlFor="notes" className="type-dish">
             Anything else for the kitchen?
           </label>
           <textarea
@@ -254,38 +246,100 @@ export function ItemDetailForm({
             rows={2}
             maxLength={200}
             placeholder="e.g. no onions, extra chutney"
-            className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none"
+            className="bg-card border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/40 type-body w-full rounded-xl border px-3.5 py-2.5 transition-colors focus-visible:ring-3 focus-visible:outline-none"
           />
         </div>
       )}
 
-      {state.error && (
-        <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
-      )}
-      {state.success && (
-        <Alert>
-          <AlertDescription className="flex items-center justify-between gap-3">
-            <span>Added to cart.</span>
-            <Link
-              href={`/r/${restaurantSlug}/cart`}
-              className="font-medium underline-offset-4 hover:underline"
-            >
-              View cart
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
+      <div className="flex items-center justify-between">
+        <span className="type-dish" id="quantity-label">
+          Quantity
+        </span>
+        <div
+          className="flex items-center gap-1 rounded-full border p-1"
+          role="group"
+          aria-labelledby="quantity-label"
+        >
+          <button
+            type="button"
+            disabled={quantity <= 1 || isPending}
+            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+            aria-label="Decrease quantity"
+            className="hover:bg-secondary focus-visible:ring-ring/50 flex size-9 items-center justify-center rounded-full transition-colors focus-visible:ring-3 focus-visible:outline-none disabled:opacity-40"
+          >
+            <Minus className="size-4" aria-hidden="true" />
+          </button>
+          <span
+            className="type-price w-8 text-center text-base"
+            aria-live="polite"
+          >
+            {quantity}
+          </span>
+          <button
+            type="button"
+            disabled={quantity >= 99 || isPending}
+            onClick={() => setQuantity((q) => Math.min(99, q + 1))}
+            aria-label="Increase quantity"
+            className="hover:bg-secondary focus-visible:ring-ring/50 flex size-9 items-center justify-center rounded-full transition-colors focus-visible:ring-3 focus-visible:outline-none disabled:opacity-40"
+          >
+            <Plus className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
 
-      <Button
-        type="submit"
-        disabled={!isValid || isPending}
-        size="lg"
-        className="w-full"
-      >
-        {isPending ? "Adding…" : `Add to cart · ${currency.format(total)}`}
-      </Button>
+      {/*
+        The action lives in a bar pinned to the bottom of the screen: on a
+        phone the form is taller than the viewport, and a button below the
+        fold is a button people don't find. It is still inside the form, so
+        it submits it natively. The layout's bottom padding keeps the last
+        field clear of it.
+      */}
+      <div className="bg-background/95 supports-backdrop-filter:bg-background/85 fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
+          {state.error && (
+            <p className="type-caption text-destructive" role="alert">
+              {state.error}
+            </p>
+          )}
+          {!isValid && !state.error && (
+            <p className="type-caption text-muted-foreground">
+              Choose the required options above to add this dish.
+            </p>
+          )}
+          {state.success && (
+            <p
+              className="type-label text-success motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 flex items-center justify-between gap-3"
+              role="status"
+            >
+              <span className="flex items-center gap-1.5">
+                <CircleCheck className="size-4" aria-hidden="true" />
+                Added to your order
+              </span>
+              <Link
+                href={`/r/${restaurantSlug}/cart`}
+                className="text-foreground font-semibold underline-offset-4 hover:underline"
+              >
+                View order
+              </Link>
+            </p>
+          )}
+          <Button
+            type="submit"
+            disabled={!isValid || isPending}
+            size="lg"
+            className="w-full justify-between"
+          >
+            <span>
+              {isPending
+                ? "Adding…"
+                : state.success
+                  ? "Add another"
+                  : "Add to order"}
+            </span>
+            <span className="type-price">{price(total)}</span>
+          </Button>
+        </div>
+      </div>
     </form>
   );
 }

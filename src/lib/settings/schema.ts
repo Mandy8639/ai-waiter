@@ -16,12 +16,13 @@ export const restaurantProfileSchema = z.object({
     .regex(/^[A-Z]{3}$/, 'Currency must be a 3-letter code (e.g. "USD").'),
   taxRate: z
     .number("Enter a tax rate.")
-    .min(0, "Must be 0 or more.")
-    .max(1, "Must be 1 or less (a fraction, e.g. 0.0825 for 8.25%)."),
+    // Stored as a fraction; the form collects a percentage and converts.
+    .min(0, "Must be 0% or more.")
+    .max(1, "Must be 100% or less."),
   serviceCharge: z
     .number("Enter a service charge.")
-    .min(0, "Must be 0 or more.")
-    .max(1, "Must be 1 or less (a fraction)."),
+    .min(0, "Must be 0% or more.")
+    .max(1, "Must be 100% or less."),
 });
 
 export type RestaurantProfileInput = z.infer<typeof restaurantProfileSchema>;

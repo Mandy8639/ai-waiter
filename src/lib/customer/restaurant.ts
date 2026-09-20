@@ -13,6 +13,8 @@ export interface PublicRestaurant {
   address: string | null;
   city: string | null;
   state: string | null;
+  /** ISO 4217 code every diner-facing price is shown in — see src/lib/format/price.ts. */
+  currency: string;
   isActive: boolean;
 }
 
@@ -27,7 +29,7 @@ export const getPublicRestaurantBySlug = cache(
     const { data } = await supabase
       .from("restaurants")
       .select(
-        "id, name, slug, description, logo_url, cover_image_url, phone, address, city, state, is_active",
+        "id, name, slug, description, logo_url, cover_image_url, phone, address, city, state, currency, is_active",
       )
       .eq("slug", slug)
       .maybeSingle();
@@ -45,6 +47,7 @@ export const getPublicRestaurantBySlug = cache(
       address: data.address,
       city: data.city,
       state: data.state,
+      currency: data.currency,
       isActive: data.is_active,
     };
   },

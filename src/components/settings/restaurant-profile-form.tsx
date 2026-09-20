@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,58 @@ import { FormField } from "@/components/dashboard/form-field";
 import type { SettingsFormState } from "@/lib/settings/actions";
 
 const initialState: SettingsFormState = {};
+
+/**
+ * A rate typed as a percentage ("8.25") but submitted as the fraction the
+ * server action and database already use ("0.0825"). Asking owners to type
+ * 0.0825 was the old UI; the stored value and the action's contract are
+ * unchanged — only the hidden input carries the conversion.
+ */
+function PercentInput({
+  id,
+  name,
+  defaultFraction,
+  disabled,
+}: {
+  id: string;
+  name: string;
+  defaultFraction: number;
+  disabled?: boolean;
+}) {
+  const [percent, setPercent] = useState(() =>
+    // toPrecision trims float noise (0.0825 * 100 = 8.250000000000002).
+    String(Number((defaultFraction * 100).toPrecision(10))),
+  );
+  const parsed = Number(percent);
+  const fraction =
+    percent.trim() === "" || !Number.isFinite(parsed)
+      ? ""
+      : String(Number((parsed / 100).toPrecision(10)));
+
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type="number"
+        inputMode="decimal"
+        min={0}
+        max={100}
+        step="0.01"
+        disabled={disabled}
+        value={percent}
+        onChange={(event) => setPercent(event.target.value)}
+        className="pr-8"
+      />
+      <span
+        className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm"
+        aria-hidden="true"
+      >
+        %
+      </span>
+      <input type="hidden" name={name} value={fraction} />
+    </div>
+  );
+}
 
 export interface RestaurantProfileValues {
   name: string;
@@ -150,36 +202,24 @@ export function RestaurantProfileForm({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField
-          id="taxRate"
-          label="Tax rate (fraction, e.g. 0.0825)"
-          errors={errors.taxRate}
-        >
-          <Input
+        <FormField id="taxRate" label="Sales tax (%)" errors={errors.taxRate}>
+          <PercentInput
             id="taxRate"
             name="taxRate"
-            type="number"
-            min={0}
-            max={1}
-            step="0.0001"
+            defaultFraction={defaultValues.taxRate}
             disabled={readOnly}
-            defaultValue={defaultValues.taxRate}
           />
         </FormField>
         <FormField
           id="serviceCharge"
-          label="Service charge (fraction)"
+          label="Service charge (%)"
           errors={errors.serviceCharge}
         >
-          <Input
+          <PercentInput
             id="serviceCharge"
             name="serviceCharge"
-            type="number"
-            min={0}
-            max={1}
-            step="0.0001"
+            defaultFraction={defaultValues.serviceCharge}
             disabled={readOnly}
-            defaultValue={defaultValues.serviceCharge}
           />
         </FormField>
       </div>

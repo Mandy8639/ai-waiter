@@ -27,6 +27,21 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-spice: var(--spice);
+  --color-ai: var(--ai);
+  --color-ai-soft: var(--ai-soft);
+  --color-ai-foreground: var(--ai-foreground);
+  --shadow-card: 0 1px 2px 0 oklch(0.2 0.02 40 / 0.05);
+  --shadow-float:
+    0 10px 30px -12px oklch(0.2 0.02 40 / 0.28),
+    0 2px 6px -2px oklch(0.2 0.02 40 / 0.08);
+  --ease-out-soft: cubic-bezier(0.2, 0, 0, 1);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -49,9 +64,9 @@
 }
 
 :root {
-  --background: oklch(0.99 0.004 75);
-  --foreground: oklch(0.18 0.02 40);
-  --card: oklch(1 0.003 75);
+  --background: oklch(0.985 0.006 75);
+  --foreground: oklch(0.2 0.02 40);
+  --card: oklch(1 0.002 75);
   --card-foreground: oklch(0.18 0.02 40);
   --popover: oklch(1 0.003 75);
   --popover-foreground: oklch(0.18 0.02 40);
@@ -59,28 +74,38 @@
   --primary-foreground: oklch(0.98 0.01 75);
   --secondary: oklch(0.95 0.015 70);
   --secondary-foreground: oklch(0.25 0.03 40);
-  --muted: oklch(0.95 0.012 70);
-  --muted-foreground: oklch(0.48 0.02 50);
+  --muted: oklch(0.955 0.012 70);
+  --muted-foreground: oklch(0.47 0.02 50);
   --accent: oklch(0.93 0.035 70);
   --accent-foreground: oklch(0.25 0.03 40);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0.015 65);
+  --destructive: oklch(0.577 0.215 27);
+  --success: oklch(0.5 0.11 150);
+  --success-foreground: oklch(0.985 0.01 150);
+  --warning: oklch(0.74 0.14 72);
+  --warning-foreground: oklch(0.3 0.06 60);
+  --info: oklch(0.52 0.07 245);
+  --info-foreground: oklch(0.985 0.005 245);
+  --spice: oklch(0.56 0.17 33);
+  --ai: oklch(0.64 0.13 68);
+  --ai-soft: oklch(0.965 0.028 80);
+  --ai-foreground: oklch(0.3 0.05 50);
+  --border: oklch(0.905 0.014 65);
   --input: oklch(0.9 0.015 65);
   --ring: oklch(0.6 0.08 45);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --chart-1: oklch(0.42 0.13 40);
+  --chart-2: oklch(0.64 0.13 68);
+  --chart-3: oklch(0.5 0.11 150);
+  --chart-4: oklch(0.52 0.07 245);
+  --chart-5: oklch(0.7 0.03 60);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.97 0.01 72);
+  --sidebar-foreground: oklch(0.2 0.02 40);
+  --sidebar-primary: oklch(0.42 0.13 40);
+  --sidebar-primary-foreground: oklch(0.985 0.01 75);
+  --sidebar-accent: oklch(0.93 0.025 70);
+  --sidebar-accent-foreground: oklch(0.2 0.02 40);
+  --sidebar-border: oklch(0.905 0.014 65);
+  --sidebar-ring: oklch(0.6 0.08 45);
 }
 
 .dark {
@@ -99,6 +124,16 @@
   --accent: oklch(0.29 0.025 50);
   --accent-foreground: oklch(0.96 0.01 70);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.72 0.13 150);
+  --success-foreground: oklch(0.2 0.03 150);
+  --warning: oklch(0.8 0.13 75);
+  --warning-foreground: oklch(0.22 0.04 60);
+  --info: oklch(0.72 0.08 245);
+  --info-foreground: oklch(0.2 0.03 245);
+  --spice: oklch(0.72 0.15 38);
+  --ai: oklch(0.78 0.12 72);
+  --ai-soft: oklch(0.26 0.03 60);
+  --ai-foreground: oklch(0.94 0.03 80);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.6 0.08 50);
@@ -107,14 +142,14 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar: oklch(0.19 0.017 40);
+  --sidebar-foreground: oklch(0.96 0.01 70);
+  --sidebar-primary: oklch(0.72 0.12 55);
+  --sidebar-primary-foreground: oklch(0.18 0.02 40);
+  --sidebar-accent: oklch(0.27 0.02 45);
+  --sidebar-accent-foreground: oklch(0.96 0.01 70);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.6 0.08 50);
 }
 
 @layer base {
@@ -126,5 +161,85 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/*
+ * Type roles — see docs/DESIGN_SYSTEM.md#typography. Utilities rather than
+ * components so any element can take a role without changing its tag.
+ */
+@utility type-display {
+  font-size: 2rem;
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  @media (min-width: 40rem) {
+    font-size: 2.5rem;
+  }
+}
+@utility type-title {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+@utility type-heading {
+  font-size: 1.125rem;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+@utility type-dish {
+  font-size: 1rem;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@utility type-body {
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+@utility type-body-sm {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+@utility type-caption {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+@utility type-label {
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+}
+@utility type-overline {
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+@utility type-price {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+@layer base {
+  /*
+   * One global honouring of the OS setting, on top of the motion-safe:
+   * prefixes used on decorative animations — so a component that forgets
+   * the prefix still cannot animate for someone who asked it not to.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

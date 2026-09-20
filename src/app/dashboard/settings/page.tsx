@@ -88,7 +88,8 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle className="text-base">Operational settings</CardTitle>
             <CardDescription>
-              These will govern the future AI waiter&apos;s behavior.
+              How diners order from their table, and what the AI waiter is
+              allowed to do.
             </CardDescription>
           </CardHeader>
           <CardContent>

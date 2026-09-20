@@ -30,8 +30,8 @@ export default async function AllergensPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Allergens</h1>
           <p className="text-muted-foreground text-sm">
-            Your allergen catalog — the source of truth for allergen questions,
-            including the future AI waiter&apos;s.
+            The allergens your dishes can be marked with. Diners see them on
+            every dish, and the AI waiter answers allergy questions from them.
           </p>
         </div>
         {canManage && (

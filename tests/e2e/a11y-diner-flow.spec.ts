@@ -99,7 +99,8 @@ test.describe("diner flow accessibility", () => {
     }
 
     const trigger = dinerPage.getByRole("button", {
-      name: "Open AI waiter chat",
+      name: "Ask the waiter",
+      exact: true,
     });
     if ((await trigger.count()) === 0) {
       // The AI waiter is only offered when a provider key is configured
@@ -112,7 +113,7 @@ test.describe("diner flow accessibility", () => {
     await trigger.focus();
     await dinerPage.keyboard.press("Enter");
 
-    const dialog = dinerPage.getByRole("dialog", { name: "AI Waiter" });
+    const dialog = dinerPage.getByRole("dialog", { name: "Your waiter" });
     await expect(dialog).toBeVisible();
 
     // Focus must land inside the dialog, not stay on the trigger behind it.

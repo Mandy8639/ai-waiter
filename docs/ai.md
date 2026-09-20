@@ -480,6 +480,33 @@ they are for a human customer using the cart UI directly: `add_item_to_cart` cal
 `addToCart()` Server Action, so an incomplete required selection is rejected by the same
 validation path, not a separate AI-specific check that could drift from it.
 
+## Dish cards under replies
+
+When a reply names dishes, the chat shows them as cards (price, dietary flags, confirmed allergens,
+"View dish", "Add"). The contract is deliberately narrow — see `src/lib/ai/recommendations.ts`:
+
+- **Candidates come only from this turn's tool results** — the `items` of a successful `search_menu`
+  or the item from a successful `get_menu_item`. No id, price or name is ever read out of the
+  model's prose.
+- **The reply text only selects among them**: a candidate gets a card when its database-supplied
+  name appears in the reply as a whole phrase, in reply order, at most four. A name that only occurs
+  inside a longer matched name ("Masala Dosa" inside "Mysore Masala Dosa") is not a separate
+  mention. A dish the model paraphrased simply gets no card.
+- **No extra model round trip.** A dedicated "show these dishes" tool was considered and rejected:
+  it would add a model call and spend the per-turn tool budget that a compound question already
+  exhausted once in live testing.
+- **Fresh data at render.** `src/lib/ai/recommendation-cards.ts` re-reads photo, availability,
+  required options and confirmed allergens for the chosen ids through the diner's RLS-scoped client;
+  an unavailable dish gets no card, and a dish with a required option shows "Choose options" instead
+  of a one-tap add.
+- **Labelled "On the menu", not "Recommended"** — a reply can name a dish to warn a diner off it.
+- Cards appear only on live replies. Replies reloaded from history show text only, because the
+  cards are not persisted.
+
+Replies themselves are rendered from a small parsed tree (`src/lib/ai/chat-format.ts`) — bold,
+italic, lists, headings and tables become React elements; links keep their text and drop the URL;
+nothing is ever rendered as HTML.
+
 ## Order confirmation
 
 The system prompt requires the model to summarize items, quantities, modifiers, subtotal, tax,

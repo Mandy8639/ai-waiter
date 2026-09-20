@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Flame, Leaf, TriangleAlert } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { AllergenLine } from "@/components/customer/allergen-note";
+import { DietBadges } from "@/components/customer/diet-badges";
+import { formatPrice } from "@/lib/format/price";
 
 export interface MenuItemCardData {
   id: string;
@@ -16,82 +16,73 @@ export interface MenuItemCardData {
   allergens: string[];
 }
 
+/**
+ * One dish in the menu list.
+ *
+ * Text-first by design: the name leads, the description supports, the
+ * price and dietary labels close the card. When the restaurant has a photo
+ * it takes the right-hand side at a fixed square, so a menu with some
+ * photos and some without still lines up — and a menu with none (most of
+ * them, today) never shows a wall of empty placeholders pretending to be
+ * food.
+ */
 export function MenuItemCard({
   item,
   restaurantSlug,
+  currency,
+  menuIsAllVegetarian = false,
 }: {
   item: MenuItemCardData;
   restaurantSlug: string;
+  currency: string;
+  /** Skip the per-card "Vegetarian" label when the page already says it once. */
+  menuIsAllVegetarian?: boolean;
 }) {
-  const currency = new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-  });
-
   return (
-    <Link href={`/r/${restaurantSlug}/item/${item.id}`}>
-      <Card className="hover:bg-secondary/40 transition-colors">
-        <CardContent className="flex gap-3 py-3">
-          {item.imageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element -- restaurant-supplied remote URL
-            <img
-              src={item.imageUrl}
-              alt=""
-              className="size-16 shrink-0 rounded-md border object-cover"
-            />
-          )}
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="flex items-start justify-between gap-2">
-              <p className="truncate text-sm font-medium">{item.name}</p>
-              <p className="shrink-0 text-sm font-medium">
-                {currency.format(item.price)}
-              </p>
-            </div>
-            {item.description && (
-              <p className="text-muted-foreground line-clamp-2 text-xs">
-                {item.description}
-              </p>
-            )}
-            {/*
-              Shown on the card, not just the item page: someone avoiding an
-              allergen is scanning a 153-item menu, and making them open every
-              dish to find out is how a mistake happens. Only confirmed
-              allergens reach here.
-            */}
-            {item.allergens.length > 0 && (
-              <p className="text-destructive flex items-center gap-1 text-xs">
-                <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />
-                Contains {item.allergens.join(", ")}
-              </p>
-            )}
-            {(item.isVegetarian || item.isVegan || item.isSpicy) && (
-              <div className="flex items-center gap-2 pt-0.5">
-                {(item.isVegetarian || item.isVegan) && (
-                  <span
-                    className={cn(
-                      "flex items-center gap-0.5 text-xs",
-                      "text-green-700 dark:text-green-500",
-                    )}
-                    title={item.isVegan ? "Vegan" : "Vegetarian"}
-                  >
-                    <Leaf className="size-3" />
-                    {item.isVegan ? "Vegan" : "Veg"}
-                  </span>
-                )}
-                {item.isSpicy && (
-                  <span
-                    className="flex items-center gap-0.5 text-xs text-orange-700 dark:text-orange-500"
-                    title="Spicy"
-                  >
-                    <Flame className="size-3" />
-                    Spicy
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+    <Link
+      href={`/r/${restaurantSlug}/item/${item.id}`}
+      className="group bg-card shadow-card focus-visible:ring-ring/50 hover:border-foreground/15 flex gap-4 rounded-xl border p-4 transition-[border-color,background-color] duration-150 focus-visible:ring-3 focus-visible:outline-none"
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <h3 className="type-dish text-foreground group-hover:text-primary transition-colors">
+          {item.name}
+        </h3>
+        {item.description && (
+          <p className="type-body-sm text-muted-foreground line-clamp-2">
+            {item.description}
+          </p>
+        )}
+        {/*
+          Shown on the card, not just the item page: someone avoiding an
+          allergen is scanning a long menu, and making them open every dish
+          to find out is how a mistake happens. Confirmed allergens only.
+        */}
+        <AllergenLine allergens={item.allergens} />
+        <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+          <span className="type-price text-foreground text-[0.9375rem]">
+            {formatPrice(item.price, currency)}
+          </span>
+          <DietBadges
+            isVegetarian={item.isVegetarian}
+            isVegan={item.isVegan}
+            isSpicy={item.isSpicy}
+            hideVegetarian={menuIsAllVegetarian}
+          />
+        </div>
+      </div>
+
+      {item.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- restaurant-supplied remote URL; hosts are not known ahead of time for next/image
+        <img
+          src={item.imageUrl}
+          alt={item.name}
+          loading="lazy"
+          decoding="async"
+          width={112}
+          height={112}
+          className="bg-muted size-24 shrink-0 self-start rounded-lg object-cover sm:size-28"
+        />
+      )}
     </Link>
   );
 }
