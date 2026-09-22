@@ -21,6 +21,7 @@
     "db:seed:users": "tsx scripts/seed-dev-users.ts",
     "billing:setup-prices": "tsx --env-file=.env.local scripts/setup-stripe-prices.ts",
     "billing:preflight": "tsx --env-file=.env.local scripts/check-stripe-mode.ts",
+    "db:check-grants": "tsx --env-file=.env.local scripts/check-function-grants.ts",
     "db:backup": "tsx --env-file=.env.local scripts/backup-database.ts",
     "db:verify-backup": "tsx scripts/verify-backup.ts"
   },
@@ -54,6 +55,7 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -62,6 +64,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
     "jsdom": "^30.0.1",
+    "pg": "^8.23.0",
     "prettier": "^3.9.6",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "tailwindcss": "^4",
