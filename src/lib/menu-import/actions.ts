@@ -10,7 +10,6 @@ import type { StorageGateway } from "@/lib/menu-images/upload-core";
 import { extractMenuFromImages } from "./vision";
 import {
   ImportUploadRejected,
-  MENU_IMPORTS_BUCKET,
   authorizeImportUpload,
   loadImportPageDataUrls,
   type ImportRecords,
