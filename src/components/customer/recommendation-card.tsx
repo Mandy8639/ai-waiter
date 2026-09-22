@@ -1,5 +1,6 @@
 "use client";
 
+import { DishPhoto } from "@/components/customer/dish-photo";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -58,18 +59,12 @@ export function RecommendationCard({
 
   return (
     <div className="bg-card shadow-card flex gap-3 rounded-xl border p-3">
-      {item.imageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- restaurant-supplied remote URL
-        <img
-          src={item.imageUrl}
-          alt={item.name}
-          loading="lazy"
-          decoding="async"
-          width={64}
-          height={64}
-          className="bg-muted size-16 shrink-0 rounded-lg object-cover"
-        />
-      )}
+      <DishPhoto
+        image={item.image}
+        alt={item.name}
+        sizes="64px"
+        className="size-16 shrink-0 rounded-lg"
+      />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-start justify-between gap-2">
           <p className="type-label text-foreground text-[0.875rem] leading-snug font-semibold">

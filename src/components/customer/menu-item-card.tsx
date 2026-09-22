@@ -2,13 +2,16 @@ import Link from "next/link";
 import { AllergenLine } from "@/components/customer/allergen-note";
 import { DietBadges } from "@/components/customer/diet-badges";
 import { formatPrice } from "@/lib/format/price";
+import { DishPhoto } from "@/components/customer/dish-photo";
+import { CARD_SIZES, type DinerImage } from "@/lib/menu-images/resolve";
 
 export interface MenuItemCardData {
   id: string;
   name: string;
   description: string | null;
   price: number;
-  imageUrl: string | null;
+  /** Resolved by resolveDinerImage() on the server; null means no photo. */
+  image: DinerImage | null;
   isVegetarian: boolean;
   isVegan: boolean;
   isSpicy: boolean;
@@ -71,18 +74,12 @@ export function MenuItemCard({
         </div>
       </div>
 
-      {item.imageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- restaurant-supplied remote URL; hosts are not known ahead of time for next/image
-        <img
-          src={item.imageUrl}
-          alt={item.name}
-          loading="lazy"
-          decoding="async"
-          width={112}
-          height={112}
-          className="bg-muted size-24 shrink-0 self-start rounded-lg object-cover sm:size-28"
-        />
-      )}
+      <DishPhoto
+        image={item.image}
+        alt={item.name}
+        sizes={CARD_SIZES}
+        className="size-24 shrink-0 self-start rounded-lg sm:size-28"
+      />
     </Link>
   );
 }

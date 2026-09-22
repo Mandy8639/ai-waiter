@@ -55,6 +55,33 @@ export default async function MenuPage() {
     .eq("spice_level_source", "ai_draft")
     .not("spice_level", "is", null);
 
+  // Photo coverage, for a restaurant deciding where to spend an evening
+  // with a camera. Counted, not fetched: the page only needs the number.
+  // database.types.ts predates phase 1, so the image columns are filtered
+  // through an assertion; see src/lib/menu-images/menu-item-rows.ts.
+  const countMenuItems = supabase
+    .from("menu_items")
+    .select.bind(supabase.from("menu_items")) as unknown as (
+    columns: string,
+    options: { count: "exact"; head: true },
+  ) => {
+    eq: (
+      column: string,
+      value: string,
+    ) => {
+      is: (column: string, value: null) => Promise<{ count: number | null }>;
+      eq: (column: string, value: string) => Promise<{ count: number | null }>;
+    };
+  };
+
+  const { count: withoutPhoto } = await countMenuItems("id", {
+    count: "exact",
+    head: true,
+  })
+    .eq("restaurant_id", restaurant.id)
+    .is("active_image_id", null);
+  const totalItems = (menuItems ?? []).length;
+
   const categoryNameById = new Map(
     (categories ?? []).map((c) => [c.id, c.name]),
   );
@@ -93,6 +120,14 @@ export default async function MenuPage() {
                 className={buttonVariants({ variant: "outline" })}
               >
                 Confirm allergens ({pendingAllergens})
+              </Link>
+            )}
+            {(withoutPhoto ?? 0) > 0 && totalItems > 0 && (
+              <Link
+                href="/dashboard/menu/photos"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Add photos ({withoutPhoto})
               </Link>
             )}
             {(draftSpice ?? 0) > 0 && (

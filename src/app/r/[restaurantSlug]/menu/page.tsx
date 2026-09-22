@@ -14,6 +14,12 @@ import { RestaurantHero } from "@/components/customer/restaurant-hero";
 import { EmptyState } from "@/components/ui/empty-state";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
+import { env } from "@/lib/env";
+import { resolveDinerImage } from "@/lib/menu-images/resolve";
+import {
+  asRowsWithImageColumns,
+  type MenuListRow,
+} from "@/lib/menu-images/menu-item-rows";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import {
   availableDietFilters,
@@ -66,7 +72,7 @@ export default async function MenuPage({
   let itemsQuery = supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, is_vegetarian, is_vegan, is_spicy, category_id",
+      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, category_id",
     )
     .eq("restaurant_id", restaurant.id)
     .order("display_order", { ascending: true })
@@ -114,6 +120,11 @@ export default async function MenuPage({
         .limit(500),
     ]);
 
+  // database.types.ts predates phase 1, so the generated client cannot
+  // describe the image columns. Asserted once here against the migration;
+  // see src/lib/menu-images/menu-item-rows.ts.
+  const itemRows = asRowsWithImageColumns<MenuListRow>(menuItems);
+
   const flags = (flagRows ?? []).map((row) => ({
     isVegetarian: row.is_vegetarian,
     isVegan: row.is_vegan,
@@ -129,7 +140,7 @@ export default async function MenuPage({
   // than one per dish. RLS already restricts these rows to this restaurant;
   // `confirmed_at is not null` is what keeps unconfirmed SUGGESTIONS away
   // from diners — see 20260904140000_allergen_confirmation.sql.
-  const itemIds = (menuItems ?? []).map((item) => item.id);
+  const itemIds = itemRows.map((item) => item.id);
   const allergensByItem = new Map<string, string[]>();
 
   if (itemIds.length > 0) {
@@ -157,20 +168,26 @@ export default async function MenuPage({
     }
   }
 
-  const cards: Array<MenuItemCardData & { categoryId: string }> = (
-    menuItems ?? []
-  ).map((item) => ({
-    id: item.id,
-    name: item.name,
-    description: item.description,
-    price: Number(item.price),
-    imageUrl: item.image_url,
-    isVegetarian: item.is_vegetarian,
-    isVegan: item.is_vegan,
-    isSpicy: item.is_spicy,
-    allergens: allergensByItem.get(item.id) ?? [],
-    categoryId: item.category_id,
-  }));
+  const cards: Array<MenuItemCardData & { categoryId: string }> = itemRows.map(
+    (item) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      price: Number(item.price),
+      image: resolveDinerImage({
+        activeImageId: item.active_image_id,
+        imageSource: item.image_source,
+        imageVariants: item.image_variants,
+        legacyImageUrl: item.image_url,
+        supabaseUrl: env.NEXT_PUBLIC_SUPABASE_URL,
+      }),
+      isVegetarian: item.is_vegetarian,
+      isVegan: item.is_vegan,
+      isSpicy: item.is_spicy,
+      allergens: allergensByItem.get(item.id) ?? [],
+      categoryId: item.category_id,
+    }),
+  );
 
   const isFiltered = Boolean(categoryId || search || diet.length > 0);
   const activeCategory = categories?.find((c) => c.id === categoryId);

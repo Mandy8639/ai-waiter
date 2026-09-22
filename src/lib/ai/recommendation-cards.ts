@@ -1,3 +1,9 @@
+import { env } from "@/lib/env";
+import { resolveDinerImage, type DinerImage } from "@/lib/menu-images/resolve";
+import {
+  asRowsWithImageColumns,
+  type MenuItemImageFields,
+} from "@/lib/menu-images/menu-item-rows";
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +20,8 @@ import type { MentionedMenuItem } from "./recommendations";
  * more than the menu does.
  */
 export interface RecommendationCard extends MentionedMenuItem {
-  imageUrl: string | null;
+  /** Resolved on the server; null means the card renders text-only. */
+  image: DinerImage | null;
   /** Confirmed allergens only — never import suggestions. */
   allergens: string[];
   /** True when a required option (size, spice…) must be chosen on the item page. */
@@ -34,7 +41,9 @@ export async function buildRecommendationCards(
     await Promise.all([
       supabase
         .from("menu_items")
-        .select("id, image_url, is_available")
+        .select(
+          "id, is_available, image_url, active_image_id, image_source, image_variants",
+        )
         .eq("restaurant_id", restaurantId)
         .in("id", ids),
       supabase
@@ -57,7 +66,13 @@ export async function buildRecommendationCards(
     : { data: [] as { id: string; name: string }[] };
   const allergenName = new Map((allergenRows ?? []).map((a) => [a.id, a.name]));
 
-  const rowById = new Map((rows ?? []).map((r) => [r.id, r]));
+  // database.types.ts predates phase 1, so the generated client cannot
+  // describe the image columns. Asserted once here against the migration;
+  // see src/lib/menu-images/menu-item-rows.ts.
+  const imageRows = asRowsWithImageColumns<
+    MenuItemImageFields & { id: string; is_available: boolean }
+  >(rows);
+  const rowById = new Map(imageRows.map((r) => [r.id, r]));
   const needsOptions = new Set(
     (requiredGroups ?? []).map((g) => g.menu_item_id),
   );
@@ -70,7 +85,13 @@ export async function buildRecommendationCards(
     return [
       {
         ...item,
-        imageUrl: row.image_url,
+        image: resolveDinerImage({
+          activeImageId: row.active_image_id,
+          imageSource: row.image_source,
+          imageVariants: row.image_variants,
+          legacyImageUrl: row.image_url,
+          supabaseUrl: env.NEXT_PUBLIC_SUPABASE_URL,
+        }),
         allergens: (allergenLinks ?? [])
           .filter((l) => l.menu_item_id === item.id)
           .map((l) => allergenName.get(l.allergen_id))

@@ -6,7 +6,11 @@ import { AskWaiterButton } from "@/components/customer/ask-waiter-card";
 import { DietBadges } from "@/components/customer/diet-badges";
 import { ItemDetailForm } from "@/components/customer/item-detail-form";
 import { formatPrice } from "@/lib/format/price";
+import { DishPhoto } from "@/components/customer/dish-photo";
 import { createClient } from "@/lib/supabase/server";
+import { env } from "@/lib/env";
+import { DETAIL_SIZES, resolveDinerImage } from "@/lib/menu-images/resolve";
+import type { MenuItemDetailRow } from "@/lib/menu-images/menu-item-rows";
 import {
   getPublicRestaurantBySlug,
   getPublicOrderSettings,
@@ -57,18 +61,33 @@ export default async function MenuItemDetailPage({
 
   const supabase = await createClient();
 
-  const { data: item } = await supabase
+  const { data: itemRow } = await supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, spice_level",
+      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, spice_level",
     )
     .eq("id", id)
     .eq("restaurant_id", restaurant.id)
     .maybeSingle();
 
-  if (!item) {
+  if (!itemRow) {
     notFound();
   }
+
+  // database.types.ts predates phase 1, so the generated client cannot
+  // describe the image columns and degrades the whole row. Asserted once
+  // here against the migration; see src/lib/menu-images/menu-item-rows.ts.
+  const item = itemRow as unknown as MenuItemDetailRow;
+
+  // database.types.ts predates phase 1, so the image columns are asserted
+  // against the migration here; see src/lib/menu-images/menu-item-rows.ts.
+  const photo = resolveDinerImage({
+    activeImageId: item.active_image_id,
+    imageSource: item.image_source,
+    imageVariants: item.image_variants,
+    legacyImageUrl: item.image_url,
+    supabaseUrl: env.NEXT_PUBLIC_SUPABASE_URL,
+  });
 
   const [
     { data: ingredientLinks },
@@ -181,17 +200,16 @@ export default async function MenuItemDetailPage({
         Menu
       </Link>
 
-      {item.image_url && (
-        // eslint-disable-next-line @next/next/no-img-element -- restaurant-supplied remote URL
-        <img
-          src={item.image_url}
-          alt={item.name}
-          width={800}
-          height={600}
-          fetchPriority="high"
-          className="bg-muted aspect-[4/3] w-full rounded-2xl object-cover"
-        />
-      )}
+      {/* The one image above the fold, so it loads eagerly. Renders
+          nothing at all when the dish has no photo — no reserved box, no
+          placeholder, so the page simply starts with the dish name. */}
+      <DishPhoto
+        image={photo}
+        alt={item.name}
+        sizes={DETAIL_SIZES}
+        priority
+        className="aspect-[4/3] w-full rounded-2xl"
+      />
 
       <div className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-4">

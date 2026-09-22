@@ -1,11 +1,13 @@
 "use server";
 import "server-only";
+import { revalidatePath } from "next/cache";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ImageRejected } from "./processing";
 import {
   authorizeUpload,
+  bucketForVariants,
   processUpload,
   publishImage,
   type ImageRecords,
@@ -273,4 +275,138 @@ export async function publishMenuPhoto(
   } catch (error) {
     return { ok: false, error: friendly(error) };
   }
+}
+
+/**
+ * A short-lived URL for an image that is NOT published yet.
+ *
+ * Pending variants live in the private bucket, which has no policy at all,
+ * so the browser cannot fetch them directly and must not be handed a path
+ * pretending to be a URL. Copying them into the public bucket just so an
+ * owner can look at them would defeat the whole phase 2 invariant — the
+ * review step exists precisely to decide whether they should ever be
+ * public.
+ *
+ * So the server signs a read URL for one object, valid for a few minutes:
+ * long enough to review, short enough that it is not a durable public link.
+ */
+export async function previewMenuPhoto(
+  restaurantId: string,
+  imageId: string,
+): Promise<{ ok: boolean; error?: string; url?: string }> {
+  const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const records = imageRecords(auth.context.supabase);
+  const record = await records.load(imageId);
+  // Read through RLS, so another restaurant's image is simply absent.
+  if (!record || record.restaurantId !== restaurantId) {
+    return { ok: false, error: "That photo could not be found." };
+  }
+
+  const variants = record.variantPaths ?? {};
+  // The medium variant is the review size; fall back to whatever exists.
+  const path = variants.medium ?? variants.large ?? variants.small;
+  if (!path) {
+    return { ok: false, error: "That photo has not finished processing." };
+  }
+
+  const bucket = bucketForVariants(record.status);
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage
+    .from(bucket)
+    .createSignedUrl(path, PREVIEW_URL_SECONDS);
+
+  if (error || !data) {
+    return { ok: false, error: "That photo could not be shown right now." };
+  }
+  return { ok: true, url: data.signedUrl };
+}
+
+/** Long enough to review a photo, short enough not to be a durable link. */
+const PREVIEW_URL_SECONDS = 300;
+
+/**
+ * Discard a photo awaiting review. Nothing public ever existed for it —
+ * `rejected` is reachable only from uploading, generating or
+ * pending_review — so there is no public cleanup to do, and the private
+ * material stays for the retention sweep.
+ */
+export async function rejectMenuPhoto(
+  restaurantId: string,
+  imageId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  return runImageRpc(restaurantId, "reject_menu_item_image", {
+    p_image_id: imageId,
+  });
+}
+
+/**
+ * Take the current photo off a dish. The row is kept (status `removed`)
+ * and its public objects are deliberately left in place for the retention
+ * window, so this is undoable and no in-flight browser request breaks.
+ */
+export async function removeMenuPhoto(
+  restaurantId: string,
+  menuItemId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  return runImageRpc(restaurantId, "remove_menu_item_image", {
+    p_menu_item_id: menuItemId,
+  });
+}
+
+/**
+ * Record that a pre-existing image really is a photo of this dish.
+ *
+ * This is the only way an `unverified` image becomes `real`, and it runs
+ * through phase 1's own function, which refuses to relabel an AI image.
+ * The front end never writes `source`.
+ */
+export async function confirmLegacyPhotoAuthentic(
+  restaurantId: string,
+  imageId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  return runImageRpc(restaurantId, "confirm_menu_item_image_authentic", {
+    p_image_id: imageId,
+  });
+}
+
+/**
+ * Shared shape for the lifecycle actions: authorize, call the phase 1
+ * function that enforces the rule, revalidate the menu.
+ *
+ * Every one of these is owner/manager-gated twice — once here for a decent
+ * error message, and again inside the database function, which is the
+ * boundary that actually holds.
+ */
+async function runImageRpc(
+  restaurantId: string,
+  fn: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const { error } = await rpcUntilTypesRegenerated(auth.context.supabase)(
+    fn,
+    args,
+  );
+  if (error) return { ok: false, error: friendlyImageError(error.message) };
+
+  revalidatePath("/dashboard/menu");
+  return { ok: true };
+}
+
+/** Turns the database's error codes into something an owner can act on. */
+function friendlyImageError(message: string): string {
+  if (message.includes("MENU_IMAGE_FORBIDDEN")) {
+    return "You don't have permission to manage this dish's photo.";
+  }
+  if (message.includes("MENU_IMAGE_INVALID_STATE")) {
+    return "That photo is no longer in a state where this is possible. Reload and try again.";
+  }
+  if (message.includes("MENU_IMAGE_NOT_AUTHENTIC")) {
+    return "An AI-generated image can't be confirmed as a restaurant photo.";
+  }
+  return "That didn't work. Please try again.";
 }
