@@ -903,9 +903,8 @@ phone photo becomes ~4.1 MB against a 1 MB cap; eight 10 MB files would be
 
 **Severity: BLOCKING** for importing a menu from phone photos.
 
-Not fixed here — out of Phase 2 scope, and a menu-import rewrite was
-explicitly excluded. **Proposed small fix**, reusing this phase's
-infrastructure rather than expanding it: have the browser upload each page
+**RESOLVED in phase 2.5 — see §22.** It was out of phase 2's scope, so the
+fix landed separately. What was proposed at the time, and is what shipped: have the browser upload each page
 straight to the existing `menu-imports` bucket (which already has
 owner/manager policies) with a signed upload URL from the same
 `StorageGateway`, then pass only the object _paths_ to the server action,
@@ -1024,22 +1023,128 @@ identical path — generate → private → process → private variants →
 branch that lets AI output reach public storage without review. A test
 asserts the module contains no reference to `ai_generated` at all.
 
-## 22. Phase 2.5 — Menu Import Direct Upload Fix
+## 22. Phase 2.5 — Menu import direct upload (2026-09-22, implemented)
 
-The immediate engineering task after phase 2, ahead of phase 3. Records the
-confirmed 1 MB server-action finding in §20.
+The confirmed 1 MB server-action defect from §20 is **resolved**: no image
+bytes travel through a server action any more.
 
-Intended architecture:
+### Before and after
 
 ```
-browser
-  → direct upload to the private menu-imports bucket
-  → server receives storage object paths only
-  → existing extraction/import pipeline continues unchanged
+BEFORE  browser → FileReader.readAsDataURL → hidden form fields
+                → server action (capped at 1 MB) → extraction
+
+AFTER   browser → startMenuImport(restaurantId, contentTypes[])   tiny request
+                ← { importId, pages: [{ index, path, signedUrl, token }] }
+                → uploadToSignedUrl, one page at a time     browser → Storage
+                → extractUploadedImport(restaurantId, importId)   tiny request
+                        → server fetches the private objects
+                        → builds data URLs server-side
+                        → existing extraction, unchanged
 ```
 
-Menu extraction itself is not redesigned: `extractMenuFromImages()`, the
-draft review flow and `commit_menu_import()` all stay as they are. The
-change is confined to how the bytes arrive — the uploader component and the
-first part of `createAndExtractImport()`, which downloads the objects
-server-side before calling the vision model.
+The old ceiling was roughly a single 750 KB photo, because base64 inflates
+bytes by about a third while the uploader offered eight files of up to
+10 MB. The two requests that remain carry a list of content types and an
+import id; the server action request size no longer depends on photo size
+at all. The limit was **not** raised — `next.config.ts` is untouched.
+
+### Path convention
+
+```
+{restaurant_id}/{import_id}/page-{n}.{jpg|png|webp}
+```
+
+Restaurant first, because that is what the existing menu-imports storage
+policies scope on (`(storage.foldername(name))[1]`). The import id beneath
+it keeps one import's pages together, and the page number keeps the user's
+ordering in Storage as well as in `source_paths` — a menu's categories
+routinely continue across a page break, and extraction reads all pages as
+one document.
+
+`menu_imports.source_paths` already existed for exactly this ("Storage
+object paths for the uploaded pages, in the order the user added them") and
+had simply never been used, so **Phase 2.5 needs no migration**.
+
+### Authorization
+
+Every key is computed on the server from the restaurant id the caller was
+already authorized for and an import id minted server-side. A client sends
+only how many pages it has and what type each is: it cannot choose a key,
+cannot reach another restaurant's folder, and each signed token is bound by
+Supabase to one object path.
+
+Extraction reads only the paths on the import row the server itself wrote —
+never a path from the request — so a caller cannot point the model at an
+object it chose. The row is read through RLS, so another restaurant's
+import is invisible; the restaurant id and the folder are re-checked anyway.
+
+### The existing menu-imports policy was kept
+
+Phase 2 gave the dish-photo bucket no policy at all, because folder-level
+authorization could not express "authorization for dish X must not also
+authorize dish Z". That reasoning does not transfer: an import's pages are
+working material for one restaurant rather than per-dish capabilities, so
+restaurant-level scoping is the right granularity, and the server mints
+every key and token regardless.
+
+The policy from `20260904120000_menu_imports.sql` is therefore unchanged.
+Its properties are now pinned by
+`tests/integration/db/menu-import-storage.test.ts`: owner and manager may
+upload into their own folder; staff, kitchen, diners and anonymous callers
+may not; no one may write or read another restaurant's folder. A later
+widening fails CI.
+
+### Limits
+
+Unchanged, so nothing a user could do before now fails: 8 pages, 10 MB each,
+JPEG/PNG/WebP. The client rejects oversized or wrong-typed files before
+uploading, the bucket enforces 10 MB and its own MIME list server-side, and
+extraction is unaffected by page size because it no longer competes with a
+request-body cap.
+
+### Client experience
+
+Previews, ordering, removal and validation are as before. The status text is
+now literal — `Preparing…`, `Uploading 1 of 4…`, `Reading your menu…` —
+because claiming extraction has started while bytes are still uploading
+makes a stalled upload look like a slow model. If any page fails to upload,
+extraction is never started: the user is told which page failed and can
+retry. A partial menu would otherwise import as a partial price list.
+
+### Cleanup and orphans
+
+| Case                           | Behaviour                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------- |
+| Authorized but never uploaded  | `uploaded` row with known `source_paths`, no objects                      |
+| Some pages uploaded, one fails | Extraction never starts; objects remain under the import's folder         |
+| All uploaded, extraction fails | Row marked `failed` with a customer-safe reason, objects kept for a retry |
+| A page missing at extraction   | Row marked `failed`, named page reported, nothing extracted               |
+| User abandons the import       | Row stays `uploaded`; harmless and visible                                |
+| Restaurant deleted             | Row cascades; objects need the sweep below                                |
+| Committed                      | Row `committed`; pages kept as the record of what was read                |
+
+No job system. Objects are deliberately kept rather than deleted on
+failure: they are the evidence for a retry, and the import row records
+exactly which paths belong to it.
+
+**Remaining orphan risk, for a future sweep:** Storage objects are never
+deleted by this flow. A cleanup script should remove objects under
+`{restaurant_id}/{import_id}/` for imports that are `failed` or `uploaded`
+past a retention age, and for import rows that no longer exist. This is the
+same sweep already documented for menu photos in §20 and is not built.
+
+### Not mixed with menu photos
+
+Import pages create no `menu_item_images` row, never enter either
+menu-photos bucket, never run through the dish-photo review or publish
+lifecycle, and are never shown to diners. Only two genuinely generic pieces
+are shared with Phase 2 — the `StorageGateway` interface and
+`isValidObjectPath` — rather than duplicating a storage abstraction.
+
+### Extraction is unchanged
+
+`extractMenuFromImages()` still receives data URLs, one per page, in order.
+Prompts, model list, parsing, price rules, draft behaviour, review and
+commit are all untouched. The only difference is that the data URLs are
+built on the server from private objects instead of in the browser.
