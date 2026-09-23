@@ -106,6 +106,20 @@ export async function createTestDb(): Promise<TestDb> {
     grant select, insert, update, delete on all tables in schema public to authenticated, anon, service_role;
   `);
 
+  // Storage, for the same reason and with the same hazard. A real Supabase
+  // project grants anon and authenticated full CRUD on storage.objects and
+  // leans entirely on RLS policies for the boundary. Without these grants a
+  // test asserting "anon cannot write this bucket" would pass on a missing
+  // grant this harness invented, not on the policy that actually protects
+  // production — and the menu-photos-private bucket's protection *is* the
+  // deliberate absence of any policy, which only means something if the
+  // grant underneath it is present.
+  await admin.exec(`
+    grant usage on schema storage to authenticated, anon, service_role;
+    grant select, insert, update, delete on storage.objects to authenticated, anon, service_role;
+    grant select on storage.buckets to authenticated, anon, service_role;
+  `);
+
   async function withRole<T>(
     role: "authenticated" | "anon" | "service_role",
     userId: string | null,

@@ -703,3 +703,343 @@ Checkout paid.
 - **Guard:** `tests/integration/db/function-grants.test.ts` pins the 50 functions still callable
   by `anon` as a pending-review list, so a newly exposed function fails CI. Reviewing those 50 is
   follow-up work.
+
+## 20. Phase 2 as built (2026-09-22)
+
+The storage and image-processing foundation. No owner-facing UI: phase 2
+ends with a pipeline the phase 3 UI will drive.
+
+### Storage areas
+
+Two buckets, one key structure, because phase 1 already fixed every path as
+`{restaurant_id}/{menu_item_id}/{image_id}/<plain file name>` and refuses
+anything else. `original_path` is always private; a variant key names an
+object in whichever bucket the image's status implies — private until it is
+published, public afterwards. See §21 for that rule, which is the one place
+bucket choice is decided.
+
+| Bucket                | Public | Holds                                                                 | Limits               |
+| --------------------- | ------ | --------------------------------------------------------------------- | -------------------- |
+| `menu-photos-private` | no     | `original.{jpg,png,webp}` and the variants of every unpublished image | 15 MB, jpeg/png/webp |
+| `menu-photos`         | yes    | `small.webp`, `medium.webp`, `large.webp` for published images only   | 2 MB, webp only      |
+
+The private bucket keeps originals at full resolution with EXIF intact, so
+a reprocess is possible and the 30-day retention window has something to
+hold. They are never served to diners.
+
+### Storage policies — and the deliberate absence of one
+
+`menu-photos-private` has **no RLS policy at all**. RLS is enabled on
+`storage.objects`, nothing matches the bucket, so every ambient read and
+write by `anon` or `authenticated` is refused — including by the
+restaurant's own owner.
+
+This differs from the `menu-imports` bucket, which uses the usual pattern:
+allow anything under `(storage.foldername(name))[1]` when the caller manages
+that restaurant. That is sound tenant isolation and it is not sufficient
+here. It authorizes a restaurant's entire folder, so a manager could write
+to any dish and any image id beneath it. The requirement is narrower:
+authorization for restaurant A / dish X / image Y must not also authorize
+A / dish Z. A policy cannot express that — it sees only the object name,
+and has no idea which image record the caller was granted.
+
+So the only way into the private bucket is a signed upload URL, minted
+server-side for one exact object path. `menu-photos` is public for reading
+and has no write policy, so only `service_role` — the server's own
+processing step — can create a published variant.
+
+An absence erodes more easily than a policy: one later migration adding a
+"convenient" policy would silently widen this back to a whole tenant folder.
+`tests/integration/db/menu-photo-storage.test.ts` asserts on every run that
+no policy references either bucket, and that owners, diners, anon and other
+restaurants can neither read nor write them.
+
+### Upload flow
+
+Image bytes never pass through a server action. A Next.js server action body
+is capped at 1 MB by default (`node_modules/next/dist/docs`, `serverActions`),
+`next.config.ts` does not raise it, and a phone photo is 2–6 MB.
+
+```
+browser  → startMenuPhotoUpload(restaurantId, menuItemId, contentType)   server action
+         ← { imageId, path, signedUrl }
+         → PUT the file directly to Storage                              no server involved
+         → finishMenuPhotoUpload(restaurantId, imageId)                  server action
+                → download original (service_role)
+                → sharp: decode, validate, orient, strip, resize
+                → upload variants to menu-photos-private     still private
+                → complete_menu_item_image(...)
+         ← ok; the image is now 'pending_review', nothing public yet
+
+owner publishes  → publishMenuPhoto(restaurantId, imageId)                server action
+                → copy variants private → public, then activate (see §21)
+```
+
+Four layers make a signed token unusable anywhere else:
+
+1. `authorizeRestaurantAction` — signed in, a member, owner or manager.
+2. `begin_menu_item_image_upload()` — phase 1 re-checks the caller manages
+   the restaurant _and_ that the dish belongs to it, then mints a fresh
+   image id. A client cannot supply one.
+3. The path is built from ids the **database** returned. The only client
+   input reaching it is the choice of file extension.
+4. Supabase binds the signed token to that single object path.
+
+### Processing
+
+`src/lib/menu-images/processing.ts`, Node runtime only (sharp is a native
+binding and cannot run on Edge).
+
+The client's Content-Type, file name and extension are treated as claims,
+not facts. Format is whatever libvips reports after decoding.
+
+| Limit      | Value           | Why                                                      |
+| ---------- | --------------- | -------------------------------------------------------- |
+| Max bytes  | 15 MB           | Matches the bucket ceiling; above a 12 MP phone photo    |
+| Max pixels | 40 MP           | Decompression-bomb guard; passes any phone or DSLR photo |
+| Max side   | 12,000 px       | Catches 1 × 40M shapes inside the pixel budget           |
+| Min side   | 200 px          | Below this there is nothing worth publishing             |
+| Formats    | JPEG, PNG, WebP | What restaurants actually send                           |
+
+The pixel limit is enforced twice: as `limitInputPixels` so libvips abandons
+a hostile file _during_ decode rather than after allocating it, and again on
+the decoded dimensions. `failOn: "error"` refuses a truncated file instead
+of publishing the part that parsed.
+
+**HEIC/HEIF is deliberately excluded.** The local libvips decodes it, but
+sharp's per-platform prebuilt binaries do not reliably, and an iPhone set to
+"Most Compatible" already sends JPEG. A format that works locally and fails
+in production for some users is worse than one not offered.
+
+### Variants
+
+Widths come from what the diner UI actually renders — cards at 96–112 CSS px
+(`size-24`/`sm:size-28`), the dish page full-bleed inside `max-w-2xl`
+(~640 CSS px at most, ~330–400 on a phone).
+
+| Variant  | Width | Covers                       |
+| -------- | ----- | ---------------------------- |
+| `small`  | 400   | Menu card at 3×              |
+| `medium` | 800   | Dish page on a 2× phone      |
+| `large`  | 1600  | Dish page at 3×, and desktop |
+
+WebP at quality 80. Aspect ratio is preserved — the UI crops with
+`object-cover`, so cropping server-side would only discard pixels the layout
+might later want.
+
+Never upscales, and never emits two variants of the same size: a 500 px
+source yields `small` 400 and `medium` 500, not three near-identical files.
+
+### Metadata
+
+Published variants carry pixels and nothing else. sharp emits no EXIF, XMP,
+IPTC or ICC unless asked, and this pipeline never asks. Orientation is the
+one tag that must be honoured before being dropped — `.rotate()` with no
+argument bakes it into the pixels, after which it is gone along with GPS
+coordinates and camera identifiers. Tested by asserting the fixture really
+carries EXIF and GPS, then that neither the tags nor the literal strings
+survive into any variant.
+
+### Caching
+
+Published variants are immutable: a replacement photo is a new image id and
+therefore a new path, never an overwrite. They are written with
+`public, max-age=31536000, immutable` and `upsert: false`. There is no
+invalidation story because nothing is ever invalidated.
+
+### Failure and orphans
+
+Variants are written to private Storage **before** the database is told they
+exist, and the image only ever reaches `pending_review`. Publishing remains
+a separate, explicit act (§21), so the photo currently on the menu is
+untouched by any failure here.
+
+On failure: every variant already written is removed from the **private**
+bucket, then the image is marked failed with a customer-safe message.
+Cleanup happens first — if marking the row fails too, the orphans are
+already gone. The database never claims variants that do not exist, and
+since nothing was public, there is nothing public to retract.
+
+The original is deliberately **not** deleted: it is the evidence for a
+retry.
+
+| Case                              | Behaviour now                                                            | Cleanup script (phase 3+)                                |
+| --------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------- |
+| Authorized, never uploaded        | Row stays `uploading`; nothing in Storage                                | Delete `uploading` rows older than the timeout           |
+| Uploaded, never processed         | Original orphaned in private bucket                                      | Sweep originals with no `active`/`pending_review` row    |
+| Processing failed part-way        | Written variants removed, row `failed`                                   | Sweep private originals for `failed` rows past retention |
+| Database failed after Storage     | Variants removed, row `failed`                                           | As above                                                 |
+| Same file uploaded twice          | Two image ids, two folders; `content_sha256` makes duplicates detectable | Optional de-duplication                                  |
+| Dish deleted mid-processing       | `complete` fails (the row is gone); variants removed                     | Sweep objects whose image row no longer exists           |
+| Restaurant deleted mid-processing | Same                                                                     | Sweep by restaurant prefix                               |
+
+No background job system. Recovery is deterministic and synchronous; the
+sweeps above are documented requirements for a future script, not built.
+
+### Runtime assumptions
+
+- `sharp` is now a **direct** dependency (`^0.35.4`); it was previously only
+  transitive via `next`, which is fragile.
+- Anything importing `processing.ts` must run on the Node runtime. Do not
+  add `export const runtime = "edge"` to a route that reaches it.
+- `processing.ts` and `upload-core.ts` deliberately omit `server-only` so
+  they can be unit-tested; `actions.ts` carries it.
+
+### Menu import: the 1 MB server-action limit — CONFIRMED, BLOCKING
+
+Investigated as required. The issue is real and reachable today.
+
+- `src/components/dashboard/menu-import-upload.tsx` reads each chosen file
+  with `readAsDataURL` and appends it as a `page` field.
+- All pages post in **one** request via `<form action={action}>` and
+  `useActionState`.
+- `createAndExtractImport` accepts up to 8 pages; the client permits files
+  up to 10 MB each and never downscales.
+- Base64 inflates bytes by ~33%, plus the data-URL header.
+
+So the practical ceiling is a single photo of roughly **750 KB**. One 3 MB
+phone photo becomes ~4.1 MB against a 1 MB cap; eight 10 MB files would be
+~109 MB. Normal phone photos fail.
+
+**Severity: BLOCKING** for importing a menu from phone photos.
+
+Not fixed here — out of Phase 2 scope, and a menu-import rewrite was
+explicitly excluded. **Proposed small fix**, reusing this phase's
+infrastructure rather than expanding it: have the browser upload each page
+straight to the existing `menu-imports` bucket (which already has
+owner/manager policies) with a signed upload URL from the same
+`StorageGateway`, then pass only the object _paths_ to the server action,
+which downloads them server-side before calling the vision model. The
+request then carries a few hundred bytes. This changes the uploader
+component and the first ~20 lines of `createAndExtractImport`, and touches
+neither extraction, review nor commit.
+
+### Still to do in phase 3
+
+Owner-facing photo management UI: pick a photo, show upload and processing
+progress, review the `pending_review` image beside the current one, publish
+or reject, replace, remove. Diner rendering of `variant_paths` with
+`srcset`. The orphan-sweep script from the table above.
+
+## 21. Phase 2 verification and the private/public invariant (2026-09-22)
+
+Verification found that processed variants were being written straight into
+the public bucket, so an image sat publicly readable while its status was
+still `pending_review`, and a rejected image's objects were never cleaned
+up. That is fixed; this section now records the invariant it established.
+
+### The invariant
+
+```
+PRIVATE STORAGE = source + processing + review
+PUBLIC STORAGE  = explicitly published sanitized derivatives only
+```
+
+An image in `uploading`, `generating`, `pending_review`, `rejected` or
+`failed` has **nothing** publicly readable. Processing finishing is not
+approval.
+
+### Lifecycle
+
+```
+browser
+  → original uploaded to menu-photos-private
+  → server validates and processes the original
+  → sanitized variants written to menu-photos-private   (same keys)
+  → complete_menu_item_image(...)  → status = pending_review
+        original: private   variants: private   public: nothing
+
+owner or manager publishes
+  → re-authorize owner/manager
+  → verify the image is publishable (pending_review, has variants)
+  → copy every variant private → public, server-side
+  → verify all copies succeeded
+  → publish_menu_item_image()  → this image active, the old one superseded
+```
+
+### Bucket choice is derived, never ad hoc
+
+The same relative key names an object in both buckets, which is convenient
+and dangerous in equal measure: treating a pending image's key as a public
+URL would expose a photo nobody approved. So no call site picks a bucket by
+hand. `variantBucket(status)` decides, from the lifecycle alone:
+
+| Status                                                            | Variants live in | Diner-facing? |
+| ----------------------------------------------------------------- | ---------------- | ------------- |
+| `uploading`, `generating`, `pending_review`, `rejected`, `failed` | private          | no            |
+| `active`                                                          | public           | yes           |
+| `superseded`, `removed`                                           | public           | no            |
+
+`isPubliclyResolvable()` is deliberately narrower than `variantBucket()`:
+only `active` may be rendered as the dish's photo. `superseded` and
+`removed` keep their public objects through the 30-day retention window, so
+a replacement never breaks a URL a browser is still holding, but neither is
+ever shown as current.
+
+### Failure ordering
+
+The two stores cannot be updated atomically, so the order is chosen to make
+the dangerous direction impossible:
+
+1. copy every required variant to public;
+2. confirm every copy succeeded;
+3. only then run `publish_menu_item_image()`, which activates this image and
+   steps the previous one down in one statement;
+4. if that call fails, remove the objects just copied.
+
+The database therefore never claims an image is active while its public
+variants are incomplete. The previous active photo is untouched by any
+failure, because it is stepped down only inside step 3.
+
+**The reverse window is real and deliberate:** during a failed publish,
+public objects can exist briefly for an image that is still
+`pending_review`. They are unreferenced orphans at unguessable paths —
+nothing in the database points at them, and `isPubliclyResolvable()` admits
+only `active`, so no diner UI can resolve them — and step 4 removes them
+immediately. They must never be treated as published.
+
+Publication uses Supabase's server-side `/object/copy` with
+`destinationBucket`, so no bytes pass through the application and the public
+object is byte-identical to the sanitized private one rather than a second
+encoding of it.
+
+### Rejection, replacement, removal
+
+Rejecting needs no storage cleanup at all: `rejected` is reachable only from
+`uploading`, `generating` or `pending_review`, none of which ever had public
+objects. Private pending and rejected material stays subject to the existing
+retention sweep.
+
+Replacement gets a new image id and therefore new immutable paths, and the
+previous image's public objects are deliberately **not** deleted — the
+30-day retention and undo strategy expects them to remain fetchable, and
+removing them would break URLs for an image that was, until moments ago,
+active.
+
+### Future AI images
+
+The storage layer never reads `source`. A generated image will follow the
+identical path — generate → private → process → private variants →
+`pending_review` → owner approves → public copy → active — and there is no
+branch that lets AI output reach public storage without review. A test
+asserts the module contains no reference to `ai_generated` at all.
+
+## 22. Phase 2.5 — Menu Import Direct Upload Fix
+
+The immediate engineering task after phase 2, ahead of phase 3. Records the
+confirmed 1 MB server-action finding in §20.
+
+Intended architecture:
+
+```
+browser
+  → direct upload to the private menu-imports bucket
+  → server receives storage object paths only
+  → existing extraction/import pipeline continues unchanged
+```
+
+Menu extraction itself is not redesigned: `extractMenuFromImages()`, the
+draft review flow and `commit_menu_import()` all stay as they are. The
+change is confined to how the bytes arrive — the uploader component and the
+first part of `createAndExtractImport()`, which downloads the objects
+server-side before calling the vision model.
