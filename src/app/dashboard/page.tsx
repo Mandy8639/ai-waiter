@@ -14,6 +14,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { getDashboardOverview } from "@/lib/dashboard/overview";
+import { ServiceRequestQueue } from "@/components/dashboard/service-request-queue";
+import { loadOpenRequests } from "@/lib/table-requests/actions";
 import { formatPrice } from "@/lib/format/price";
 import { STATUS_LABELS, type OrderStatus } from "@/lib/orders/status";
 import { cn } from "@/lib/utils";
@@ -72,7 +74,10 @@ function StatCard({
 
 export default async function DashboardOverviewPage() {
   const { restaurant } = await requireCurrentRestaurant();
-  const overview = await getDashboardOverview(restaurant.id, restaurant.role);
+  const [overview, openRequests] = await Promise.all([
+    getDashboardOverview(restaurant.id, restaurant.role),
+    loadOpenRequests(restaurant.id),
+  ]);
 
   const todayLabel = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -174,6 +179,21 @@ export default async function DashboardOverviewPage() {
           {serviceState.label}
         </span>
       </div>
+
+      {/* Above "needs attention" on purpose: everything in that list is a
+          task, while this is a person sitting at a table waiting. */}
+      <section
+        aria-labelledby="service-requests-heading"
+        className="flex flex-col gap-3"
+      >
+        <h2 id="service-requests-heading" className="type-label">
+          Tables waiting
+        </h2>
+        <ServiceRequestQueue
+          restaurantId={restaurant.id}
+          initial={openRequests}
+        />
+      </section>
 
       {attention.length > 0 && (
         <section

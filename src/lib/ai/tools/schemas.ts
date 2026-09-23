@@ -114,3 +114,31 @@ export const submitOrderSchema = z
 export const getOrderStatusSchema = z.object({}).strict();
 
 export const getCustomerOrderHistorySchema = z.object({}).strict();
+
+/**
+ * The only two things a table can ask a person for. An enum, not free
+ * text: the staff-facing surface is a queue somebody glances at during
+ * service, and a model that could invent a `kind` would turn that queue
+ * into a chat nobody is watching.
+ *
+ * There is deliberately no table or restaurant field here — as with every
+ * other tool, the context comes from the authenticated customer session
+ * (see tools/types.ts), so there is nothing for the model to tamper with.
+ */
+export const requestServiceSchema = z
+  .object({
+    kind: z
+      .enum(["waiter", "bill"])
+      .describe(
+        "What the customer is asking for: 'waiter' when they want someone to come to the table, 'bill' when they want to pay. Use this only when the customer actually asks for a person or for the bill — not to answer a question you can answer yourself.",
+      ),
+    note: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .describe(
+        "One short line of context for the staff member who will walk over, in the customer's own terms (e.g. 'asked about the spice level', 'wants to split the bill'). Omit it when there is nothing useful to add; never invent a reason.",
+      ),
+  })
+  .strict();
