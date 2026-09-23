@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MenuItemForm } from "@/components/menu/menu-item-form";
+import { DishPhotoManager } from "@/components/dashboard/dish-photo-manager";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { updateMenuItem } from "@/lib/menu/actions";
+import { env } from "@/lib/env";
+import { loadOwnerPhotoState } from "@/lib/menu-images/owner-state";
 
 export const metadata = {
   title: "Edit menu item — AI Waiter",
@@ -38,9 +41,31 @@ export default async function EditMenuItemPage({
     notFound();
   }
 
+  const photoState = await loadOwnerPhotoState(
+    supabase,
+    restaurant.id,
+    item.id,
+    env.NEXT_PUBLIC_SUPABASE_URL,
+  );
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <h1 className="text-2xl font-semibold tracking-tight">Edit menu item</h1>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Photo</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DishPhotoManager
+            restaurantId={restaurant.id}
+            menuItemId={item.id}
+            dishName={item.name}
+            initial={photoState}
+          />
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Item details</CardTitle>

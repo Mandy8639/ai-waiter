@@ -1148,3 +1148,152 @@ are shared with Phase 2 — the `StorageGateway` interface and
 Prompts, model list, parsing, price rules, draft behaviour, review and
 commit are all untouched. The only difference is that the data URLs are
 built on the server from private objects instead of in the browser.
+
+## 23. Phase 3 — Owner photo management and diner rendering (2026-09-22)
+
+Phase 2 built the pipeline; phase 3 makes it usable. No AI generation, and
+no "Generate with AI" action anywhere — that would be a button that fails.
+
+### One resolver, not one per page
+
+`src/lib/menu-images/resolve.ts` is the only place that decides which image
+a diner sees. Every surface — menu card, dish page, AI waiter card — renders
+what it is handed.
+
+It reads `menu_items`, not `menu_item_images`. That table is members-only
+(`menu_item_images_select_members`) and a diner is an anonymous auth user
+with no membership, so a join would be invisible to them. Phase 1 planned
+for this: `publish_menu_item_image()` denormalises the published variant
+keys and the source onto `menu_items.image_variants` / `image_source`.
+Diner rendering therefore needs no new policy and no wider grant.
+
+Two rules carry the weight:
+
+1. **`active_image_id` is the whole answer.** It is set only by publish and
+   cleared only by remove, so pending, rejected, failed and superseded
+   images are all invisible by construction, and a replacement stays
+   invisible until it is published.
+2. **A removed photo never comes back.** `remove_menu_item_image()`
+   deliberately leaves `image_url` in place, so treating that column as a
+   fallback would put the photo an owner just took down straight back on
+   the menu. It is read only when there IS an active image with no
+   processed variants — the backfilled legacy case.
+
+### Responsive variants
+
+`DishPhoto` renders `srcset` from the phase 2 widths with `sizes` measured
+from the real layout: menu cards draw at 96–112 CSS px, the dish page
+full-bleed inside `max-w-2xl`. A card therefore fetches the 400px file, not
+the 1600px one. The default `src` is the middle variant so a browser
+ignoring `srcset` still does something sensible. Aspect ratio is preserved
+and the UI crops with `object-cover`.
+
+A dish with no photo renders **nothing** — no grey box, no placeholder, no
+stock food. The text-first card is the designed state.
+
+### Owner flow
+
+Photo management lives in the existing Menu workflow, on the dish edit page,
+not in a separate media product.
+
+```
+no photo    → choose file → "This is a photo of our food" → Upload
+            → Preparing… → Uploading… → Processing photo…
+            → waiting for review
+review      → current and new side by side → Use this photo | Choose another
+active      → Replace photo | Remove photo
+legacy      → "Is this a photo of your food?" → Yes, it's our photo
+```
+
+The declaration is a single checkbox and appears only once a file is chosen.
+It does not prove authenticity; it records the restaurant's declaration, and
+it is the only route by which an upload becomes `source = 'real'`. Nothing
+in the UI can label an upload as AI-generated.
+
+**Nothing publishes by accident.** A processed photo always stops at "waiting
+for you". Only "Use this photo" calls `publishMenuPhoto`, and the photo
+diners see is untouched until that succeeds — if it fails, the current photo
+stays current and the replacement stays reviewable.
+
+### Previewing something private
+
+A pending photo's variants are in the private bucket, which has no policy at
+all. They are **not** copied to public storage to be previewed — that would
+defeat the point of reviewing them. `previewMenuPhoto` signs a read URL for
+one object, valid five minutes: long enough to review, short enough not to
+be a durable link. The bucket is chosen by `bucketForVariants(status)`, so a
+pending key is never turned into a public URL.
+
+### Source labels
+
+`real` carries no badge — a restaurant's own photo is the unremarkable case.
+`unverified` is shown to the owner as "Not confirmed" with a one-click
+confirmation, and is never presented to diners as verified photography.
+`ai_generated` renders a visible **AI-generated** label on every surface,
+through `DishPhoto`, so the disclosure cannot be implemented on one page and
+forgotten on another. No AI records are created to test this.
+
+### Menu-wide entry point
+
+`/dashboard/menu/photos` shows three real counts — your photos,
+AI-generated (informational, currently always zero), no photo yet — and
+lists the dishes still missing one, each linking into the normal per-dish
+flow. Deliberately not a media library: no thumbnail grid, no bulk actions,
+no bulk generation.
+
+### Accessibility and mobile
+
+Alt text is the dish name, never "image of". Upload progress and outcomes
+go through one `aria-live="polite"` region rather than a stream of updates.
+Actions are ordinary buttons, keyboard reachable, with dish-specific labels
+where the text alone would not identify them ("Add a photo to Cold Coffee").
+Removal asks for confirmation because diners lose the image. Verified at
+375px: current and new stack, nothing overflows, the empty placeholder is
+capped so it does not dominate the card.
+
+### Types
+
+`database.types.ts` still predates phase 1. Regenerating it was attempted
+and is not possible in this environment: `supabase gen types` shells out to
+Docker even when given `--db-url`, Docker is not installed, and the only
+other source of truth is production, which is off limits. Serving the
+migration-built schema over a TCP socket worked and still failed at the same
+Docker call.
+
+So the image columns are declared in `src/lib/menu-images/menu-item-rows.ts`
+exactly as the migration writes them, and each query asserts its rows once
+through a named helper rather than spreading `any` through the pages.
+Everything downstream is fully typed. Delete that file when the generated
+types catch up.
+
+### Real Storage verification — still pending
+
+Every phase 3 test runs against PGlite and stubs. The pipeline has never run
+against real Supabase Storage, because the phase 2 migration is not applied
+anywhere and production is off limits. Before this ships, run the checklist
+in §24 against a development project.
+
+## 24. Manual verification checklist (development Supabase only)
+
+Not production. Requires a non-production project with
+`20260922090000_menu_photo_storage.sql` applied. No such project is
+configured in this repository today — `SUPABASE_DB_URL` points at a
+disposable E2E project that no longer exists, and nothing was created for
+this purpose.
+
+| #   | Check                                             | Expected                                                                     |
+| --- | ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 1   | Owner clicks Upload photo                         | A signed upload URL is minted for `{restaurant}/{dish}/{image}/original.ext` |
+| 2   | Browser PUTs the file                             | Object appears in `menu-photos-private`; no bytes crossed the server action  |
+| 3   | Fetch that original anonymously                   | 400/403 — never the file                                                     |
+| 4   | Fetch a pending variant anonymously               | 400/403 — pending variants are private                                       |
+| 5   | Owner reviews the pending photo                   | Renders through the five-minute signed URL                                   |
+| 6   | Owner clicks Use this photo                       | All variants copied to `menu-photos`, then the image activates               |
+| 7   | Fetch a published variant anonymously             | 200, `cache-control: public, max-age=31536000, immutable`                    |
+| 8   | Upload a replacement, do not publish              | Diner menu still shows the OLD photo                                         |
+| 9   | Reject a pending photo                            | No object ever appears in `menu-photos` for it                               |
+| 10  | Another restaurant's owner tries any of the above | Refused at the database, before Storage                                      |
+
+Also worth checking by hand: an EXIF-laden phone photo loses its GPS on the
+published variant, and a menu card downloads the 400px file rather than the
+1600px one.
