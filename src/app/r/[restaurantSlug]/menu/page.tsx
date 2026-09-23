@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { HeroVideo } from "@/components/customer/hero-video";
+import { resolveHeroVideo } from "@/lib/hero-video/resolve";
 import { Flame, Leaf, Search, SearchX, Sprout, Wind, X } from "lucide-react";
 import {
   AskWaiterButton,
@@ -64,6 +66,13 @@ export default async function MenuPage({
   if (!restaurant || !restaurant.isActive) {
     notFound();
   }
+
+  // Null for almost every restaurant; a menu without a video is the menu.
+  const heroVideo = resolveHeroVideo({
+    activeHeroVideoId: restaurant.activeHeroVideoId,
+    heroVideo: restaurant.heroVideo,
+    supabaseUrl: env.NEXT_PUBLIC_SUPABASE_URL,
+  });
 
   const search = q?.trim() ?? "";
   const diet = parseDietFilters(dietParam);
@@ -225,6 +234,9 @@ export default async function MenuPage({
     <div className="flex flex-1 flex-col gap-6">
       {!isFiltered ? (
         <>
+          {heroVideo && (
+            <HeroVideo video={heroVideo} restaurantName={restaurant.name} />
+          )}
           <RestaurantHero restaurant={restaurant} eyebrow="Menu" />
           {menuIsAllVegetarian && (
             <p className="type-label text-success -mt-2 inline-flex items-center gap-1.5">

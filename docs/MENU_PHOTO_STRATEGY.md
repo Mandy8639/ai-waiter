@@ -1436,3 +1436,111 @@ does not claim it, is **report-only** — never deleted.
 3. Only when the output matches reality, run once with `--execute`.
 4. Scheduling (cron, Vercel, a Supabase scheduled function) comes after
    that, never before.
+
+---
+
+## 27. Phase 4B — Restaurant hero video (2026-09-23, implemented)
+
+One short video per restaurant, at the top of the diner menu. It reuses
+every mechanism the photo pipeline established, because the properties
+that made photos safe are the ones that matter here too.
+
+### Decisions taken
+
+| #   | Decision                                                                                                                                                                                                                                                                                                  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Restaurant-level only.** One hero per restaurant. No per-dish video.                                                                                                                                                                                                                                    |
+| 2   | **Poster first, tap to play.** The `<video>` element is not rendered until the diner taps it — `preload="none"` alone is not enough, since browsers disagree about what it permits. A diner on cellular in a restaurant pays nothing for a decoration they did not ask for.                               |
+| 3   | **No ffmpeg, now or later.** The video is stored and served exactly as uploaded.                                                                                                                                                                                                                          |
+| 4   | **MP4 and WebM only.** A QuickTime `.mov` — what an iPhone produces by default — is refused, and the UI says so plainly. Safari plays it; Chrome's support depends on the codec inside. A hero that works for the owner and breaks for half their diners is the worst outcome, because nobody reports it. |
+| 5   | **The owner supplies the poster.** A frame cannot be extracted without ffmpeg, so a still is required, not optional. It goes through the existing sharp pipeline.                                                                                                                                         |
+| 6   | **50 MB ceiling**, enforced by the bucket and again in the application, against the size Storage recorded rather than the size the browser claimed.                                                                                                                                                       |
+
+### Consequences of having no decoder
+
+Duration, dimensions and codec are **unknown**, so the schema has no column
+for them: a column that could only ever hold a guess is worse than no
+column. Validation is the bucket's MIME allow-list plus a container-header
+check (`src/lib/hero-video/container.ts`), which catches a renamed `.exe`,
+an HTML error page, a PDF, a ZIP and a JPEG — but is explicitly _not_ a
+decode. A hostile file that starts with a valid MP4 header and continues
+with anything at all will pass.
+
+That residual risk is bounded by what a browser does with it: served from a
+video-only bucket, under a Content-Type the bucket enforces, from an origin
+hosting nothing else. A browser handed a `video/mp4` it cannot decode shows
+a broken player; it does not execute it. The stronger defence is
+procedural — nothing is public until an owner has watched it and published
+it.
+
+The video's `sha256` is deliberately **not** computed. It would mean
+pulling up to 50 MB through the rendering server on every upload to fill a
+provenance column nothing compares against. The container check reads **64
+bytes** via a ranged request instead.
+
+### What was built
+
+`supabase/migrations/20260923090000_restaurant_hero_video.sql` — two
+buckets, `restaurant_hero_videos`, the `restaurants.active_hero_video_id` /
+`hero_video` pointer columns with a consistency constraint and a guard
+trigger, seven lifecycle functions, and explicit `revoke ... from public,
+anon` on every one of them.
+
+`src/lib/hero-video/` — `container.ts`, `paths.ts`, `upload-core.ts`,
+`resolve.ts`, `owner-state.ts`, `actions.ts`.
+`src/components/dashboard/hero-video-manager.tsx`,
+`src/components/customer/hero-video.tsx`.
+Retention: `HERO_VIDEO_POLICY` in the cleanup engine, with the same 30-day
+windows as photos — **deliberately not shorter**, even though these are the
+largest objects in the system, because the owner UI promises 30 days and
+the cleanup engine does not get to renegotiate a promise the product made.
+
+Tests: 21 integration (real Postgres, real migration), 36 unit for the
+library, 11 added to the cleanup suite.
+
+### Deployment ordering — this is not optional
+
+**The migration must be applied before this code is deployed.** Verified
+empirically on 2026-09-23: running this branch against a database without
+the migration makes `getPublicRestaurantBySlug` select columns PostgREST
+does not know, which returns no row, which calls `notFound()` — **the
+entire diner menu 404s, for every restaurant**.
+
+This is the same coupling Phase 3 introduced (the menu page already selects
+`active_image_id`, `image_source`, `image_variants`) and it is handled the
+same way: migration first, then deploy.
+
+### Verified against real Supabase Storage (2026-09-23)
+
+The migration was applied to the **disposable** project
+(`iriwghorcramhpmekktq`, never production) and the storage path was driven
+end to end. 22 checks, all passing, all objects removed afterwards:
+
+- both buckets exist with the right visibility, MIME allow-list and 50 MB
+  ceiling;
+- a signed upload URL writes its own path and is refused with
+  `Invalid signature` for any other — the binding is real, not assumed;
+- the bucket itself refuses `application/x-msdownload`
+  (_"mime type ... is not supported"_), so the MIME allow-list is a real
+  control and not decoration;
+- `stat()` reports the true size and content type from Storage;
+- **Storage honours a Range request — HTTP 206, 64 bytes returned, not the
+  whole object** — which is the assumption the whole no-ffmpeg design rests
+  on, and the one thing that could not be tested locally;
+- the container is detected correctly from those 64 ranged bytes;
+- an unreviewed video is **not** publicly readable (HTTP 400);
+- the server-side copy produces a publicly fetchable object served as
+  `video/mp4`, **byte-identical** to the private original;
+- the private bucket still refuses anonymous reads after publication.
+
+### Still not verified
+
+**No real camera file has been through this.** The video used above was a
+structurally valid MP4 container with padding, because there is no ffmpeg
+here to produce a playable one — so the plumbing is proven and
+_playability_ is not. The database lifecycle is proven separately, by the
+21 integration tests that run the real migration against real Postgres with
+real roles.
+
+Before this is announced to a restaurant: upload one real clip through the
+owner UI, watch it, publish it, and load the menu on a phone.

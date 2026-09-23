@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import type { HeroVideoPointer } from "@/lib/hero-video/resolve";
 
 export interface PublicRestaurant {
   id: string;
@@ -16,6 +17,13 @@ export interface PublicRestaurant {
   /** ISO 4217 code every diner-facing price is shown in — see src/lib/format/price.ts. */
   currency: string;
   isActive: boolean;
+  /**
+   * The hero video, denormalised onto restaurants so a diner can read it
+   * without access to the members-only lifecycle table. Null for almost
+   * every restaurant, which is the normal state of a menu.
+   */
+  activeHeroVideoId: string | null;
+  heroVideo: HeroVideoPointer | null;
 }
 
 /**
@@ -26,10 +34,25 @@ export interface PublicRestaurant {
 export const getPublicRestaurantBySlug = cache(
   async (slug: string): Promise<PublicRestaurant | null> => {
     const supabase = await createClient();
-    const { data } = await supabase
-      .from("restaurants")
+    // The hero video columns postdate database.types.ts, so the generated
+    // client types reject them by name. Asserted rather than inferred, in
+    // one place — the same approach as src/lib/menu-images/menu-item-rows.ts,
+    // and deletable once the types are regenerated.
+    const from = supabase.from.bind(supabase) as unknown as (table: string) => {
+      select: (columns: string) => {
+        eq: (
+          column: string,
+          value: string,
+        ) => {
+          maybeSingle: () => Promise<{
+            data: Record<string, unknown> | null;
+          }>;
+        };
+      };
+    };
+    const { data } = await from("restaurants")
       .select(
-        "id, name, slug, description, logo_url, cover_image_url, phone, address, city, state, currency, is_active",
+        "id, name, slug, description, logo_url, cover_image_url, phone, address, city, state, currency, is_active, active_hero_video_id, hero_video",
       )
       .eq("slug", slug)
       .maybeSingle();
@@ -37,18 +60,20 @@ export const getPublicRestaurantBySlug = cache(
     if (!data) return null;
 
     return {
-      id: data.id,
-      name: data.name,
-      slug: data.slug,
-      description: data.description,
-      logoUrl: data.logo_url,
-      coverImageUrl: data.cover_image_url,
-      phone: data.phone,
-      address: data.address,
-      city: data.city,
-      state: data.state,
-      currency: data.currency,
-      isActive: data.is_active,
+      id: data.id as string,
+      name: data.name as string,
+      slug: data.slug as string,
+      description: data.description as string | null,
+      logoUrl: data.logo_url as string | null,
+      coverImageUrl: data.cover_image_url as string | null,
+      phone: data.phone as string | null,
+      address: data.address as string | null,
+      city: data.city as string | null,
+      state: data.state as string | null,
+      currency: data.currency as string,
+      isActive: data.is_active as boolean,
+      activeHeroVideoId: (data.active_hero_video_id as string | null) ?? null,
+      heroVideo: (data.hero_video as HeroVideoPointer | null) ?? null,
     };
   },
 );

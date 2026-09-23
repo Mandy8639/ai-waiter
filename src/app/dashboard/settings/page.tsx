@@ -7,6 +7,9 @@ import {
 } from "@/components/ui/card";
 import { RestaurantProfileForm } from "@/components/settings/restaurant-profile-form";
 import { OperationalSettingsForm } from "@/components/settings/operational-settings-form";
+import { HeroVideoManager } from "@/components/dashboard/hero-video-manager";
+import { loadOwnerHeroVideoState } from "@/lib/hero-video/owner-state";
+import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import {
@@ -38,6 +41,12 @@ export default async function SettingsPage() {
       .eq("restaurant_id", restaurant.id)
       .single(),
   ]);
+
+  const heroVideoState = await loadOwnerHeroVideoState(
+    supabase,
+    restaurant.id,
+    env.NEXT_PUBLIC_SUPABASE_URL,
+  );
 
   const canManage =
     restaurant.role === "owner" || restaurant.role === "manager";
@@ -82,6 +91,23 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Menu video</CardTitle>
+          <CardDescription>
+            A short video at the top of your menu. Diners see a still image
+            first and only download the video if they tap it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <HeroVideoManager
+            restaurantId={restaurant.id}
+            initial={heroVideoState}
+            disabled={!canManage}
+          />
+        </CardContent>
+      </Card>
 
       {settings && (
         <Card>

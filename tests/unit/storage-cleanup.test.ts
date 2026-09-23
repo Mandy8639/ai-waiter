@@ -578,3 +578,202 @@ describe("execution", () => {
     expect(result.refused[0].reason).toBe("malformed_photo_path");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hero videos (phase 4B)
+//
+// Same rules as photos, one level shallower, and with one extra reason to
+// be careful: these are the largest objects in the system, so the pressure
+// to delete them early is real. The tests below are mostly assertions that
+// it is resisted.
+// ---------------------------------------------------------------------------
+
+const HERO = "77777777-7777-4777-8777-777777777777";
+const HERO_P = {
+  video: `${REST}/${HERO}/original.mp4`,
+  posterSmall: `${REST}/${HERO}/poster-small.webp`,
+  posterLarge: `${REST}/${HERO}/poster-large.webp`,
+};
+
+function hero(
+  over: Partial<import("@/lib/storage-cleanup/types").HeroVideoRecord> = {},
+): import("@/lib/storage-cleanup/types").HeroVideoRecord {
+  return {
+    id: HERO,
+    restaurantId: REST,
+    status: "active",
+    statusChangedAt: ago(100 * DAY),
+    videoPath: HERO_P.video,
+    posterPaths: { small: HERO_P.posterSmall, large: HERO_P.posterLarge },
+    ...over,
+  };
+}
+
+describe("hero video cleanup", () => {
+  it("never deletes the video on a live menu", () => {
+    const result = plan({
+      heroVideos: [hero({ status: "active" })],
+      restaurants: [{ id: REST, activeHeroVideoId: HERO }],
+      objects: [
+        obj(MANAGED_BUCKETS.videoPublic, HERO_P.video),
+        obj(MANAGED_BUCKETS.videoPublic, HERO_P.posterSmall),
+        obj(MANAGED_BUCKETS.videoPrivate, HERO_P.video),
+      ],
+    });
+    expect(result.candidates).toHaveLength(0);
+    expect(result.skips).toHaveLength(3);
+  });
+
+  it("vetoes deletion when the restaurant still points at it, whatever the row says", () => {
+    // Two sources of truth disagreeing is a bug, not a licence to delete.
+    const result = plan({
+      heroVideos: [
+        hero({ status: "removed", statusChangedAt: ago(100 * DAY) }),
+      ],
+      restaurants: [{ id: REST, activeHeroVideoId: HERO }],
+      objects: [obj(MANAGED_BUCKETS.videoPublic, HERO_P.video)],
+    });
+    expect(result.candidates).toHaveLength(0);
+    expect(result.skips[0].reason).toBe("referenced_as_active_hero_video");
+  });
+
+  it("keeps a video waiting for review indefinitely", () => {
+    const result = plan({
+      heroVideos: [
+        hero({ status: "pending_review", statusChangedAt: ago(365 * DAY) }),
+      ],
+      restaurants: [{ id: REST, activeHeroVideoId: null }],
+      objects: [obj(MANAGED_BUCKETS.videoPrivate, HERO_P.video)],
+    });
+    expect(result.candidates).toHaveLength(0);
+    expect(result.skips[0].reason).toBe("pending_review_never_eligible");
+  });
+
+  it("holds a superseded video for the full 30 days the owner was promised", () => {
+    const justInside = plan({
+      heroVideos: [
+        hero({ status: "superseded", statusChangedAt: ago(29 * DAY) }),
+      ],
+      restaurants: [{ id: REST, activeHeroVideoId: null }],
+      objects: [obj(MANAGED_BUCKETS.videoPublic, HERO_P.video)],
+    });
+    expect(justInside.candidates).toHaveLength(0);
+    expect(justInside.skips[0].reason).toBe("within_retention");
+
+    const past = plan({
+      heroVideos: [
+        hero({ status: "superseded", statusChangedAt: ago(31 * DAY) }),
+      ],
+      restaurants: [{ id: REST, activeHeroVideoId: null }],
+      objects: [obj(MANAGED_BUCKETS.videoPublic, HERO_P.video)],
+    });
+    expect(past.candidates).toHaveLength(1);
+    expect(past.candidates[0].reason).toBe(
+      "hero_video_superseded_retention_expired",
+    );
+    expect(past.candidates[0].heroVideoId).toBe(HERO);
+  });
+
+  it("collects an abandoned upload after a day, not sooner", () => {
+    const fresh = plan({
+      heroVideos: [
+        hero({
+          status: "uploading",
+          statusChangedAt: ago(6 * 60 * 60 * 1000),
+          videoPath: HERO_P.video,
+        }),
+      ],
+      restaurants: [{ id: REST, activeHeroVideoId: null }],
+      objects: [obj(MANAGED_BUCKETS.videoPrivate, HERO_P.video)],
+    });
+    expect(fresh.candidates).toHaveLength(0);
+
+    const stale = plan({
+      heroVideos: [
+        hero({ status: "uploading", statusChangedAt: ago(2 * DAY) }),
+      ],
+      restaurants: [{ id: REST, activeHeroVideoId: null }],
+      objects: [obj(MANAGED_BUCKETS.videoPrivate, HERO_P.video)],
+    });
+    expect(stale.candidates[0].reason).toBe("hero_video_incomplete_abandoned");
+  });
+
+  it("reports an unrecognisable path instead of deleting it", () => {
+    const result = plan({
+      heroVideos: [],
+      restaurants: [],
+      objects: [obj(MANAGED_BUCKETS.videoPublic, "not/a/valid/hero/path.mp4")],
+    });
+    expect(result.candidates).toHaveLength(0);
+    expect(result.skips[0].reason).toBe("malformed_path");
+  });
+
+  it("waits a day before collecting a true orphan, in case a failed publish is still compensating", () => {
+    const fresh = plan({
+      heroVideos: [],
+      restaurants: [],
+      objects: [
+        obj(MANAGED_BUCKETS.videoPublic, HERO_P.video, ago(2 * 60 * 60 * 1000)),
+      ],
+    });
+    expect(fresh.skips[0].reason).toBe("within_safety_window");
+
+    const old = plan({
+      heroVideos: [],
+      restaurants: [],
+      objects: [obj(MANAGED_BUCKETS.videoPublic, HERO_P.video, ago(3 * DAY))],
+    });
+    expect(old.candidates[0].reason).toBe("hero_video_orphan_expired");
+    expect(old.candidates[0].heroVideoId).toBeNull();
+  });
+
+  it("will not guess about a path its owning row does not list", () => {
+    const result = plan({
+      heroVideos: [hero({ status: "rejected", posterPaths: {} })],
+      restaurants: [{ id: REST, activeHeroVideoId: null }],
+      objects: [obj(MANAGED_BUCKETS.videoPrivate, HERO_P.posterSmall)],
+    });
+    expect(result.candidates).toHaveLength(0);
+    expect(result.skips[0].reason).toBe("path_does_not_match_owning_record");
+  });
+
+  it("deletes a rejected video's poster stills along with the video", () => {
+    const result = plan({
+      heroVideos: [
+        hero({ status: "rejected", statusChangedAt: ago(40 * DAY) }),
+      ],
+      restaurants: [{ id: REST, activeHeroVideoId: null }],
+      objects: [
+        obj(MANAGED_BUCKETS.videoPrivate, HERO_P.video),
+        obj(MANAGED_BUCKETS.videoPrivate, HERO_P.posterSmall),
+        obj(MANAGED_BUCKETS.videoPrivate, HERO_P.posterLarge),
+      ],
+    });
+    expect(result.candidates).toHaveLength(3);
+    expect(
+      result.candidates.every(
+        (c) => c.reason === "hero_video_rejected_retention_expired",
+      ),
+    ).toBe(true);
+  });
+
+  it("treats video objects as unowned when the caller omits hero rows entirely", () => {
+    // The optional-inputs guarantee: under-delete, never over-delete.
+    const result = plan({
+      objects: [obj(MANAGED_BUCKETS.videoPublic, HERO_P.video, ago(3 * DAY))],
+    });
+    expect(result.candidates[0].reason).toBe("hero_video_orphan_expired");
+    expect(result.candidates[0].heroVideoId).toBeNull();
+  });
+
+  it("does not confuse a hero path with a menu photo path", () => {
+    // Three segments vs four: a dish photo path in a video bucket is not a
+    // hero video, and must not be parsed as one.
+    const result = plan({
+      heroVideos: [],
+      restaurants: [],
+      objects: [obj(MANAGED_BUCKETS.videoPublic, P.original, ago(3 * DAY))],
+    });
+    expect(result.skips[0].reason).toBe("malformed_path");
+  });
+});

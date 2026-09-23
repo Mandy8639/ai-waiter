@@ -35,9 +35,11 @@ import {
   MANAGED_BUCKETS,
 } from "../src/lib/storage-cleanup/policy";
 import type {
+  HeroVideoRecord,
   ImageRecord,
   ImportRecord,
   MenuItemRecord,
+  RestaurantRecord,
   StorageObject,
 } from "../src/lib/storage-cleanup/types";
 
@@ -101,15 +103,20 @@ async function main(): Promise<void> {
     ) => Promise<{ data: unknown[] | null; error: unknown }>;
   };
 
-  const [imageRows, itemRows, importRows] = await Promise.all([
-    from("menu_item_images").select(
-      "id, restaurant_id, menu_item_id, status, status_changed_at, original_path, variant_paths",
-    ),
-    from("menu_items").select("id, active_image_id"),
-    from("menu_imports").select(
-      "id, restaurant_id, status, source_paths, updated_at",
-    ),
-  ]);
+  const [imageRows, itemRows, importRows, heroRows, restaurantRows] =
+    await Promise.all([
+      from("menu_item_images").select(
+        "id, restaurant_id, menu_item_id, status, status_changed_at, original_path, variant_paths",
+      ),
+      from("menu_items").select("id, active_image_id"),
+      from("menu_imports").select(
+        "id, restaurant_id, status, source_paths, updated_at",
+      ),
+      from("restaurant_hero_videos").select(
+        "id, restaurant_id, status, status_changed_at, video_path, poster_paths",
+      ),
+      from("restaurants").select("id, active_hero_video_id"),
+    ]);
 
   const images: ImageRecord[] = ((imageRows.data ?? []) as never[]).map(
     (r: Record<string, string>) => ({
@@ -139,6 +146,24 @@ async function main(): Promise<void> {
     }),
   );
 
+  const heroVideos: HeroVideoRecord[] = ((heroRows.data ?? []) as never[]).map(
+    (r: Record<string, string>) => ({
+      id: r.id,
+      restaurantId: r.restaurant_id,
+      status: r.status as HeroVideoRecord["status"],
+      statusChangedAt: new Date(r.status_changed_at),
+      videoPath: r.video_path ?? null,
+      posterPaths:
+        (r.poster_paths as unknown as Record<string, string>) ?? null,
+    }),
+  );
+  const restaurants: RestaurantRecord[] = (
+    (restaurantRows.data ?? []) as never[]
+  ).map((r: Record<string, string>) => ({
+    id: r.id,
+    activeHeroVideoId: r.active_hero_video_id ?? null,
+  }));
+
   const objects: StorageObject[] = [];
   for (const bucket of Object.values(MANAGED_BUCKETS)) {
     objects.push(...(await listBucket(supabase, bucket)));
@@ -149,6 +174,8 @@ async function main(): Promise<void> {
     images,
     menuItems,
     imports,
+    heroVideos,
+    restaurants,
     objects,
   });
   const result = await executeCleanup(
