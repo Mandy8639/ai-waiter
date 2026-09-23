@@ -162,6 +162,22 @@ describe("authorizeUpload", () => {
   });
 });
 
+describe("PUBLISHED_CACHE_CONTROL", () => {
+  /**
+   * Regression: this was once the full directive string, which Supabase
+   * nested into `public, max-age=public, max-age=31536000, immutable`. The
+   * value must stay a bare number of seconds, because the header is the
+   * server's to build.
+   */
+  it("is a bare number of seconds, never a directive", () => {
+    expect(PUBLISHED_CACHE_CONTROL).toMatch(/^\d+$/);
+  });
+
+  it("asks for a year", () => {
+    expect(Number(PUBLISHED_CACHE_CONTROL)).toBe(365 * 24 * 60 * 60);
+  });
+});
+
 describe("processUpload", () => {
   it("writes every variant to the PRIVATE bucket, not the public one", async () => {
     const storage = storageStub();
