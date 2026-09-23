@@ -1297,3 +1297,142 @@ this purpose.
 Also worth checking by hand: an EXIF-laden phone photo loses its GPS on the
 published variant, and a menu card downloads the 400px file rather than the
 1600px one.
+
+## 25. Phase 3.5B — Storage retention and orphan cleanup (2026-09-22)
+
+The cleanup engine. Not scheduled, not enabled, and **never yet executed
+against real Supabase Storage.**
+
+### The principle everything follows from
+
+Cleanup is **database-led**. There is no rule anywhere of the form "object
+older than X, delete it". An object is deleted because a database row says
+its lifecycle has retired _and_ the retention window has passed _and_ the
+path proves which record owns it. "Old" is a property of bytes; "safe to
+delete" is a property of the lifecycle that owns them.
+
+Second principle: **Storage retention and database retention are separate
+decisions.** This phase deletes bytes only. Provenance, timestamps, source
+and lifecycle history stay in Postgres — they are small, and they are the
+record of what a restaurant published to diners. The generation-attempt
+ledger is append-only and is never touched at all.
+
+### Lifecycle inventory (from the schema, not invented)
+
+`menu_item_images.status` — all eight values:
+
+| Status           | Private expected | Public expected | Private retention | Public retention |
+| ---------------- | ---------------- | --------------- | ----------------- | ---------------- |
+| `active`         | yes              | yes             | **never**         | **never**        |
+| `pending_review` | yes              | no              | **never**         | n/a              |
+| `uploading`      | yes              | no              | 24 h              | n/a              |
+| `generating`     | yes              | no              | 24 h              | n/a              |
+| `failed`         | yes              | no              | 30 d              | n/a              |
+| `rejected`       | yes              | no              | 30 d              | n/a              |
+| `superseded`     | yes              | yes             | 30 d              | 30 d             |
+| `removed`        | yes              | yes             | 30 d              | 30 d             |
+
+`menu_imports.status` — all five:
+
+| Status       | Retention on source pages                  |
+| ------------ | ------------------------------------------ |
+| `uploaded`   | 24 h (abandoned)                           |
+| `extracting` | 24 h (crashed run)                         |
+| `review`     | **never** — a person is reading the drafts |
+| `committed`  | 7 d                                        |
+| `failed`     | 7 d                                        |
+
+`menu_item_images.source` (`real` / `ai_generated` / `unverified`) is
+**provenance, not lifecycle**. The planner never reads it; all three clean
+identically. Conflating the two would be an easy and dangerous mistake.
+
+`menu_image_generation_attempts.status` (`started`, `succeeded`, `failed`,
+`timed_out`, `cancelled`) appears here only to record that the ledger is
+append-only and out of scope.
+
+### Never deleted, at any age
+
+- anything belonging to an `active` image;
+- **anything a dish's `active_image_id` points at**, even if that row's own
+  status says otherwise — two sources of truth disagreeing is a bug, and a
+  bug is not a licence to delete a diner's photo;
+- anything `pending_review`, however old: an owner taking a week to look is
+  not abandonment;
+- an object whose owning record cannot be proven;
+- a malformed path, a path outside the three managed buckets, or a path
+  whose image/import id does not match the record claiming it;
+- any database row or ledger entry.
+
+Where safety cannot be proven, the object is **skipped and reported**, never
+deleted.
+
+### Two stages
+
+**Plan** (`src/lib/storage-cleanup/plan.ts`) is a pure function of database
+rows, an object inventory and `now`. It produces candidates carrying a
+machine-readable `reason`, `ageMs`, `safeAfter` and size, plus a skip entry
+with a reason for **every** object it declined. A cleanup system that
+silently skips is indistinguishable from one that silently deletes the wrong
+thing, so the skips are reported as loudly as the candidates.
+
+**Execute** (`execute.ts`) deletes only what the plan approved, after
+re-validating every candidate against the same path rules. A candidate that
+was hand-edited, replayed from an old run, or produced by a planner bug
+still cannot name an arbitrary object; refusals are reported.
+
+### Dry run is the default
+
+`npm run storage:cleanup` reports and deletes nothing. `--execute` is
+required to delete, and `--batch=N` overrides the default limit of 100
+objects per run, with continuation reported when more remain.
+
+### Execution safeguards
+
+1. Dry run by default.
+2. **The target is never implicit.** The Supabase CLI link points at
+   production, so the script ignores it entirely and requires an explicit
+   `STORAGE_CLEANUP_ENV_FILE`. Forgetting to say where means it refuses to
+   run rather than quietly cleaning production.
+3. Known production refs are refused unless
+   `STORAGE_CLEANUP_ALLOW_PRODUCTION=i-understand` — a speed bump against
+   the 2am mistake, not a real barrier.
+4. Bounded batches; no recursion, no unbounded deletion.
+5. Objects are deleted one at a time: a failure is recorded and stepped
+   over, never aborting the run. Nothing about the database is touched, so
+   the next run recomputes the same state and finds fewer objects. That is
+   what makes it idempotent and retryable.
+
+### Orphans
+
+A **public orphan** is an object in `menu-photos` with no legitimate owning
+row — almost always the brief window during a failed publish, which Phase 2
+compensates for within seconds. It waits a 24-hour safety window so a
+compensating delete that is merely slow is never raced.
+
+A **private orphan** is the same idea in `menu-photos-private`: a signed
+upload that never completed, variants whose `complete_menu_item_image()`
+failed, or leftovers of a deleted row. Same 24-hour window, same path proof.
+
+Anything whose path does not parse, or whose id belongs to a record that
+does not claim it, is **report-only** — never deleted.
+
+### Known limitations
+
+- **Not verified against real Supabase Storage.** The planner and executor
+  have 37 tests; the CLI wiring — listing, deleting, pagination — has never
+  run against a live service.
+- Bucket listing walks prefixes three deep because Storage offers no flat
+  list; on a large bucket this will be slow.
+- `created_at` from a storage listing is used only for orphan safety
+  windows, never for lifecycle decisions.
+- No scheduler. Deliberately.
+
+### Before this is switched on
+
+1. Run `STORAGE_CLEANUP_ENV_FILE=.env.e2e-disposable.local npm run storage:cleanup`
+   against the development project and read the plan.
+2. Check every candidate and every skip against what is actually in the
+   buckets.
+3. Only when the output matches reality, run once with `--execute`.
+4. Scheduling (cron, Vercel, a Supabase scheduled function) comes after
+   that, never before.
