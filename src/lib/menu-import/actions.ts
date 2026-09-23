@@ -5,7 +5,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { toFriendlyError } from "@/lib/errors/database-error";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { StorageGateway } from "@/lib/menu-images/upload-core";
 import { extractMenuFromImages } from "./vision";
+import {
+  ImportUploadRejected,
+  MENU_IMPORTS_BUCKET,
+  authorizeImportUpload,
+  loadImportPageDataUrls,
+  type ImportRecords,
+} from "./upload-core";
 
 /**
  * Server actions for importing a menu from uploaded photographs.
@@ -24,38 +33,154 @@ export interface MenuImportState {
   notice?: string;
 }
 
-/** Pages are read in the browser and posted as data URLs — see the upload form. */
-export async function createAndExtractImport(
+/**
+ * Storage access for import pages.
+ *
+ * The admin client is used for two operations only: minting a signed
+ * upload URL for one exact object, and downloading a page the server
+ * itself recorded. Every database read stays on the request-scoped client
+ * so RLS still applies.
+ */
+function storageGateway(): Pick<
+  StorageGateway,
+  "createSignedUploadUrl" | "download" | "remove"
+> {
+  const admin = createAdminClient();
+  return {
+    async createSignedUploadUrl(bucket, path) {
+      const { data, error } = await admin.storage
+        .from(bucket)
+        .createSignedUploadUrl(path);
+      if (error || !data) {
+        throw new Error(error?.message ?? "Could not authorize the upload.");
+      }
+      return { signedUrl: data.signedUrl, token: data.token };
+    },
+    async download(bucket, path) {
+      const { data, error } = await admin.storage.from(bucket).download(path);
+      if (error || !data) throw new Error(error?.message ?? "not found");
+      return Buffer.from(await data.arrayBuffer());
+    },
+    async remove(bucket, paths) {
+      const { error } = await admin.storage.from(bucket).remove(paths);
+      if (error) throw new Error(error.message);
+    },
+  };
+}
+
+function importRecords(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): ImportRecords {
+  return {
+    async create({ importId, restaurantId, sourcePaths }) {
+      const { error } = await supabase.from("menu_imports").insert({
+        id: importId,
+        restaurant_id: restaurantId,
+        status: "uploaded",
+        source_paths: sourcePaths,
+      });
+      if (error) throw new Error(toFriendlyError(error, "menu import"));
+    },
+    async load(importId) {
+      const { data } = await supabase
+        .from("menu_imports")
+        .select("restaurant_id, status, source_paths")
+        .eq("id", importId)
+        .maybeSingle();
+      if (!data) return null;
+      return {
+        restaurantId: data.restaurant_id,
+        status: data.status,
+        sourcePaths: data.source_paths ?? [],
+      };
+    },
+  };
+}
+
+export interface StartImportResult {
+  ok: boolean;
+  error?: string;
+  importId?: string;
+  pages?: Array<{
+    index: number;
+    path: string;
+    signedUrl: string;
+    token: string;
+  }>;
+}
+
+/**
+ * Step 1: create the import and authorize one upload per page.
+ *
+ * Carries no image bytes. The browser sends only how many pages it has and
+ * what type each one is, and receives a credential bound to a single
+ * server-chosen object path per page.
+ */
+export async function startMenuImport(
   restaurantId: string,
-  _prev: MenuImportState,
-  formData: FormData,
+  contentTypes: string[],
+): Promise<StartImportResult> {
+  const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  try {
+    const result = await authorizeImportUpload(
+      { restaurantId, contentTypes },
+      {
+        records: importRecords(auth.context.supabase),
+        storage: storageGateway() as StorageGateway,
+      },
+    );
+    return { ok: true, importId: result.importId, pages: result.pages };
+  } catch (error) {
+    return { ok: false, error: friendlyImportError(error) };
+  }
+}
+
+/**
+ * Step 2: extract, once every page has been uploaded.
+ *
+ * Takes an import id and nothing else. The page paths are read from the
+ * row the server wrote, so a caller cannot point extraction at an object
+ * it chose. Extraction itself is untouched: it receives the same data URLs
+ * it always did, built here from the private objects instead of in the
+ * browser.
+ */
+export async function extractUploadedImport(
+  restaurantId: string,
+  importId: string,
 ): Promise<MenuImportState> {
   const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
   if (!auth.ok) return { error: auth.error };
 
-  const pages = formData.getAll("page").map(String).filter(Boolean);
-  if (pages.length === 0) {
-    return { error: "Add at least one photo of your menu." };
-  }
-  if (pages.length > 8) {
-    // A practical ceiling: more pages in one call means a longer request
-    // and a likelier truncation, both of which read as "it broke".
-    return { error: "Please import up to 8 pages at a time." };
+  const supabase = auth.context.supabase;
+  const records = importRecords(supabase);
+
+  let imageDataUrls: string[];
+  try {
+    imageDataUrls = await loadImportPageDataUrls(importId, restaurantId, {
+      records,
+      storage: storageGateway() as StorageGateway,
+    });
+  } catch (error) {
+    const message = friendlyImportError(error);
+    // A page that never arrived is recorded on the row, like any other
+    // failure, so an abandoned import is diagnosable afterwards.
+    await supabase
+      .from("menu_imports")
+      .update({ status: "failed", error: message })
+      .eq("id", importId)
+      .eq("restaurant_id", restaurantId);
+    return { error: message };
   }
 
-  const supabase = await createClient();
-
-  const { data: created, error: createError } = await supabase
+  await supabase
     .from("menu_imports")
-    .insert({ restaurant_id: restaurantId, status: "extracting" })
-    .select("id")
-    .single();
+    .update({ status: "extracting" })
+    .eq("id", importId)
+    .eq("restaurant_id", restaurantId);
 
-  if (createError || !created) {
-    return { error: toFriendlyError(createError, "menu import") };
-  }
-
-  const result = await extractMenuFromImages({ imageDataUrls: pages });
+  const result = await extractMenuFromImages({ imageDataUrls });
 
   if (!result.ok) {
     // Recorded on the row rather than only shown once, so a failed import
@@ -67,13 +192,13 @@ export async function createAndExtractImport(
         error: result.error ?? "Extraction failed.",
         extraction_model: result.model ?? null,
       })
-      .eq("id", created.id);
+      .eq("id", importId);
     return { error: result.error };
   }
 
   const { error: itemsError } = await supabase.from("menu_import_items").insert(
     result.drafts.map((d) => ({
-      import_id: created.id,
+      import_id: importId,
       restaurant_id: restaurantId,
       category_name: d.categoryName,
       name: d.name,
@@ -89,16 +214,22 @@ export async function createAndExtractImport(
         status: "failed",
         error: toFriendlyError(itemsError, "menu items"),
       })
-      .eq("id", created.id);
+      .eq("id", importId);
     return { error: toFriendlyError(itemsError, "menu items") };
   }
 
   await supabase
     .from("menu_imports")
     .update({ status: "review", extraction_model: result.model ?? null })
-    .eq("id", created.id);
+    .eq("id", importId);
 
-  redirect(`/dashboard/menu/import/${created.id}`);
+  redirect(`/dashboard/menu/import/${importId}`);
+}
+
+function friendlyImportError(error: unknown): string {
+  if (error instanceof ImportUploadRejected) return error.message;
+  if (error instanceof Error && error.message) return error.message;
+  return "That menu import could not be started. Please try again.";
 }
 
 /** Saves the reviewer's corrections. Called before commit, and on its own as a save. */
