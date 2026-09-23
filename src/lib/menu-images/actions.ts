@@ -14,6 +14,20 @@ import {
   type StorageGateway,
 } from "./upload-core";
 import type { ImageStatus } from "./paths";
+import {
+  generateImage,
+  quotaMessage,
+  type GenerationRecords,
+} from "./generation-core";
+import {
+  GenerationFailed,
+  GenerationUnavailable,
+  configuredModel,
+  generationConfigured,
+  generationTimeoutMs,
+  unavailableMessage,
+} from "./generation-provider";
+import { OpenRouterImageGenerationProvider } from "./openrouter-image-provider";
 
 /**
  * Server actions for the phase 2 upload pipeline.
@@ -409,4 +423,159 @@ function friendlyImageError(message: string): string {
     return "An AI-generated image can't be confirmed as a restaurant photo.";
   }
   return "That didn't work. Please try again.";
+}
+
+/* -------------------------------------------------------------------------
+ * Phase 4: AI image generation
+ *
+ * Shipped switched off. With MENU_IMAGE_MODEL unset — the default, and what
+ * production runs — `generationAvailability()` reports UNCONFIGURED, the
+ * owner UI renders a disabled button with an explanation, and
+ * `generateMenuPhoto` refuses before it authorizes anything. Not one
+ * request is made and no quota is touched.
+ *
+ * It is off because it cannot be on: re-checked 2026-09-23, OpenRouter's
+ * dedicated image API lists 54 models and none is free, and the approved
+ * zero-cost model (recraft/recraft-v3:free) still reports no serving
+ * endpoints. docs/MENU_PHOTO_STRATEGY.md §18 decision 1 requires $0, so
+ * the switch stays off until a free model exists or someone decides to pay
+ * — at which point this is one environment variable, not a code change.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Can the button be offered? Never throws and never calls the network, so
+ * a page render cannot be held up by a provider being slow.
+ */
+export async function generationAvailability(): Promise<{
+  available: boolean;
+  message?: string;
+}> {
+  const state = generationConfigured();
+  return state.available
+    ? { available: true }
+    : { available: false, message: unavailableMessage(state.reason) };
+}
+
+function generationRecords(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): GenerationRecords {
+  return {
+    async beginGeneration(menuItemId) {
+      const { data, error } = await rpcUntilTypesRegenerated(supabase)(
+        "begin_menu_item_image_generation",
+        { p_menu_item_id: menuItemId },
+      );
+      // The quota exceptions arrive here. They are rethrown verbatim so
+      // quotaMessage() can recognise them; the caller never shows the raw
+      // text to an owner.
+      if (error || !data) {
+        throw new Error(error?.message ?? "Could not start the generation.");
+      }
+      return data as string;
+    },
+    async complete(input) {
+      const { error } = await rpcUntilTypesRegenerated(supabase)(
+        "complete_menu_item_image",
+        {
+          p_image_id: input.imageId,
+          p_original_path: input.originalPath,
+          p_variant_paths: input.variantPaths,
+          p_width: input.width,
+          p_height: input.height,
+          p_byte_size: input.byteSize,
+          p_mime_type: input.mimeType,
+          p_content_sha256: input.contentSha256,
+          p_generation: input.generation,
+        },
+      );
+      if (error) throw new Error(error.message);
+    },
+    async fail(imageId, message) {
+      await rpcUntilTypesRegenerated(supabase)("fail_menu_item_image", {
+        p_image_id: imageId,
+        p_error: message,
+      });
+    },
+    async loadDish(menuItemId) {
+      const from = supabase.from.bind(supabase) as unknown as (
+        table: string,
+      ) => {
+        select: (columns: string) => {
+          eq: (
+            column: string,
+            value: string,
+          ) => { maybeSingle: () => Promise<{ data: UntypedRow | null }> };
+        };
+      };
+      // Through RLS: a dish in another restaurant is simply absent.
+      const { data } = await from("menu_items")
+        .select("restaurant_id, name, description, ingredients, category")
+        .eq("id", menuItemId)
+        .maybeSingle();
+      if (!data) return null;
+      return {
+        restaurantId: data.restaurant_id as string,
+        name: (data.name as string) ?? "",
+        description: (data.description as string | null) ?? null,
+        ingredients: (data.ingredients as string[] | null) ?? null,
+        category: (data.category as string | null) ?? null,
+      };
+    },
+  };
+}
+
+/**
+ * Generate one image for one dish, leaving it in 'pending_review'.
+ *
+ * Nothing here can put a picture in front of a diner: the generated
+ * variants go to the private bucket, and only publishMenuPhoto() — a
+ * separate, explicit act by a person — makes an image live.
+ */
+export async function generateMenuPhoto(
+  restaurantId: string,
+  menuItemId: string,
+): Promise<{ ok: boolean; error?: string; imageId?: string }> {
+  // Checked before authorization so that, in the normal disabled state,
+  // this costs one environment read and nothing else.
+  const state = generationConfigured();
+  if (!state.available) {
+    return { ok: false, error: unavailableMessage(state.reason) };
+  }
+
+  const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const model = configuredModel();
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!model || !apiKey) {
+    // Unreachable given the check above; kept so the types are honest
+    // rather than asserted away with a non-null assertion.
+    return { ok: false, error: unavailableMessage("UNCONFIGURED") };
+  }
+
+  try {
+    const result = await generateImage(menuItemId, {
+      provider: new OpenRouterImageGenerationProvider({ apiKey, model }),
+      records: generationRecords(auth.context.supabase),
+      storage: storageGateway(),
+      timeoutMs: generationTimeoutMs(),
+    });
+    revalidatePath("/dashboard/menu");
+    return { ok: true, imageId: result.imageId };
+  } catch (error) {
+    // Quota answers first: they are the most actionable thing an owner can
+    // be told, and they are not faults.
+    const quota = quotaMessage(error);
+    if (quota) return { ok: false, error: quota };
+    if (error instanceof GenerationUnavailable) {
+      return { ok: false, error: error.message };
+    }
+    if (error instanceof GenerationFailed) {
+      return { ok: false, error: error.message };
+    }
+    if (error instanceof ImageRejected) {
+      return { ok: false, error: "The generated image could not be used." };
+    }
+    return { ok: false, error: "The image could not be generated." };
+  }
 }

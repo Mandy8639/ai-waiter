@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   confirmLegacyPhotoAuthentic,
   finishMenuPhotoUpload,
+  generateMenuPhoto,
   previewMenuPhoto,
   publishMenuPhoto,
   rejectMenuPhoto,
@@ -36,6 +37,7 @@ type Phase =
   | { name: "preparing" }
   | { name: "uploading" }
   | { name: "processing" }
+  | { name: "generating" }
   | { name: "working" };
 
 export function DishPhotoManager({
@@ -43,11 +45,18 @@ export function DishPhotoManager({
   menuItemId,
   dishName,
   initial,
+  generation,
 }: {
   restaurantId: string;
   menuItemId: string;
   dishName: string;
   initial: OwnerPhotoState;
+  /**
+   * Whether an image generator is configured, decided on the server so the
+   * browser never learns which model or provider is in use. Today this is
+   * always unavailable — see src/lib/menu-images/generation-provider.ts.
+   */
+  generation: { available: boolean; message?: string };
 }) {
   const [state, setState] = useState(initial);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
@@ -158,6 +167,31 @@ export function DishPhotoManager({
     setNotice("Photo ready. Have a look before diners see it.");
   }
 
+  /**
+   * Ask for an AI illustration. Lands in exactly the same "waiting for
+   * you" state an upload does — there is deliberately no separate review
+   * flow for generated images, because the decision an owner makes is the
+   * same one either way: is this good enough to show a diner?
+   */
+  async function generate() {
+    if (busy) return;
+    setError(null);
+    setNotice(null);
+    setPhase({ name: "generating" });
+    const result = await generateMenuPhoto(restaurantId, menuItemId);
+    setPhase({ name: "idle" });
+    if (!result.ok || !result.imageId) {
+      setError(result.error ?? "The image could not be generated.");
+      return;
+    }
+    setState((current) => ({
+      ...current,
+      pending: { imageId: result.imageId! },
+      failed: null,
+    }));
+    setNotice("Illustration ready. Have a look before diners see it.");
+  }
+
   async function run(
     work: () => Promise<{ ok: boolean; error?: string }>,
     after: (current: OwnerPhotoState) => OwnerPhotoState,
@@ -184,9 +218,11 @@ export function DishPhotoManager({
         ? "Uploading…"
         : phase.name === "processing"
           ? "Processing photo…"
-          : phase.name === "working"
-            ? "Saving…"
-            : null;
+          : phase.name === "generating"
+            ? "Generating an illustration…"
+            : phase.name === "working"
+              ? "Saving…"
+              : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -256,16 +292,25 @@ export function DishPhotoManager({
           </div>
         </div>
       ) : (
-        <UploadControls
-          hasPhoto={Boolean(state.current)}
-          file={file}
-          declared={declared}
-          busy={busy}
-          statusLabel={statusLabel}
-          onChoose={choose}
-          onDeclare={setDeclared}
-          onUpload={() => void upload()}
-        />
+        <>
+          <UploadControls
+            hasPhoto={Boolean(state.current)}
+            file={file}
+            declared={declared}
+            busy={busy}
+            statusLabel={statusLabel}
+            onChoose={choose}
+            onDeclare={setDeclared}
+            onUpload={() => void upload()}
+          />
+          <GenerateControls
+            available={generation.available}
+            message={generation.message}
+            busy={busy}
+            generating={phase.name === "generating"}
+            onGenerate={() => void generate()}
+          />
+        </>
       )}
 
       {state.current?.unverified && !state.pending && (
@@ -451,6 +496,60 @@ function UploadControls({
               ? "Making the sizes diners will see."
               : "Sending your photo."}
           </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The AI illustration option.
+ *
+ * Shown even when it cannot be used, and disabled with the reason, rather
+ * than hidden. An owner who has heard the feature exists and cannot find
+ * it will assume the product is broken; an owner who sees it greyed out
+ * with a sentence knows where they stand. `message` is deliberately the
+ * same sentence for every operational cause — a restaurant cannot act on
+ * the difference between "no model configured" and "the provider is down".
+ *
+ * The wording never says "photo". What this produces is an illustration,
+ * it is labelled "AI-generated" everywhere a diner sees it, and calling it
+ * anything else here would be the first step towards it being mistaken for
+ * a picture of real food.
+ */
+function GenerateControls({
+  available,
+  message,
+  busy,
+  generating,
+  onGenerate,
+}: {
+  available: boolean;
+  message?: string;
+  busy: boolean;
+  generating: boolean;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <p className="text-sm font-medium">No photo to hand?</p>
+      <p className="text-muted-foreground text-xs">
+        We can generate an illustration of this dish. It is clearly drawn rather
+        than photographic, and diners always see it labelled
+        &ldquo;AI-generated&rdquo;. You review it before anyone else does.
+      </p>
+      <div className="flex items-center gap-3">
+        <Button
+          variant="outline"
+          disabled={!available || busy}
+          onClick={onGenerate}
+        >
+          {generating
+            ? "Generating an illustration…"
+            : "Generate an illustration"}
+        </Button>
+        {!available && message && (
+          <p className="text-muted-foreground text-sm">{message}</p>
         )}
       </div>
     </div>
