@@ -62,6 +62,32 @@ one open request per table per kind.
 seconds without a refresh, staff can clear it, and the AI can raise the
 same request from a sentence.
 
+### Built and verified (2026-09-24)
+
+Shipped in #72, with #73 as a required follow-up: the staff queue
+subscribed to `postgres_changes` on a table that was never added to the
+`supabase_realtime` publication. That subscription emitted nothing. It did
+not look broken — the queue polls every 12 seconds, so the symptom was
+"requests arrive about ten seconds late", which nobody would trace back to
+a missing publication entry. PGlite has no Realtime layer, so 24 passing
+integration tests could not have caught it; running the flow against a
+real Supabase project did.
+
+Verified on the disposable project with real anonymous auth, real
+PostgREST and real Realtime: INSERT delivered in ~500ms across three runs,
+the UPDATE that clears a request in ~400ms, another table saw zero rows
+through RLS, a diner could not resolve their own request, and tapping
+twice returned the same request.
+
+Then confirmed on production by a real diner scanning a real table QR: the
+request appeared on the dashboard in about half a second. That also
+retired the last two unknowns — the diner buttons had never been rendered,
+and the publication entry could not be inspected through PostgREST.
+
+**Still open from this phase:** the AI tool (`request_service`) has never
+been exercised against a live model. Its schema, registry entry and
+database path are tested; the sentence-to-tool-call hop is not.
+
 ## Phase B — More dietary tags
 
 **Why here.** Cheapest item on the entire list, and for Nashta's menu
