@@ -1,4 +1,6 @@
 import {
+  HERO_VIDEO_POLICY,
+  HERO_VIDEO_RETENTION,
   IMAGE_POLICY,
   IMPORT_POLICY,
   MANAGED_BUCKETS,
@@ -34,6 +36,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function planCleanup(input: CleanupInput): CleanupPlan {
   const { now, images, menuItems, imports, objects } = input;
+  const heroVideos = input.heroVideos ?? [];
+  const restaurants = input.restaurants ?? [];
   const candidates: CleanupCandidate[] = [];
   const skips: CleanupSkip[] = [];
 
@@ -81,6 +85,33 @@ export function planCleanup(input: CleanupInput): CleanupPlan {
     }
   }
 
+  /**
+   * The hero-video equivalent of the veto above: a video a restaurant
+   * currently points at is never deleted, whatever its row's status
+   * claims. Two sources of truth disagreeing is a bug, and a bug is not a
+   * licence to delete the video on a live menu.
+   */
+  const activeHeroVideoIds = new Set(
+    restaurants
+      .map((r) => r.activeHeroVideoId)
+      .filter((id): id is string => Boolean(id)),
+  );
+
+  const heroById = new Map(heroVideos.map((v) => [v.id, v]));
+
+  /** Which hero video row owns a given object path, per the database. */
+  const heroOwnerByPath = new Map<string, string>();
+  for (const hero of heroVideos) {
+    const paths = [
+      ...(hero.videoPath ? [hero.videoPath] : []),
+      ...Object.values(hero.posterPaths ?? {}),
+    ];
+    for (const path of paths) {
+      heroOwnerByPath.set(`${MANAGED_BUCKETS.videoPrivate}:${path}`, hero.id);
+      heroOwnerByPath.set(`${MANAGED_BUCKETS.videoPublic}:${path}`, hero.id);
+    }
+  }
+
   for (const object of objects) {
     if (!isManagedBucket(object.bucket)) {
       skips.push({
@@ -99,7 +130,143 @@ export function planCleanup(input: CleanupInput): CleanupPlan {
       planImportObject();
       continue;
     }
+    if (
+      bucket === MANAGED_BUCKETS.videoPrivate ||
+      bucket === MANAGED_BUCKETS.videoPublic
+    ) {
+      planHeroVideoObject();
+      continue;
+    }
     planPhotoObject();
+
+    function planHeroVideoObject() {
+      const key = `${object.bucket}:${object.path}`;
+      const ownerId = heroOwnerByPath.get(key);
+      const isPublicBucket = object.bucket === MANAGED_BUCKETS.videoPublic;
+
+      if (!ownerId) {
+        const parsed = parseHeroVideoPath(object.path);
+        if (!parsed) {
+          skips.push({
+            bucket: object.bucket,
+            path: object.path,
+            reason: "malformed_path",
+          });
+          return;
+        }
+        // A row exists but does not list this path: not ours to reason
+        // about. Report it rather than guess.
+        if (heroById.has(parsed.videoId)) {
+          skips.push({
+            bucket: object.bucket,
+            path: object.path,
+            reason: "path_does_not_match_owning_record",
+            heroVideoId: parsed.videoId,
+          });
+          return;
+        }
+        if (activeHeroVideoIds.has(parsed.videoId)) {
+          skips.push({
+            bucket: object.bucket,
+            path: object.path,
+            reason: "referenced_as_active_hero_video",
+            heroVideoId: parsed.videoId,
+          });
+          return;
+        }
+
+        const safeAfter = new Date(
+          object.createdAt.getTime() + HERO_VIDEO_RETENTION.orphanSafetyMs,
+        );
+        if (safeAfter > now) {
+          skips.push({
+            bucket: object.bucket,
+            path: object.path,
+            reason: "within_safety_window",
+            eligibleAt: safeAfter,
+          });
+          return;
+        }
+        candidates.push({
+          kind: "hero_video",
+          heroVideoId: null,
+          bucket,
+          path: object.path,
+          reason: "hero_video_orphan_expired",
+          ageMs: now.getTime() - object.createdAt.getTime(),
+          safeAfter,
+          sizeBytes: object.sizeBytes,
+          destructive: true,
+        });
+        return;
+      }
+
+      const hero = heroById.get(ownerId);
+      if (!hero) {
+        skips.push({
+          bucket: object.bucket,
+          path: object.path,
+          reason: "path_does_not_match_owning_record",
+          heroVideoId: ownerId,
+        });
+        return;
+      }
+
+      // The veto, before any status or age reasoning.
+      if (activeHeroVideoIds.has(hero.id)) {
+        skips.push({
+          bucket: object.bucket,
+          path: object.path,
+          reason: "referenced_as_active_hero_video",
+          heroVideoId: hero.id,
+        });
+        return;
+      }
+
+      const policy = HERO_VIDEO_POLICY[hero.status];
+      const retentionMs = isPublicBucket
+        ? policy.publicRetentionMs
+        : policy.privateRetentionMs;
+
+      if (retentionMs === null) {
+        skips.push({
+          bucket: object.bucket,
+          path: object.path,
+          reason:
+            hero.status === "active"
+              ? "active_never_eligible"
+              : hero.status === "pending_review"
+                ? "pending_review_never_eligible"
+                : "within_retention",
+          heroVideoId: hero.id,
+        });
+        return;
+      }
+
+      const safeAfter = new Date(hero.statusChangedAt.getTime() + retentionMs);
+      if (safeAfter > now) {
+        skips.push({
+          bucket: object.bucket,
+          path: object.path,
+          reason: "within_retention",
+          heroVideoId: hero.id,
+          eligibleAt: safeAfter,
+        });
+        return;
+      }
+
+      candidates.push({
+        kind: "hero_video",
+        heroVideoId: hero.id,
+        bucket,
+        path: object.path,
+        reason: policy.reason as CleanupCandidate["reason"],
+        ageMs: now.getTime() - hero.statusChangedAt.getTime(),
+        safeAfter,
+        sizeBytes: object.sizeBytes,
+        destructive: true,
+      });
+    }
 
     function planPhotoObject() {
       const key = `${object.bucket}:${object.path}`;
@@ -374,4 +541,20 @@ export function parseImportPath(
   if (![restaurantId, importId].every((p) => UUID.test(p))) return null;
   if (!isValidImportPagePath(path, restaurantId, importId)) return null;
   return { restaurantId, importId };
+}
+
+/**
+ * `{restaurant}/{video}/{file}` — one level shallower than a photo path,
+ * because a hero video belongs to a restaurant rather than to a dish.
+ * Same allow-list, so the same class of hostile name is refused.
+ */
+export function parseHeroVideoPath(
+  path: string,
+): { restaurantId: string; videoId: string } | null {
+  const parts = path.split("/");
+  if (parts.length !== 3) return null;
+  const [restaurantId, videoId] = parts;
+  if (![restaurantId, videoId].every((p) => UUID.test(p))) return null;
+  if (!isValidObjectPath(path, `${restaurantId}/${videoId}/`)) return null;
+  return { restaurantId, videoId };
 }

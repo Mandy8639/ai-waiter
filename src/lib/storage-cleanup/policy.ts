@@ -27,6 +27,18 @@ export const IMAGE_STATUSES = [
 ] as const;
 export type ImageStatus = (typeof IMAGE_STATUSES)[number];
 
+/** restaurant_hero_videos.status — every value the schema allows. */
+export const HERO_VIDEO_STATUSES = [
+  "uploading",
+  "pending_review",
+  "active",
+  "superseded",
+  "rejected",
+  "removed",
+  "failed",
+] as const;
+export type HeroVideoStatus = (typeof HERO_VIDEO_STATUSES)[number];
+
 /** menu_imports.status — likewise. */
 export const IMPORT_STATUSES = [
   "uploaded",
@@ -94,6 +106,24 @@ export const RETENTION = {
   importFailedMs: 7 * DAYS,
 } as const;
 
+/**
+ * A hero video's retention, kept identical to a photo's on purpose.
+ *
+ * The temptation is to delete videos sooner because they are the biggest
+ * objects in the system — a 50 MB hero against a 200 KB dish photo. That
+ * would be optimising storage cost against the one promise the owner UI
+ * makes them ("the old one is kept for 30 days"), and a promise made in
+ * the product is not something the cleanup engine gets to renegotiate.
+ */
+export const HERO_VIDEO_RETENTION = {
+  incompleteStaleMs: RETENTION.incompleteStaleMs,
+  failedMs: RETENTION.failedMs,
+  rejectedMs: RETENTION.rejectedMs,
+  supersededMs: RETENTION.supersededMs,
+  removedMs: RETENTION.removedMs,
+  orphanSafetyMs: RETENTION.publicOrphanSafetyMs,
+} as const;
+
 /** How many objects one run may delete. Bounded so a bug cannot run away. */
 export const DEFAULT_BATCH_LIMIT = 100;
 
@@ -102,6 +132,8 @@ export const MANAGED_BUCKETS = {
   photoPrivate: "menu-photos-private",
   photoPublic: "menu-photos",
   imports: "menu-imports",
+  videoPrivate: "restaurant-videos-private",
+  videoPublic: "restaurant-videos",
 } as const;
 
 export type ManagedBucket =
@@ -238,6 +270,76 @@ export const IMPORT_POLICY: Record<
     retentionMs: RETENTION.importFailedMs,
     reason: "import_failed_retention_expired",
     rationale: "Kept a week for retry and diagnosis.",
+  },
+};
+
+/**
+ * What each hero video status implies for its objects.
+ *
+ * The same two-sided shape as IMAGE_POLICY: a video that was published
+ * has objects on both sides, one that never was has objects only on the
+ * private side, and `null` means "never eligible on age alone".
+ */
+export const HERO_VIDEO_POLICY: Record<HeroVideoStatus, StatusPolicy> = {
+  active: {
+    privateExpected: true,
+    publicExpected: true,
+    privateRetentionMs: null,
+    publicRetentionMs: null,
+    reason: "active_never_eligible",
+    rationale: "This is the video diners see. Nothing about it is cleaned up.",
+  },
+  pending_review: {
+    privateExpected: true,
+    publicExpected: false,
+    privateRetentionMs: null,
+    publicRetentionMs: null,
+    reason: "pending_review_never_eligible",
+    rationale:
+      "Waiting on a person to watch it. An owner may take a week; that is not abandonment.",
+  },
+  uploading: {
+    privateExpected: true,
+    publicExpected: false,
+    privateRetentionMs: HERO_VIDEO_RETENTION.incompleteStaleMs,
+    publicRetentionMs: null,
+    reason: "hero_video_incomplete_abandoned",
+    rationale:
+      "Never finished. More likely here than for a photo: a hero video is up to 50 MB over restaurant wifi.",
+  },
+  failed: {
+    privateExpected: true,
+    publicExpected: false,
+    privateRetentionMs: HERO_VIDEO_RETENTION.failedMs,
+    publicRetentionMs: null,
+    reason: "hero_video_failed_retention_expired",
+    rationale: "The upload is kept as retry evidence for 30 days.",
+  },
+  rejected: {
+    privateExpected: true,
+    publicExpected: false,
+    privateRetentionMs: HERO_VIDEO_RETENTION.rejectedMs,
+    publicRetentionMs: null,
+    reason: "hero_video_rejected_retention_expired",
+    rationale:
+      "An owner watched it and said no; kept 30 days in case they reconsider.",
+  },
+  superseded: {
+    privateExpected: true,
+    publicExpected: true,
+    privateRetentionMs: HERO_VIDEO_RETENTION.supersededMs,
+    publicRetentionMs: HERO_VIDEO_RETENTION.supersededMs,
+    reason: "hero_video_superseded_retention_expired",
+    rationale:
+      "Replaced. A video may still be mid-download in an open tab, so both areas wait 30 days.",
+  },
+  removed: {
+    privateExpected: true,
+    publicExpected: true,
+    privateRetentionMs: HERO_VIDEO_RETENTION.removedMs,
+    publicRetentionMs: HERO_VIDEO_RETENTION.removedMs,
+    reason: "hero_video_removed_retention_expired",
+    rationale: "Taken down by an owner; the same 30-day undo window.",
   },
 };
 

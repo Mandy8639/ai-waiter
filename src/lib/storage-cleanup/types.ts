@@ -1,4 +1,9 @@
-import type { ImageStatus, ImportStatus, ManagedBucket } from "./policy";
+import type {
+  HeroVideoStatus,
+  ImageStatus,
+  ImportStatus,
+  ManagedBucket,
+} from "./policy";
 
 /**
  * The inputs and outputs of cleanup planning.
@@ -37,6 +42,28 @@ export interface ImportRecord {
   updatedAt: Date;
 }
 
+/**
+ * One restaurant_hero_videos row.
+ *
+ * A hero video's objects are a video and its poster stills, all under one
+ * prefix, so unlike an image there is no separate "original vs variants"
+ * distinction to reason about — either the row owns the path or it does not.
+ */
+export interface HeroVideoRecord {
+  id: string;
+  restaurantId: string;
+  status: HeroVideoStatus;
+  statusChangedAt: Date;
+  videoPath: string | null;
+  posterPaths: Record<string, string> | null;
+}
+
+/** restaurants, reduced to the one field that can veto a deletion. */
+export interface RestaurantRecord {
+  id: string;
+  activeHeroVideoId: string | null;
+}
+
 /** One object as Storage reports it. Never authoritative on its own. */
 export interface StorageObject {
   bucket: string;
@@ -50,6 +77,15 @@ export interface CleanupInput {
   images: ImageRecord[];
   menuItems: MenuItemRecord[];
   imports: ImportRecord[];
+  /**
+   * Optional so that a caller predating the hero video feature still type
+   * checks and still behaves correctly: the planner reads them as empty,
+   * which makes every video object an unowned one, and an unowned object
+   * is reported rather than deleted. Omitting them can under-delete; it
+   * can never over-delete.
+   */
+  heroVideos?: HeroVideoRecord[];
+  restaurants?: RestaurantRecord[];
   objects: StorageObject[];
 }
 
@@ -65,12 +101,19 @@ export type CleanupReason =
   | "import_abandoned"
   | "import_success_retention_expired"
   | "import_failed_retention_expired"
-  | "import_orphan_expired";
+  | "import_orphan_expired"
+  | "hero_video_incomplete_abandoned"
+  | "hero_video_failed_retention_expired"
+  | "hero_video_rejected_retention_expired"
+  | "hero_video_superseded_retention_expired"
+  | "hero_video_removed_retention_expired"
+  | "hero_video_orphan_expired";
 
 /** Why an object was left alone. Reported, because silence hides bugs. */
 export type SkipReason =
   | "active_never_eligible"
   | "referenced_as_active_image"
+  | "referenced_as_active_hero_video"
   | "pending_review_never_eligible"
   | "import_in_review_never_eligible"
   | "within_retention"
@@ -81,10 +124,11 @@ export type SkipReason =
   | "unmanaged_bucket";
 
 export interface CleanupCandidate {
-  kind: "menu_photo" | "menu_import";
+  kind: "menu_photo" | "menu_import" | "hero_video";
   /** The owning row, when there is one. Null only for true orphans. */
   imageId?: string | null;
   importId?: string | null;
+  heroVideoId?: string | null;
   bucket: ManagedBucket;
   path: string;
   reason: CleanupReason;
@@ -102,6 +146,7 @@ export interface CleanupSkip {
   reason: SkipReason;
   imageId?: string | null;
   importId?: string | null;
+  heroVideoId?: string | null;
   /** For within_retention / within_safety_window: when it would become eligible. */
   eligibleAt?: Date;
 }
