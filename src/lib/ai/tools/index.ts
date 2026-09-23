@@ -3,6 +3,7 @@ import { z } from "zod";
 import { menuTools } from "./menu";
 import { cartTools } from "./cart";
 import { orderTools } from "./order";
+import { serviceTools } from "./service";
 import type { ToolContext, ToolResult } from "./types";
 
 /**
@@ -13,7 +14,7 @@ import type { ToolContext, ToolResult } from "./types";
  * entry below is a narrow, named action backed by existing, already-
  * authorized application code (src/lib/cart/, src/lib/orders/).
  */
-const allTools = [...menuTools, ...cartTools, ...orderTools];
+const allTools = [...menuTools, ...cartTools, ...orderTools, ...serviceTools];
 
 const toolsByName = new Map(allTools.map((tool) => [tool.name, tool]));
 

@@ -18,6 +18,7 @@ import {
   type RecommendationCard as RecommendationCardData,
 } from "@/lib/ai/actions";
 import { cn } from "@/lib/utils";
+import { ServiceRequestButtons } from "./service-request-buttons";
 
 /**
  * Starter questions. Each is something the waiter genuinely answers from
@@ -324,6 +325,9 @@ export function AiWaiterPanel({
         )}
 
         <div className="border-t px-4 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {/* Above the disclaimer and the composer: the diner who wants a
+              person is not going to read either first. */}
+          <ServiceRequestButtons />
           <p className="type-caption text-muted-foreground mb-2 px-1">
             Answers come from the restaurant&apos;s menu. For allergies, please
             also check with staff.
