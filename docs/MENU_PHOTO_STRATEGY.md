@@ -1632,14 +1632,28 @@ end to end. 22 checks, all passing, all objects removed afterwards:
   `video/mp4`, **byte-identical** to the private original;
 - the private bucket still refuses anonymous reads after publication.
 
-### Still not verified
+### Verified with a real video on production (2026-09-23)
 
-**No real camera file has been through this.** The video used above was a
-structurally valid MP4 container with padding, because there is no ffmpeg
-here to produce a playable one — so the plumbing is proven and
-_playability_ is not. The database lifecycle is proven separately, by the
-21 integration tests that run the real migration against real Postgres with
-real roles.
+The last gap is closed. A real 5.27 MB MP4 was uploaded through the owner
+UI on production, with a 552 KB JPEG still:
 
-Before this is announced to a restaurant: upload one real clip through the
-owner UI, watch it, publish it, and load the menu on a phone.
+- processed in **8 seconds**, from upload to `pending_review`;
+- `mime_type` recorded as `video/mp4` **from the container header**, read
+  through a 64-byte ranged request — not from the browser's claim;
+- the JPEG became `poster-large.webp` (221 KB) and `poster-small.webp`
+  (26 KB), so a diner's phone downloads 26 KB of a half-megabyte source;
+- **0 objects in the public bucket** while it awaited review, and the video
+  was not publicly readable (HTTP 400);
+- the preview **played** — the one property no automated check in this repo
+  can establish;
+- discarded on review → `rejected`, still 0 public objects, and no
+  restaurant ever pointed at it.
+
+So the pipeline is proven end to end against a real file: container
+detection, poster processing, the private/public boundary, and the review
+gate. The database lifecycle is proven separately by the 21 integration
+tests that run the real migration against real Postgres with real roles.
+
+**Still open:** no video has been _published_ to a live menu yet, so the
+publish copy and the diner-facing player have been exercised only against
+the disposable project, never on production.
