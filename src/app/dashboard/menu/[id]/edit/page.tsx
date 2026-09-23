@@ -7,6 +7,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { updateMenuItem } from "@/lib/menu/actions";
 import { env } from "@/lib/env";
 import { loadOwnerPhotoState } from "@/lib/menu-images/owner-state";
+import { generationAvailability } from "@/lib/menu-images/actions";
 
 export const metadata = {
   title: "Edit menu item — AI Waiter",
@@ -41,12 +42,17 @@ export default async function EditMenuItemPage({
     notFound();
   }
 
-  const photoState = await loadOwnerPhotoState(
-    supabase,
-    restaurant.id,
-    item.id,
-    env.NEXT_PUBLIC_SUPABASE_URL,
-  );
+  // Decided on the server: the browser never learns which model or
+  // provider is configured, only whether the button can do anything.
+  const [photoState, generation] = await Promise.all([
+    loadOwnerPhotoState(
+      supabase,
+      restaurant.id,
+      item.id,
+      env.NEXT_PUBLIC_SUPABASE_URL,
+    ),
+    generationAvailability(),
+  ]);
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -62,6 +68,7 @@ export default async function EditMenuItemPage({
             menuItemId={item.id}
             dishName={item.name}
             initial={photoState}
+            generation={generation}
           />
         </CardContent>
       </Card>
