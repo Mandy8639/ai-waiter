@@ -109,8 +109,22 @@ export interface ImageRecords {
  * Published variants are immutable — a replacement photo is a new image id
  * and therefore a new path, never an overwrite — so they can be cached for
  * a year with no invalidation story to get wrong.
+ *
+ * SECONDS, NOT A DIRECTIVE. Supabase Storage builds the header itself: the
+ * client sends `cache-control: max-age=<this>` and the server prepends
+ * `public, `. Passing a full directive here nests it, and production served
+ * `public, max-age=public, max-age=31536000, immutable` for the first photo
+ * ever published — a duplicated, part-invalid header whose caching
+ * behaviour is implementation-defined, which is the opposite of the year we
+ * are asking for. `immutable` cannot be set through this API at all; the
+ * long max-age is the whole of what we get, and it is enough, because the
+ * paths are never reused.
+ *
+ * The private upload is the only place this is set. Publishing is a
+ * server-side /object/copy, which carries the source object's metadata
+ * across, so the public object inherits whatever the private one was given.
  */
-export const PUBLISHED_CACHE_CONTROL = "public, max-age=31536000, immutable";
+export const PUBLISHED_CACHE_CONTROL = "31536000";
 
 const EXTENSION_BY_TYPE: Record<string, "jpg" | "png" | "webp"> = {
   "image/jpeg": "jpg",
