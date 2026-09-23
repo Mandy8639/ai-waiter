@@ -1436,3 +1436,102 @@ does not claim it, is **report-only** — never deleted.
 3. Only when the output matches reality, run once with `--execute`.
 4. Scheduling (cron, Vercel, a Supabase scheduled function) comes after
    that, never before.
+
+---
+
+## 26. Phase 4 — AI image generation (2026-09-23, implemented and switched off)
+
+Phase 4 is complete and **ships disabled**, because it cannot honestly ship
+enabled. §18 decision 1 requires the feature to cost $0, and on the day it
+was built no free image model existed.
+
+### The provider re-check §18 asked for
+
+Run 2026-09-23, against OpenRouter's public API:
+
+| Check                                                  | Result                                                            |
+| ------------------------------------------------------ | ----------------------------------------------------------------- |
+| `GET /api/v1/models/recraft/recraft-v3:free/endpoints` | `"endpoints": []` — still no provider serving the approved model  |
+| `GET /api/v1/models`                                   | 11 image-output models, all paid                                  |
+| `GET /api/v1/images/models` (the dedicated image API)  | **54 models, not one of them free** — `:free` appears in zero ids |
+
+Cheapest observed, for whenever this decision is revisited:
+
+- `recraft/recraft-v4.1-flash` — **$0.007 per image**
+- `google/gemini-3.1-flash-lite-image` — $0.00003 per output token
+
+Against the existing cap of 10 attempts per restaurant per day, the
+per-image model works out at roughly **$2 per restaurant per month** at
+full usage. Enabling it is a new decision and overturns decision 1; it is
+not an implementation detail.
+
+### What "disabled" means in the code
+
+`MENU_IMAGE_MODEL` is unset in every environment. With it unset:
+
+- `generationConfigured()` returns `UNCONFIGURED`;
+- the owner UI renders a **disabled** "Generate an illustration" button with
+  "AI image generation is temporarily unavailable." beside it — shown, not
+  hidden, so an owner who has heard of the feature knows where they stand;
+- `generateMenuPhoto()` refuses before it authorizes anything, so the
+  disabled path costs one environment read;
+- no request is made, and no quota is touched.
+
+Turning it on is one environment variable. There is no code change, and by
+design no fallback list: a comma-separated value is kept verbatim rather
+than split, because a preference chain _is_ the automatic model switch that
+decision 1 forbids.
+
+### What was built
+
+| File                                               | Role                                                                                                        |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `src/lib/menu-images/generation-provider.ts`       | `ImageGenerationProvider`, the two error types, and the configuration gate                                  |
+| `src/lib/menu-images/openrouter-image-provider.ts` | The only implementation. `POST /api/v1/images`, `GET /api/v1/images/models/{model}/endpoints` for preflight |
+| `src/lib/menu-images/generation-prompt.ts`         | Dish row → prompt, enforcing decision 6's illustration style                                                |
+| `src/lib/menu-images/generation-core.ts`           | Orchestration, written against interfaces                                                                   |
+| `src/lib/menu-images/actions.ts`                   | `generationAvailability()`, `generateMenuPhoto()`                                                           |
+| `src/components/dashboard/dish-photo-manager.tsx`  | `GenerateControls`                                                                                          |
+| `tests/unit/menu-image-generation.test.ts`         | 38 tests                                                                                                    |
+
+No migration. Phase 1 already built the entire database layer:
+`begin_menu_item_image_generation`, `complete_menu_item_image`'s
+`p_generation` argument, `fail_menu_item_image`,
+`get_menu_image_generation_quota`, `menu_image_expire_stale_generations`,
+the append-only `menu_image_generation_attempts` ledger, and the unique
+index allowing one in-flight generation per dish.
+
+### Two invariants, and the ordering that enforces them
+
+**A restaurant never loses a quota slot to a request that was not made.**
+`preflight()` runs _before_ `begin_menu_item_image_generation()`. That is
+the entire reason `GenerationUnavailable` and `GenerationFailed` are
+separate types: unavailable means nothing was attempted and nothing is
+counted; failed means a request went out, may have been billed, and counts.
+A 429, a 402 and a dead model are all unavailability. A 400, a timeout
+mid-request and an undecodable response are all failures.
+
+**A generated image never reaches a diner unreviewed.** Variants are
+written to `menu-photos-private` only, and the row stops at
+`pending_review`. `publish_menu_item_image()` remains the sole route to
+`active`, and it needs a person. An AI picture of food nobody has plated is
+precisely the image that must not appear on a menu by itself.
+
+A third, smaller one: bytes are validated by `processUploadedImage()`
+_before_ anything is stored, so a model returning an HTML error page, an
+SVG, a decompression bomb or a 3-byte stub writes nothing at all. The
+original's extension comes from what sharp actually decoded, never from the
+`output_format` that was requested.
+
+### Honest limits
+
+- **The real provider has never been exercised.** The request and response
+  shapes were read from OpenRouter's OpenAPI document on 2026-09-23 and
+  match it, but no real 200 has ever been parsed, because there is nothing
+  free to call. The tests drive a real local HTTP server through every
+  status-code branch, which is evidence about _this code_, not about
+  OpenRouter.
+- **The prompt has never produced an image.** Its style rules are a
+  product promise (decision 6), unverified against any model's output.
+- When this is switched on, generate one image for one dish first and look
+  at it before letting a restaurant near the button.
