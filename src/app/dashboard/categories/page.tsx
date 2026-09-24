@@ -9,7 +9,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { deleteCategory, toggleCategoryActive } from "@/lib/categories/actions";
 
 export const metadata = {
-  title: "Categories — AI Waiter",
+  title: "Categories — Tableside",
 };
 
 export default async function CategoriesPage() {

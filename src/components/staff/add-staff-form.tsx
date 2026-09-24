@@ -35,7 +35,7 @@ export function AddStaffForm({
         id="email"
         label="Email"
         errors={errors.email}
-        hint="They must already have an AI Waiter account — ask them to sign up first if they don't."
+        hint="They must already have a Tableside account — ask them to sign up first if they don't."
       >
         <Input
           id="email"

@@ -16,7 +16,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { deleteMenuItem, toggleMenuItemAvailability } from "@/lib/menu/actions";
 
 export const metadata = {
-  title: "Menu — AI Waiter",
+  title: "Menu — Tableside",
 };
 
 export default async function MenuPage() {

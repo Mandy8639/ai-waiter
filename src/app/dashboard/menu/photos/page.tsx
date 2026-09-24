@@ -9,7 +9,7 @@ import { asRowsWithImageColumns } from "@/lib/menu-images/menu-item-rows";
 import type { ImageSource } from "@/lib/menu-images/resolve";
 
 export const metadata = {
-  title: "Menu photos — AI Waiter",
+  title: "Menu photos — Tableside",
 };
 
 interface PhotoRow {

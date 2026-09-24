@@ -14,7 +14,7 @@ import {
 import { formatReservationTime } from "@/lib/reservations/timezone";
 
 export const metadata = {
-  title: "Reservations — AI Waiter",
+  title: "Reservations — Tableside",
 };
 
 const STATUS_LABELS: Record<string, string> = {

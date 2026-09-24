@@ -17,7 +17,7 @@ import {
 } from "@/lib/modifiers/actions";
 
 export const metadata = {
-  title: "Modifier group — AI Waiter",
+  title: "Modifier group — Tableside",
 };
 
 export default async function ModifierGroupDetailPage({

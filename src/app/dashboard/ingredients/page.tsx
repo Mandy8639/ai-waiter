@@ -8,7 +8,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { deleteIngredient } from "@/lib/ingredients/actions";
 
 export const metadata = {
-  title: "Ingredients — AI Waiter",
+  title: "Ingredients — Tableside",
 };
 
 export default async function IngredientsPage() {

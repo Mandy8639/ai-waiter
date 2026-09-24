@@ -9,7 +9,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { updateStaffRole, removeStaffMember } from "@/lib/staff/actions";
 
 export const metadata = {
-  title: "Staff — AI Waiter",
+  title: "Staff — Tableside",
 };
 
 const ROLE_LABELS: Record<string, string> = {

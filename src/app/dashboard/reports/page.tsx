@@ -19,7 +19,7 @@ import {
 } from "@/lib/reports/range";
 
 export const metadata = {
-  title: "Reports — AI Waiter",
+  title: "Reports — Tableside",
 };
 
 const STATUS_LABELS: Record<string, string> = {

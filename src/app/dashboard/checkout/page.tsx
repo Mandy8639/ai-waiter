@@ -9,7 +9,7 @@ import { recordCashPayment } from "@/lib/payments/cash-actions";
 import { getUnpaidOrdersByTable } from "@/lib/payments/unpaid-orders";
 
 export const metadata = {
-  title: "Settle up — AI Waiter",
+  title: "Settle up — Tableside",
 };
 
 /**

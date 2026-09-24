@@ -3,7 +3,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { getActiveOrdersForRestaurant } from "@/lib/orders/kitchen";
 
 export const metadata = {
-  title: "Kitchen — AI Waiter",
+  title: "Kitchen — Tableside",
 };
 
 /**

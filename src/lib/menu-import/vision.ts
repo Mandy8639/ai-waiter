@@ -102,8 +102,8 @@ export async function extractMenuFromImages(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://ai-waiter.local",
-        "X-Title": "AI Waiter menu import",
+        "HTTP-Referer": "https://tableside.menu",
+        "X-Title": "Tableside menu import",
       },
       body: JSON.stringify({
         // `models`, never `models` AND `model` together: the singular

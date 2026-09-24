@@ -2,7 +2,7 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 
 export const metadata = {
-  title: "You're signed in as staff — AI Waiter",
+  title: "You're signed in as staff — Tableside",
 };
 
 /**

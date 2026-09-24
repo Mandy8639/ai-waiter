@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
 
-test("home page loads and identifies AI Waiter", async ({ page }) => {
+test("home page loads and identifies Tableside", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page).toHaveTitle(/AI Waiter/);
-  await expect(page.getByRole("heading", { name: "AI Waiter" })).toBeVisible();
+  await expect(page).toHaveTitle(/Tableside/);
+  await expect(page.getByRole("heading", { name: "Tableside" })).toBeVisible();
   await expect(page.getByText("An AI waiter for restaurants.")).toBeVisible();
 });
 

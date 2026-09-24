@@ -21,7 +21,7 @@ import { STATUS_LABELS, type OrderStatus } from "@/lib/orders/status";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
-  title: "Overview — AI Waiter",
+  title: "Overview — Tableside",
 };
 
 const STATUS_TONE: Record<OrderStatus, string> = {

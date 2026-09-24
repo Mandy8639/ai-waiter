@@ -4,7 +4,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { createTable } from "@/lib/tables/actions";
 
 export const metadata = {
-  title: "New table — AI Waiter",
+  title: "New table — Tableside",
 };
 
 export default async function NewTablePage() {

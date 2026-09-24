@@ -14,7 +14,7 @@ import {
 import { regenerateTableToken } from "@/lib/tables/actions";
 
 export const metadata = {
-  title: "Table QR code — AI Waiter",
+  title: "Table QR code — Tableside",
 };
 
 export default async function TableQrPage({

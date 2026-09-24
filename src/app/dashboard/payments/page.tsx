@@ -19,7 +19,7 @@ import { startSubscriptionCheckout } from "@/lib/billing/subscription-actions";
 import { SubscribeButton } from "@/components/payments/subscribe-button";
 
 export const metadata = {
-  title: "Payments — AI Waiter",
+  title: "Payments — Tableside",
 };
 
 /**

@@ -9,7 +9,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { deleteTable, toggleTableActive } from "@/lib/tables/actions";
 
 export const metadata = {
-  title: "Tables — AI Waiter",
+  title: "Tables — Tableside",
 };
 
 export default async function TablesPage() {

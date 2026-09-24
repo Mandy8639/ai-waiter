@@ -9,7 +9,7 @@ import { AuthForm } from "@/components/auth/auth-form";
 import { signIn } from "@/lib/auth/actions";
 
 export const metadata = {
-  title: "Sign in — AI Waiter",
+  title: "Sign in — Tableside",
 };
 
 export default function LoginPage() {

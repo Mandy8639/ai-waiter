@@ -6,7 +6,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { isMenuImportConfigured } from "@/lib/menu-import/vision";
 
 export const metadata = {
-  title: "Import menu — AI Waiter",
+  title: "Import menu — Tableside",
 };
 
 export default async function MenuImportPage() {

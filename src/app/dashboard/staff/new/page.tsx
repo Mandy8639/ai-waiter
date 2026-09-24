@@ -4,7 +4,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { addStaffMember } from "@/lib/staff/actions";
 
 export const metadata = {
-  title: "Add staff — AI Waiter",
+  title: "Add staff — Tableside",
 };
 
 export default async function NewStaffPage() {

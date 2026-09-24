@@ -43,8 +43,8 @@ export async function callOpenRouterModel(
       headers: {
         Authorization: `Bearer ${params.apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://ai-waiter.local",
-        "X-Title": "AI Waiter",
+        "HTTP-Referer": "https://tableside.menu",
+        "X-Title": "Tableside",
       },
       body: JSON.stringify({
         // OpenRouter routes across a preference list via `models`, serving

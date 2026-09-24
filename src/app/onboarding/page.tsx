@@ -8,7 +8,7 @@ import { OnboardingForm } from "@/components/onboarding/onboarding-form";
 import { requireUser } from "@/lib/auth/session";
 
 export const metadata = {
-  title: "Create your restaurant — AI Waiter",
+  title: "Create your restaurant — Tableside",
 };
 
 export default async function OnboardingPage() {

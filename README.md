@@ -1,4 +1,4 @@
-# AI Waiter
+# Tableside
 
 An AI waiter for restaurants — a multi-tenant SaaS platform where an AI talks to customers,
 answers menu questions, recommends food, takes customized orders, confirms them, and sends them

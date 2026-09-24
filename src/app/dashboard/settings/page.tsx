@@ -18,7 +18,7 @@ import {
 } from "@/lib/settings/actions";
 
 export const metadata = {
-  title: "Settings — AI Waiter",
+  title: "Settings — Tableside",
 };
 
 export default async function SettingsPage() {

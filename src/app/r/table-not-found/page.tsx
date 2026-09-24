@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "QR code not recognized — AI Waiter",
+  title: "QR code not recognized — Tableside",
 };
 
 /**

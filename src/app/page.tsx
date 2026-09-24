@@ -4,7 +4,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const metadata = {
-  title: "AI Waiter — an AI waiter for your restaurant",
+  title: "Tableside — an AI waiter for your restaurant",
   description:
     "Diners scan the table's QR code, ask questions in their own words, and order. Orders land on your kitchen board, and card payments go straight to your own Stripe account.",
 };
@@ -20,9 +20,10 @@ export const metadata = {
  * table, what it does for the kitchen, what it costs, and how the money
  * reaches them.
  *
- * The <h1> is "AI Waiter" and the tagline is unchanged from the old
- * placeholder: tests/e2e/home.spec.ts asserts on both, and they are also
- * simply the clearest way to say what this is.
+ * The <h1> is the product name; the tagline below it stays "An AI waiter
+ * for restaurants", because that is what the thing DOES and a visitor who
+ * has never heard of Tableside needs the sentence, not the brand.
+ * tests/e2e/home.spec.ts asserts on both.
  */
 
 const HOW_IT_WORKS = [
@@ -78,7 +79,7 @@ export default function Home() {
             For restaurants
           </Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-            AI Waiter
+            Tableside
           </h1>
           <p className="text-muted-foreground text-lg text-balance">
             An AI waiter for restaurants.
@@ -205,7 +206,7 @@ export default function Home() {
 
       <footer className="text-muted-foreground border-t px-6 py-8 text-center text-sm">
         <p>
-          Already using AI Waiter at a table? Scan the code on your table to see
+          Already using Tableside at a table? Scan the code on your table to see
           the menu.
         </p>
       </footer>
