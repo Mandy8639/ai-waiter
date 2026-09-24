@@ -1,7 +1,7 @@
 import { env } from "@/lib/env";
 import { resolveDinerImage, type DinerImage } from "@/lib/menu-images/resolve";
 import {
-  asRowsWithImageColumns,
+  asRowsWithNewColumns,
   type MenuItemImageFields,
 } from "@/lib/menu-images/menu-item-rows";
 import "server-only";
@@ -69,7 +69,7 @@ export async function buildRecommendationCards(
   // database.types.ts predates phase 1, so the generated client cannot
   // describe the image columns. Asserted once here against the migration;
   // see src/lib/menu-images/menu-item-rows.ts.
-  const imageRows = asRowsWithImageColumns<
+  const imageRows = asRowsWithNewColumns<
     MenuItemImageFields & { id: string; is_available: boolean }
   >(rows);
   const rowById = new Map(imageRows.map((r) => [r.id, r]));

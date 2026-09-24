@@ -23,6 +23,9 @@ export interface MenuItemFormValues {
   imageUrl: string | null;
   isAvailable: boolean;
   isVegetarian: boolean;
+  isHalal: boolean;
+  isKosher: boolean;
+  isHighProtein: boolean;
   isVegan: boolean;
   isSpicy: boolean;
   spiceLevel: string | null;
@@ -269,6 +272,41 @@ export function MenuItemForm({
             id="containsGluten"
             label="Contains gluten"
             defaultChecked={defaultValues?.containsGluten}
+            disabled={isPending}
+          />
+        </div>
+      </fieldset>
+
+      {/*
+        Separated from the toggles above on purpose. Those describe a dish;
+        these are statements the restaurant makes and that diners may act on
+        for religious reasons. The copy says who is making the claim, because
+        this software never verifies any of it.
+      */}
+      <fieldset className="flex flex-col gap-3">
+        <legend className="type-label mb-1">What you can confirm</legend>
+        <p className="type-caption text-muted-foreground -mt-1">
+          Only tick these if your kitchen can stand behind them. Diners see them
+          as your restaurant&apos;s statement, and we never work them out from
+          ingredients.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Toggle
+            id="isHalal"
+            label="Halal"
+            defaultChecked={defaultValues?.isHalal}
+            disabled={isPending}
+          />
+          <Toggle
+            id="isKosher"
+            label="Kosher"
+            defaultChecked={defaultValues?.isKosher}
+            disabled={isPending}
+          />
+          <Toggle
+            id="isHighProtein"
+            label="High in protein"
+            defaultChecked={defaultValues?.isHighProtein}
             disabled={isPending}
           />
         </div>

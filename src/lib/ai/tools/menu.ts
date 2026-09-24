@@ -2,6 +2,7 @@ import "server-only";
 import type { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
+import { assertedClaims } from "@/lib/menu/diet-filters";
 import type { ToolContext, ToolDefinition, ToolResult } from "./types";
 import {
   searchMenuSchema,
@@ -37,6 +38,35 @@ async function restaurantCurrency(
     .eq("id", restaurantId)
     .maybeSingle();
   return data?.currency ?? "USD";
+}
+
+/**
+ * One row of a search_menu select, exactly as the migrations declare it.
+ * See the comment at the query below for why this is asserted rather than
+ * inferred.
+ */
+interface SearchRow {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number | string;
+  category_id: string;
+  is_vegetarian: boolean;
+  is_vegan: boolean;
+  is_spicy: boolean;
+  is_halal: boolean;
+  is_kosher: boolean;
+  is_high_protein: boolean;
+}
+
+/** Just the builder methods search_menu uses, none of them column-typed. */
+interface MenuSearchQuery {
+  select(columns: string): MenuSearchQuery;
+  eq(column: string, value: unknown): MenuSearchQuery;
+  or(filter: string): MenuSearchQuery;
+  order(column: string, options: { ascending: boolean }): MenuSearchQuery;
+  limit(count: number): MenuSearchQuery;
+  then<T>(onfulfilled: (result: { data: SearchRow[] | null }) => T): Promise<T>;
 }
 
 async function searchMenu(
@@ -75,10 +105,14 @@ async function searchMenu(
     };
   }
 
-  let query = supabase
-    .from("menu_items")
+  // The dietary claim columns postdate database.types.ts, so the generated
+  // builder rejects them by name and infers SelectQueryError for the whole
+  // select. Asserted once here against the migration, in the same spirit as
+  // src/lib/menu-images/menu-item-rows.ts, and deletable the day the types
+  // are regenerated. Everything downstream stays fully typed via SearchRow.
+  let query = (supabase.from("menu_items") as unknown as MenuSearchQuery)
     .select(
-      "id, name, description, price, category_id, is_vegetarian, is_vegan, is_spicy",
+      "id, name, description, price, category_id, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein",
     )
     .eq("restaurant_id", context.restaurantId)
     .eq("is_available", true)
@@ -97,6 +131,14 @@ async function searchMenu(
   }
   if (args.dietary === "vegetarian") query = query.eq("is_vegetarian", true);
   if (args.dietary === "vegan") query = query.eq("is_vegan", true);
+  // halal and kosher filter to what the restaurant ASSERTED. A dish
+  // excluded here is unstated, not denied — the tool description says so
+  // to the model, and the system prompt repeats it.
+  if (args.dietary === "halal") query = query.eq("is_halal", true);
+  if (args.dietary === "kosher") query = query.eq("is_kosher", true);
+  if (args.dietary === "high_protein") {
+    query = query.eq("is_high_protein", true);
+  }
   if (args.spicyOnly) query = query.eq("is_spicy", true);
 
   const { data } = await query;
@@ -120,12 +162,46 @@ async function searchMenu(
         isVegetarian: item.is_vegetarian,
         isVegan: item.is_vegan,
         isSpicy: item.is_spicy,
+        // Claims the restaurant has ASSERTED, as a list. Deliberately not
+        // `isHalal: false` alongside the booleans above: a model handed a
+        // false will eventually tell a diner "no, that isn't halal" about a
+        // dish nobody ever assessed. An absent claim here means unstated,
+        // and the tool description and system prompt both say so.
+        dietaryClaims: assertedClaims({
+          isVegetarian: item.is_vegetarian,
+          isVegan: item.is_vegan,
+          isSpicy: item.is_spicy,
+          isHalal: item.is_halal,
+          isKosher: item.is_kosher,
+          isHighProtein: item.is_high_protein,
+        }),
         // The restaurant's own grouping, carried through so the model can
         // say "that's one of their chaats" without guessing.
         category: categoryName.get(item.category_id) ?? null,
       })),
     },
   };
+}
+
+/** One row of a get_menu_item select, as the migrations declare it. */
+interface DetailRow extends SearchRow {
+  is_available: boolean;
+  spice_level: string | null;
+  contains_nuts: boolean;
+  contains_dairy: boolean;
+  contains_gluten: boolean;
+  preparation_time: number | null;
+  portion_note: string | null;
+}
+
+/** Just the builder methods get_menu_item uses. */
+interface MenuDetailQuery {
+  select(columns: string): MenuDetailQuery;
+  eq(column: string, value: unknown): MenuDetailQuery;
+  maybeSingle(): Promise<{
+    data: DetailRow | null;
+    error: { message: string } | null;
+  }>;
 }
 
 async function getMenuItem(
@@ -139,10 +215,12 @@ async function getMenuItem(
   // same "not found" a customer browsing that restaurant's own menu would
   // get for a bad id. There is no way for this tool to leak another
   // restaurant's item, no matter what id the model supplies.
-  const { data: item, error } = await supabase
-    .from("menu_items")
+  // Same untyped-column assertion as search_menu above.
+  const { data: item, error } = await (
+    supabase.from("menu_items") as unknown as MenuDetailQuery
+  )
     .select(
-      "id, name, description, price, is_available, category_id, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note",
+      "id, name, description, price, is_available, category_id, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note",
     )
     .eq("id", args.menuItemId)
     .eq("restaurant_id", context.restaurantId)
@@ -241,6 +319,20 @@ async function getMenuItem(
       isVegetarian: item.is_vegetarian,
       isVegan: item.is_vegan,
       isSpicy: item.is_spicy,
+      // Claims the restaurant has ASSERTED, as a list. Deliberately not
+      // `isHalal: false` alongside the booleans above: a model handed a
+      // false will eventually tell a diner "no, that isn't halal" about a
+      // dish nobody ever assessed. An absent claim here means unstated,
+      // and the tool description and system prompt both say so.
+      dietaryClaims: assertedClaims({
+        isVegetarian: item.is_vegetarian,
+        isVegan: item.is_vegan,
+        isSpicy: item.is_spicy,
+        isHalal: item.is_halal,
+        isKosher: item.is_kosher,
+        isHighProtein: item.is_high_protein,
+      }),
+
       spiceLevel: item.spice_level,
       containsNuts: item.contains_nuts,
       containsDairy: item.contains_dairy,

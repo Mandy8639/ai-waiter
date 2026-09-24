@@ -5,12 +5,27 @@ import {
   menuHref,
   parseDietFilters,
   toggleDietFilter,
+  type DietFlags,
 } from "@/lib/menu/diet-filters";
 import { formatPrice } from "@/lib/format/price";
 
-const veg = { isVegetarian: true, isVegan: false, isSpicy: false };
-const vegan = { isVegetarian: false, isVegan: true, isSpicy: true };
-const meat = { isVegetarian: false, isVegan: false, isSpicy: true };
+/**
+ * A dish with nothing claimed. Every fixture starts here and turns on only
+ * what it needs, so a test never accidentally asserts that an unstated
+ * claim behaves like a stated one.
+ */
+const unstated: DietFlags = {
+  isVegetarian: false,
+  isVegan: false,
+  isSpicy: false,
+  isHalal: false,
+  isKosher: false,
+  isHighProtein: false,
+};
+
+const veg: DietFlags = { ...unstated, isVegetarian: true };
+const vegan: DietFlags = { ...unstated, isVegan: true, isSpicy: true };
+const meat: DietFlags = { ...unstated, isSpicy: true };
 
 describe("diet filters", () => {
   it("treats a vegan dish as vegetarian", () => {

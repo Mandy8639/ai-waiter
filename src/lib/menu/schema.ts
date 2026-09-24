@@ -24,6 +24,13 @@ export const menuItemSchema = z.object({
   imageUrl: z.string().trim().max(2000).optional(),
   isAvailable: z.boolean(),
   isVegetarian: z.boolean(),
+  /**
+   * Owner-asserted claims. False means "not stated" and is never rendered
+   * or reported as a denial — see 20260925090000_dietary_claims.sql.
+   */
+  isHalal: z.boolean(),
+  isKosher: z.boolean(),
+  isHighProtein: z.boolean(),
   isVegan: z.boolean(),
   isSpicy: z.boolean(),
   spiceLevel: z.enum(spiceLevels).optional(),

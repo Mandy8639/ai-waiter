@@ -7,6 +7,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { updateMenuItem } from "@/lib/menu/actions";
 import { env } from "@/lib/env";
 import { loadOwnerPhotoState } from "@/lib/menu-images/owner-state";
+import type { MenuItemEditRow } from "@/lib/menu-images/menu-item-rows";
 import { generationAvailability } from "@/lib/menu-images/actions";
 
 export const metadata = {
@@ -22,11 +23,28 @@ export default async function EditMenuItemPage({
   const { restaurant } = await requireCurrentRestaurant();
   const supabase = await createClient();
 
+  // The dietary claim columns postdate database.types.ts; asserted against
+  // the migration, like every other select that mentions them.
   const [{ data: item }, { data: categories }] = await Promise.all([
-    supabase
-      .from("menu_items")
+    (
+      supabase.from("menu_items") as unknown as {
+        select: (columns: string) => {
+          eq: (
+            c: string,
+            v: string,
+          ) => {
+            eq: (
+              c: string,
+              v: string,
+            ) => {
+              maybeSingle: () => Promise<{ data: MenuItemEditRow | null }>;
+            };
+          };
+        };
+      }
+    )
       .select(
-        "id, name, slug, category_id, description, price, image_url, is_available, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, display_order",
+        "id, name, slug, category_id, description, price, image_url, is_available, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, display_order",
       )
       .eq("id", id)
       .eq("restaurant_id", restaurant.id)
@@ -90,6 +108,9 @@ export default async function EditMenuItemPage({
               imageUrl: item.image_url,
               isAvailable: item.is_available,
               isVegetarian: item.is_vegetarian,
+              isHalal: item.is_halal,
+              isKosher: item.is_kosher,
+              isHighProtein: item.is_high_protein,
               isVegan: item.is_vegan,
               isSpicy: item.is_spicy,
               spiceLevel: item.spice_level,

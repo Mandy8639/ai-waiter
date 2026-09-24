@@ -19,7 +19,8 @@ import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { resolveDinerImage } from "@/lib/menu-images/resolve";
 import {
-  asRowsWithImageColumns,
+  asRowsWithNewColumns,
+  type DietFlagRow,
   type MenuListRow,
 } from "@/lib/menu-images/menu-item-rows";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
@@ -41,9 +42,20 @@ export async function generateMetadata({
   return { title: restaurant ? `Menu — ${restaurant.name}` : "Menu" };
 }
 
+/**
+ * halal, kosher and high-protein are deliberately text-only.
+ *
+ * Every candidate icon makes a claim the chip should not: a check or
+ * badge reads as "verified by this app", and we verify nothing — the
+ * restaurant is the one asserting it. A religious symbol would be worse
+ * still. Plain words say exactly as much as we know.
+ */
 const DIET_ICONS: Record<DietFilterKey, React.ReactNode> = {
   vegetarian: <Leaf className="size-3.5" aria-hidden="true" />,
   vegan: <Sprout className="size-3.5" aria-hidden="true" />,
+  halal: null,
+  kosher: null,
+  "high-protein": null,
   spicy: <Flame className="size-3.5" aria-hidden="true" />,
   mild: <Wind className="size-3.5" aria-hidden="true" />,
 };
@@ -81,7 +93,7 @@ export default async function MenuPage({
   let itemsQuery = supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, category_id",
+      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein, category_id",
     )
     .eq("restaurant_id", restaurant.id)
     .order("display_order", { ascending: true })
@@ -122,9 +134,21 @@ export default async function MenuPage({
         .eq("restaurant_id", restaurant.id)
         .order("display_order", { ascending: true }),
       itemsQuery,
-      supabase
-        .from("menu_items")
-        .select("is_vegetarian, is_vegan, is_spicy")
+      // Same untyped-column problem as the list query above: the dietary
+      // claim columns postdate database.types.ts.
+      (
+        supabase.from("menu_items") as unknown as {
+          select: (columns: string) => {
+            eq: (
+              column: string,
+              value: string,
+            ) => { limit: (n: number) => Promise<{ data: unknown }> };
+          };
+        }
+      )
+        .select(
+          "is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein",
+        )
         .eq("restaurant_id", restaurant.id)
         .limit(500),
     ]);
@@ -132,12 +156,15 @@ export default async function MenuPage({
   // database.types.ts predates phase 1, so the generated client cannot
   // describe the image columns. Asserted once here against the migration;
   // see src/lib/menu-images/menu-item-rows.ts.
-  const itemRows = asRowsWithImageColumns<MenuListRow>(menuItems);
+  const itemRows = asRowsWithNewColumns<MenuListRow>(menuItems);
 
-  const flags = (flagRows ?? []).map((row) => ({
+  const flags = asRowsWithNewColumns<DietFlagRow>(flagRows).map((row) => ({
     isVegetarian: row.is_vegetarian,
     isVegan: row.is_vegan,
     isSpicy: row.is_spicy,
+    isHalal: row.is_halal,
+    isKosher: row.is_kosher,
+    isHighProtein: row.is_high_protein,
   }));
   const dietChoices = availableDietFilters(flags);
   // Said once, in the restaurant's own terms (its flags), instead of a
@@ -193,6 +220,9 @@ export default async function MenuPage({
       isVegetarian: item.is_vegetarian,
       isVegan: item.is_vegan,
       isSpicy: item.is_spicy,
+      isHalal: item.is_halal,
+      isKosher: item.is_kosher,
+      isHighProtein: item.is_high_protein,
       allergens: allergensByItem.get(item.id) ?? [],
       categoryId: item.category_id,
     }),

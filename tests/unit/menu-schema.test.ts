@@ -10,6 +10,11 @@ const valid = {
   isVegetarian: false,
   isVegan: false,
   isSpicy: true,
+  // Required rather than defaulted, so a form that forgets a claim field
+  // fails loudly instead of quietly recording "not stated".
+  isHalal: false,
+  isKosher: false,
+  isHighProtein: false,
   containsNuts: false,
   containsDairy: true,
   containsGluten: false,
@@ -89,5 +94,19 @@ describe("menuItemSchema", () => {
     expect(
       menuItemSchema.safeParse({ ...valid, spiceLevel: "hot" }).success,
     ).toBe(true);
+  });
+});
+
+describe("dietary claims", () => {
+  it("requires each claim to be stated explicitly", () => {
+    // Omitting one is a form bug, and a form bug that silently recorded
+    // "not stated" would be indistinguishable from a deliberate answer.
+    const { isHalal: _omitted, ...withoutHalal } = valid;
+    expect(menuItemSchema.safeParse(withoutHalal).success).toBe(false);
+  });
+
+  it("accepts a dish the restaurant states is halal", () => {
+    const result = menuItemSchema.safeParse({ ...valid, isHalal: true });
+    expect(result.success).toBe(true);
   });
 });
