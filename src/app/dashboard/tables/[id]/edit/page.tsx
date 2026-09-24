@@ -6,7 +6,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { updateTable } from "@/lib/tables/actions";
 
 export const metadata = {
-  title: "Edit table — AI Waiter",
+  title: "Edit table — Tableside",
 };
 
 export default async function EditTablePage({

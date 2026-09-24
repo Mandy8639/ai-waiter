@@ -7,7 +7,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { ALLERGEN_VOCABULARY } from "@/lib/menu-import/suggestions";
 
 export const metadata = {
-  title: "Confirm allergens — AI Waiter",
+  title: "Confirm allergens — Tableside",
 };
 
 export default async function AllergenReviewPage() {

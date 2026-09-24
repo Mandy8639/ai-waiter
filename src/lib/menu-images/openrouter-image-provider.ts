@@ -121,8 +121,8 @@ export class OpenRouterImageGenerationProvider implements ImageGenerationProvide
           headers: {
             Authorization: `Bearer ${this.options.apiKey}`,
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://ai-waiter.local",
-            "X-Title": "AI Waiter",
+            "HTTP-Referer": "https://tableside.menu",
+            "X-Title": "Tableside",
           },
           body: JSON.stringify({
             model: this.options.model,

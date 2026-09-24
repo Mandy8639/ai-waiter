@@ -10,7 +10,7 @@ import {
 } from "@/lib/ingredients/actions";
 
 export const metadata = {
-  title: "Edit ingredient — AI Waiter",
+  title: "Edit ingredient — Tableside",
 };
 
 export default async function EditIngredientPage({

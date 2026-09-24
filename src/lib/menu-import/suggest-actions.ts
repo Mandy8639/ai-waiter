@@ -53,8 +53,8 @@ async function askForSuggestions(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://ai-waiter.local",
-        "X-Title": "AI Waiter menu suggestions",
+        "HTTP-Referer": "https://tableside.menu",
+        "X-Title": "Tableside menu suggestions",
       },
       body: JSON.stringify({
         // The suggester's own list, not the reader's: this call contains

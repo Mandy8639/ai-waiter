@@ -8,7 +8,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { createMenuItem } from "@/lib/menu/actions";
 
 export const metadata = {
-  title: "New menu item — AI Waiter",
+  title: "New menu item — Tableside",
 };
 
 export default async function NewMenuItemPage() {

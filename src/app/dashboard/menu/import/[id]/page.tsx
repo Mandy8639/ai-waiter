@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 
 export const metadata = {
-  title: "Review imported menu — AI Waiter",
+  title: "Review imported menu — Tableside",
 };
 
 export default async function MenuImportReviewPage({

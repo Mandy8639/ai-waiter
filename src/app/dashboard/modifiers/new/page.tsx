@@ -6,7 +6,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { createModifierGroup } from "@/lib/modifiers/actions";
 
 export const metadata = {
-  title: "New modifier group — AI Waiter",
+  title: "New modifier group — Tableside",
 };
 
 export default async function NewModifierGroupPage() {

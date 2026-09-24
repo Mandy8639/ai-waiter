@@ -4,7 +4,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { createAllergen } from "@/lib/allergens/actions";
 
 export const metadata = {
-  title: "New allergen — AI Waiter",
+  title: "New allergen — Tableside",
 };
 
 export default async function NewAllergenPage() {

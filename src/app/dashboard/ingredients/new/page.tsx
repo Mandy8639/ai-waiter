@@ -4,7 +4,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { createIngredient } from "@/lib/ingredients/actions";
 
 export const metadata = {
-  title: "New ingredient — AI Waiter",
+  title: "New ingredient — Tableside",
 };
 
 export default async function NewIngredientPage() {

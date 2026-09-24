@@ -8,7 +8,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { deleteAllergen } from "@/lib/allergens/actions";
 
 export const metadata = {
-  title: "Allergens — AI Waiter",
+  title: "Allergens — Tableside",
 };
 
 export default async function AllergensPage() {

@@ -4,7 +4,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { createCategory } from "@/lib/categories/actions";
 
 export const metadata = {
-  title: "New category — AI Waiter",
+  title: "New category — Tableside",
 };
 
 export default async function NewCategoryPage() {

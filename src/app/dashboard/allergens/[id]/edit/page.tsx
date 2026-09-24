@@ -10,7 +10,7 @@ import {
 } from "@/lib/allergens/actions";
 
 export const metadata = {
-  title: "Edit allergen — AI Waiter",
+  title: "Edit allergen — Tableside",
 };
 
 export default async function EditAllergenPage({

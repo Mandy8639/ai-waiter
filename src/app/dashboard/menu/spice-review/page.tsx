@@ -7,7 +7,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import type { SpiceLevel } from "@/lib/menu-import/suggestions";
 
 export const metadata = {
-  title: "Review spice levels — AI Waiter",
+  title: "Review spice levels — Tableside",
 };
 
 export default async function SpiceReviewPage() {

@@ -17,7 +17,7 @@ import { formatReservationTime } from "@/lib/reservations/timezone";
 import { OrderSearchForm } from "@/components/orders/order-search-form";
 
 export const metadata = {
-  title: "Orders — AI Waiter",
+  title: "Orders — Tableside",
 };
 
 const STATUS_BADGE: Record<

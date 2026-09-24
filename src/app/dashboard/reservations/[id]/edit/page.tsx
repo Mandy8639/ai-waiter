@@ -6,7 +6,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { updateReservationDetails } from "@/lib/reservations/actions";
 
 export const metadata = {
-  title: "Edit reservation — AI Waiter",
+  title: "Edit reservation — Tableside",
 };
 
 export default async function EditReservationPage({

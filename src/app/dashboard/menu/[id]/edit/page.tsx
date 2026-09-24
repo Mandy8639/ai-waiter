@@ -10,7 +10,7 @@ import { loadOwnerPhotoState } from "@/lib/menu-images/owner-state";
 import { generationAvailability } from "@/lib/menu-images/actions";
 
 export const metadata = {
-  title: "Edit menu item — AI Waiter",
+  title: "Edit menu item — Tableside",
 };
 
 export default async function EditMenuItemPage({

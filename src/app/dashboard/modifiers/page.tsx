@@ -9,7 +9,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { deleteModifierGroup } from "@/lib/modifiers/actions";
 
 export const metadata = {
-  title: "Modifiers — AI Waiter",
+  title: "Modifiers — Tableside",
 };
 
 export default async function ModifiersPage() {

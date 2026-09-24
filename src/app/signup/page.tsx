@@ -9,7 +9,7 @@ import { AuthForm } from "@/components/auth/auth-form";
 import { signUp } from "@/lib/auth/actions";
 
 export const metadata = {
-  title: "Sign up — AI Waiter",
+  title: "Sign up — Tableside",
 };
 
 export default function SignupPage() {

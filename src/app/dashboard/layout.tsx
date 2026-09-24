@@ -111,7 +111,7 @@ export default async function DashboardLayout({
               {restaurant.name}
             </span>
             <span className="type-caption text-muted-foreground">
-              AI Waiter
+              Tableside
             </span>
           </span>
         </Link>

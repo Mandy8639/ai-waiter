@@ -19,7 +19,7 @@ export async function generateMetadata({
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
   return {
     title: restaurant
-      ? `${restaurant.name} — AI Waiter`
+      ? `${restaurant.name} — Tableside`
       : "Restaurant not found",
   };
 }

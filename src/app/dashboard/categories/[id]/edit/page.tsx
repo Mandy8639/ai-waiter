@@ -6,7 +6,7 @@ import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-rest
 import { updateCategory } from "@/lib/categories/actions";
 
 export const metadata = {
-  title: "Edit category — AI Waiter",
+  title: "Edit category — Tableside",
 };
 
 export default async function EditCategoryPage({
