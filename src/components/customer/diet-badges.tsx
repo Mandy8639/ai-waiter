@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
  * missing allergen data — see src/lib/menu/diet-filters.ts for why
  * "dairy-free" and friends are never shown.
  *
- * halal, kosher and high-protein appear as plain words with no icon. Every
+ * halal and kosher appear as plain words with no icon. Every
  * icon that fits would overclaim: a tick or a badge reads as "verified",
  * and this software verifies nothing — the restaurant is the one asserting
  * it. On the dish page the claim is written out in full and attributed by
@@ -21,7 +21,6 @@ export function DietBadges({
   isSpicy,
   isHalal = false,
   isKosher = false,
-  isHighProtein = false,
   spiceLabel,
   hideVegetarian = false,
   className,
@@ -33,17 +32,14 @@ export function DietBadges({
   isSpicy: boolean;
   isHalal?: boolean;
   isKosher?: boolean;
-  isHighProtein?: boolean;
   /** A specific heat ("Medium", "Hot") when known; otherwise "Spicy". */
   spiceLabel?: string | null;
   className?: string;
 }) {
   const showVegetarian = isVegetarian && !hideVegetarian;
-  const claims = [
-    isHalal && "Halal",
-    isKosher && "Kosher",
-    isHighProtein && "High protein",
-  ].filter((c): c is string => Boolean(c));
+  const claims = [isHalal && "Halal", isKosher && "Kosher"].filter(
+    (c): c is string => Boolean(c),
+  );
   if (!showVegetarian && !isVegan && !isSpicy && claims.length === 0) {
     return null;
   }

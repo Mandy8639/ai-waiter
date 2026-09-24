@@ -27,7 +27,6 @@ const nothingClaimed: DietFlags = {
   isSpicy: false,
   isHalal: false,
   isKosher: false,
-  isHighProtein: false,
 };
 
 describe("assertedClaims", () => {
@@ -46,13 +45,8 @@ describe("assertedClaims", () => {
 
   it("reports each claim the restaurant did make", () => {
     expect(
-      assertedClaims({
-        ...nothingClaimed,
-        isHalal: true,
-        isKosher: true,
-        isHighProtein: true,
-      }),
-    ).toEqual(["halal", "kosher", "high-protein"]);
+      assertedClaims({ ...nothingClaimed, isHalal: true, isKosher: true }),
+    ).toEqual(["halal", "kosher"]);
   });
 
   it("treats a vegan dish as vegetarian, like the filter does", () => {
@@ -73,7 +67,6 @@ describe("attribution", () => {
   it("attributes exactly the claims a diner may act on for belief or health", () => {
     expect(claimNeedsAttribution("halal")).toBe(true);
     expect(claimNeedsAttribution("kosher")).toBe(true);
-    expect(claimNeedsAttribution("high-protein")).toBe(true);
   });
 
   it("leaves the conventional labels unattributed", () => {
@@ -90,14 +83,6 @@ describe("attribution", () => {
     );
     expect(claimSentence("kosher", "Nashta")).toBe(
       "Nashta states this dish is kosher.",
-    );
-  });
-
-  it("words the protein claim as a description rather than a measurement", () => {
-    // There is no threshold behind it and no nutrition data — see
-    // docs/COMPETITIVE_ROADMAP.md phase M.
-    expect(claimSentence("high-protein", "Nashta")).toBe(
-      "Nashta states this dish is high in protein.",
     );
   });
 
@@ -141,7 +126,6 @@ describe("filtering", () => {
 
   it("accepts the new keys in the URL", () => {
     expect(parseDietFilters("halal,kosher")).toEqual(["halal", "kosher"]);
-    expect(parseDietFilters("high-protein")).toEqual(["high-protein"]);
   });
 
   it("keeps the canonical order stable so equivalent URLs are identical", () => {

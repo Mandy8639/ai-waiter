@@ -65,7 +65,7 @@ export default async function MenuItemDetailPage({
   const { data: itemRow } = await supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, spice_level",
+      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, spice_level",
     )
     .eq("id", id)
     .eq("restaurant_id", restaurant.id)
@@ -197,7 +197,6 @@ export default async function MenuItemDetailPage({
     isSpicy: item.is_spicy,
     isHalal: item.is_halal,
     isKosher: item.is_kosher,
-    isHighProtein: item.is_high_protein,
   })
     .map((claim) => claimSentence(claim, restaurant.name))
     .filter((sentence): sentence is string => sentence !== null);
@@ -240,7 +239,6 @@ export default async function MenuItemDetailPage({
             isSpicy={item.is_spicy}
             isHalal={item.is_halal}
             isKosher={item.is_kosher}
-            isHighProtein={item.is_high_protein}
             spiceLabel={
               item.spice_level ? spiceLevelLabels[item.spice_level] : null
             }

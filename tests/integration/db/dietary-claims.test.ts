@@ -28,16 +28,10 @@ describe("dietary claim columns", () => {
     const { rows } = await db.admin.query<{
       is_halal: boolean;
       is_kosher: boolean;
-      is_high_protein: boolean;
-    }>(
-      "select is_halal, is_kosher, is_high_protein from public.menu_items where id = $1;",
-      [menuItemId],
-    );
-    expect(rows[0]).toEqual({
-      is_halal: false,
-      is_kosher: false,
-      is_high_protein: false,
-    });
+    }>("select is_halal, is_kosher from public.menu_items where id = $1;", [
+      menuItemId,
+    ]);
+    expect(rows[0]).toEqual({ is_halal: false, is_kosher: false });
   });
 
   it("carries a comment saying what false means, for the next person", async () => {
@@ -95,5 +89,29 @@ describe("dietary claim columns", () => {
       [menuItemId],
     );
     expect(rows[0].is_halal).toBe(false);
+  });
+});
+
+describe("the dropped high-protein claim", () => {
+  let db2: TestDb;
+
+  beforeAll(async () => {
+    db2 = await createTestDb();
+  });
+
+  afterAll(async () => {
+    await db2.close();
+  });
+
+  it("is gone, because 20260925100000 drops what 20260925090000 added", () => {
+    // Guards the pair: the add migration could not simply be edited, since
+    // it had already been applied to production. If someone later "tidies"
+    // the history by deleting the drop, this fails.
+    return db2.admin
+      .query("select is_high_protein from public.menu_items limit 1;")
+      .then(
+        () => expect.unreachable("is_high_protein should not exist"),
+        (error: Error) => expect(error.message).toMatch(/does not exist/),
+      );
   });
 });

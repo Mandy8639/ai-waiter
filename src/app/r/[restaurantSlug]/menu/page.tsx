@@ -43,7 +43,7 @@ export async function generateMetadata({
 }
 
 /**
- * halal, kosher and high-protein are deliberately text-only.
+ * halal and kosher are deliberately text-only.
  *
  * Every candidate icon makes a claim the chip should not: a check or
  * badge reads as "verified by this app", and we verify nothing — the
@@ -55,7 +55,6 @@ const DIET_ICONS: Record<DietFilterKey, React.ReactNode> = {
   vegan: <Sprout className="size-3.5" aria-hidden="true" />,
   halal: null,
   kosher: null,
-  "high-protein": null,
   spicy: <Flame className="size-3.5" aria-hidden="true" />,
   mild: <Wind className="size-3.5" aria-hidden="true" />,
 };
@@ -93,7 +92,7 @@ export default async function MenuPage({
   let itemsQuery = supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein, category_id",
+      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, category_id",
     )
     .eq("restaurant_id", restaurant.id)
     .order("display_order", { ascending: true })
@@ -146,9 +145,7 @@ export default async function MenuPage({
           };
         }
       )
-        .select(
-          "is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein",
-        )
+        .select("is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher")
         .eq("restaurant_id", restaurant.id)
         .limit(500),
     ]);
@@ -164,7 +161,6 @@ export default async function MenuPage({
     isSpicy: row.is_spicy,
     isHalal: row.is_halal,
     isKosher: row.is_kosher,
-    isHighProtein: row.is_high_protein,
   }));
   const dietChoices = availableDietFilters(flags);
   // Said once, in the restaurant's own terms (its flags), instead of a
@@ -222,7 +218,6 @@ export default async function MenuPage({
       isSpicy: item.is_spicy,
       isHalal: item.is_halal,
       isKosher: item.is_kosher,
-      isHighProtein: item.is_high_protein,
       allergens: allergensByItem.get(item.id) ?? [],
       categoryId: item.category_id,
     }),

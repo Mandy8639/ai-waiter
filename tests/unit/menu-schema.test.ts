@@ -14,7 +14,6 @@ const valid = {
   // fails loudly instead of quietly recording "not stated".
   isHalal: false,
   isKosher: false,
-  isHighProtein: false,
   containsNuts: false,
   containsDairy: true,
   containsGluten: false,

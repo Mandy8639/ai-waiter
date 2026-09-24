@@ -20,7 +20,6 @@ const unstated: DietFlags = {
   isSpicy: false,
   isHalal: false,
   isKosher: false,
-  isHighProtein: false,
 };
 
 const veg: DietFlags = { ...unstated, isVegetarian: true };

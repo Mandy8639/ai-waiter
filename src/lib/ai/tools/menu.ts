@@ -56,7 +56,6 @@ interface SearchRow {
   is_spicy: boolean;
   is_halal: boolean;
   is_kosher: boolean;
-  is_high_protein: boolean;
 }
 
 /** Just the builder methods search_menu uses, none of them column-typed. */
@@ -112,7 +111,7 @@ async function searchMenu(
   // are regenerated. Everything downstream stays fully typed via SearchRow.
   let query = (supabase.from("menu_items") as unknown as MenuSearchQuery)
     .select(
-      "id, name, description, price, category_id, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein",
+      "id, name, description, price, category_id, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher",
     )
     .eq("restaurant_id", context.restaurantId)
     .eq("is_available", true)
@@ -136,9 +135,6 @@ async function searchMenu(
   // to the model, and the system prompt repeats it.
   if (args.dietary === "halal") query = query.eq("is_halal", true);
   if (args.dietary === "kosher") query = query.eq("is_kosher", true);
-  if (args.dietary === "high_protein") {
-    query = query.eq("is_high_protein", true);
-  }
   if (args.spicyOnly) query = query.eq("is_spicy", true);
 
   const { data } = await query;
@@ -173,7 +169,6 @@ async function searchMenu(
           isSpicy: item.is_spicy,
           isHalal: item.is_halal,
           isKosher: item.is_kosher,
-          isHighProtein: item.is_high_protein,
         }),
         // The restaurant's own grouping, carried through so the model can
         // say "that's one of their chaats" without guessing.
@@ -220,7 +215,7 @@ async function getMenuItem(
     supabase.from("menu_items") as unknown as MenuDetailQuery
   )
     .select(
-      "id, name, description, price, is_available, category_id, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note",
+      "id, name, description, price, is_available, category_id, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note",
     )
     .eq("id", args.menuItemId)
     .eq("restaurant_id", context.restaurantId)
@@ -330,7 +325,6 @@ async function getMenuItem(
         isSpicy: item.is_spicy,
         isHalal: item.is_halal,
         isKosher: item.is_kosher,
-        isHighProtein: item.is_high_protein,
       }),
 
       spiceLevel: item.spice_level,

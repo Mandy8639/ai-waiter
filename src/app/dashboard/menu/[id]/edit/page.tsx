@@ -44,7 +44,7 @@ export default async function EditMenuItemPage({
       }
     )
       .select(
-        "id, name, slug, category_id, description, price, image_url, is_available, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, is_high_protein, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, display_order",
+        "id, name, slug, category_id, description, price, image_url, is_available, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, display_order",
       )
       .eq("id", id)
       .eq("restaurant_id", restaurant.id)
@@ -110,7 +110,6 @@ export default async function EditMenuItemPage({
               isVegetarian: item.is_vegetarian,
               isHalal: item.is_halal,
               isKosher: item.is_kosher,
-              isHighProtein: item.is_high_protein,
               isVegan: item.is_vegan,
               isSpicy: item.is_spicy,
               spiceLevel: item.spice_level,

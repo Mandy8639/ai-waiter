@@ -3,7 +3,7 @@
  * know about yet.
  *
  * Originally the image columns from phase 1; phase B added the dietary
- * claim columns (`is_halal`, `is_kosher`, `is_high_protein`) to the same
+ * claim columns (`is_halal`, `is_kosher`) to the same
  * problem and so to the same place.
  *
  * `src/lib/supabase/database.types.ts` predates both migrations, so the
@@ -35,14 +35,13 @@ export interface MenuItemImageFields {
 }
 
 /**
- * The three columns phase B added. Kept as their own interface so the
+ * The two columns phase B added. Kept as their own interface so the
  * dietary claims travel together and a select that forgets one fails to
  * type-check rather than silently reading `undefined` as "not stated".
  */
 export interface MenuItemDietaryClaimFields {
   is_halal: boolean;
   is_kosher: boolean;
-  is_high_protein: boolean;
 }
 
 /** Selected by the owner's edit form. */
@@ -92,8 +91,7 @@ export const MENU_ITEM_IMAGE_COLUMNS =
   "image_url, active_image_id, image_source, image_variants";
 
 /** The column list to add to a select that needs the dietary claims. */
-export const MENU_ITEM_DIETARY_CLAIM_COLUMNS =
-  "is_halal, is_kosher, is_high_protein";
+export const MENU_ITEM_DIETARY_CLAIM_COLUMNS = "is_halal, is_kosher";
 
 /**
  * Narrows rows the generated types cannot describe yet.

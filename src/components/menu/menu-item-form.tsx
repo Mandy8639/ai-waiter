@@ -25,7 +25,6 @@ export interface MenuItemFormValues {
   isVegetarian: boolean;
   isHalal: boolean;
   isKosher: boolean;
-  isHighProtein: boolean;
   isVegan: boolean;
   isSpicy: boolean;
   spiceLevel: string | null;
@@ -301,12 +300,6 @@ export function MenuItemForm({
             id="isKosher"
             label="Kosher"
             defaultChecked={defaultValues?.isKosher}
-            disabled={isPending}
-          />
-          <Toggle
-            id="isHighProtein"
-            label="High in protein"
-            defaultChecked={defaultValues?.isHighProtein}
             disabled={isPending}
           />
         </div>

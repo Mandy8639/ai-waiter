@@ -22,7 +22,6 @@ const nothingClaimed = {
   isSpicy: false,
   isHalal: false,
   isKosher: false,
-  isHighProtein: false,
 };
 
 describe("DietBadges", () => {
@@ -43,22 +42,20 @@ describe("DietBadges", () => {
     render(<DietBadges {...nothingClaimed} isHalal />);
     expect(screen.queryByText(/kosher/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/not halal/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/high protein/i)).not.toBeInTheDocument();
   });
 
   it("never renders the word 'not' against any claim", () => {
     const { container } = render(
-      <DietBadges {...nothingClaimed} isHalal isKosher isHighProtein />,
+      <DietBadges {...nothingClaimed} isHalal isKosher />,
     );
     // "Not spicy" is a filter chip, not a badge; no badge negates anything.
     expect(container.textContent).not.toMatch(/\bnot\b/i);
   });
 
   it("shows several claims together", () => {
-    render(<DietBadges {...nothingClaimed} isHalal isKosher isHighProtein />);
+    render(<DietBadges {...nothingClaimed} isHalal isKosher />);
     expect(screen.getByText("Halal")).toBeInTheDocument();
     expect(screen.getByText("Kosher")).toBeInTheDocument();
-    expect(screen.getByText("High protein")).toBeInTheDocument();
   });
 
   it("carries no icon on a claim", () => {

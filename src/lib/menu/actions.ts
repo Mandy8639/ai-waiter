@@ -31,7 +31,6 @@ function parse(formData: FormData) {
     isVegetarian: toBoolean(formData.get("isVegetarian")),
     isHalal: toBoolean(formData.get("isHalal")),
     isKosher: toBoolean(formData.get("isKosher")),
-    isHighProtein: toBoolean(formData.get("isHighProtein")),
     isVegan: toBoolean(formData.get("isVegan")),
     isSpicy: toBoolean(formData.get("isSpicy")),
     spiceLevel:
@@ -64,7 +63,7 @@ export async function createMenuItem(
   if (!parsed.success)
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
 
-  // is_halal / is_kosher / is_high_protein postdate database.types.ts, so
+  // is_halal / is_kosher postdate database.types.ts, so
   // the generated insert payload types them as `never`. Asserted here
   // against 20260925090000_dietary_claims.sql; the Zod schema above is
   // what actually validates the values.
@@ -86,7 +85,6 @@ export async function createMenuItem(
     is_vegetarian: parsed.data.isVegetarian,
     is_halal: parsed.data.isHalal,
     is_kosher: parsed.data.isKosher,
-    is_high_protein: parsed.data.isHighProtein,
     is_vegan: parsed.data.isVegan,
     is_spicy: parsed.data.isSpicy,
     spice_level: parsed.data.spiceLevel ?? null,
@@ -155,7 +153,6 @@ export async function updateMenuItem(
       is_vegetarian: parsed.data.isVegetarian,
       is_halal: parsed.data.isHalal,
       is_kosher: parsed.data.isKosher,
-      is_high_protein: parsed.data.isHighProtein,
       is_vegan: parsed.data.isVegan,
       is_spicy: parsed.data.isSpicy,
       spice_level: parsed.data.spiceLevel ?? null,

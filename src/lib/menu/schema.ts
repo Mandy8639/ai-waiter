@@ -30,7 +30,6 @@ export const menuItemSchema = z.object({
    */
   isHalal: z.boolean(),
   isKosher: z.boolean(),
-  isHighProtein: z.boolean(),
   isVegan: z.boolean(),
   isSpicy: z.boolean(),
   spiceLevel: z.enum(spiceLevels).optional(),

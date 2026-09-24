@@ -17,7 +17,6 @@ export interface MenuItemCardData {
   isSpicy: boolean;
   isHalal: boolean;
   isKosher: boolean;
-  isHighProtein: boolean;
   /** Confirmed allergens only — never suggestions. */
   allergens: string[];
 }
@@ -74,7 +73,6 @@ export function MenuItemCard({
             isSpicy={item.isSpicy}
             isHalal={item.isHalal}
             isKosher={item.isKosher}
-            isHighProtein={item.isHighProtein}
             hideVegetarian={menuIsAllVegetarian}
           />
         </div>

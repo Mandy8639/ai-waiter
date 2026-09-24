@@ -30,7 +30,6 @@ export const DIET_FILTERS = [
   { key: "vegan", label: "Vegan" },
   { key: "halal", label: "Halal" },
   { key: "kosher", label: "Kosher" },
-  { key: "high-protein", label: "High protein" },
   { key: "spicy", label: "Spicy" },
   { key: "mild", label: "Not spicy" },
 ] as const;
@@ -43,7 +42,6 @@ export interface DietFlags {
   isSpicy: boolean;
   isHalal: boolean;
   isKosher: boolean;
-  isHighProtein: boolean;
 }
 
 const KEYS = new Set<string>(DIET_FILTERS.map((f) => f.key));
@@ -68,8 +66,6 @@ export function matchesDietFilter(
       return item.isHalal;
     case "kosher":
       return item.isKosher;
-    case "high-protein":
-      return item.isHighProtein;
     case "spicy":
       return item.isSpicy;
     case "mild":
@@ -171,7 +167,6 @@ export const DIETARY_CLAIMS = [
   { key: "vegan", label: "Vegan" },
   { key: "halal", label: "Halal" },
   { key: "kosher", label: "Kosher" },
-  { key: "high-protein", label: "High protein" },
 ] as const;
 
 export type DietaryClaimKey = (typeof DIETARY_CLAIMS)[number]["key"];
@@ -180,23 +175,16 @@ export type DietaryClaimKey = (typeof DIETARY_CLAIMS)[number]["key"];
  * Claims that must be shown as the restaurant's own statement rather than
  * as a bare badge.
  *
- * halal and kosher because they are religious certifications a diner may
+ * halal and kosher, because they are religious certifications a diner may
  * act on for reasons far beyond preference, and the restaurant — not this
- * software — is the party making the claim. high-protein because it has no
- * agreed threshold and no nutrition data behind it (see
- * docs/COMPETITIVE_ROADMAP.md phase M); it is the restaurant's description,
- * not a measurement.
+ * software — is the party making the claim.
  *
  * Vegetarian and vegan are absent on purpose: they are conventional, and
  * this product has shown them as plain labels since the first menu.
  * Attributing those and not the allergen list would be inconsistent
  * theatre.
  */
-const ATTRIBUTED: ReadonlySet<string> = new Set([
-  "halal",
-  "kosher",
-  "high-protein",
-]);
+const ATTRIBUTED: ReadonlySet<string> = new Set(["halal", "kosher"]);
 
 export function claimNeedsAttribution(key: DietaryClaimKey): boolean {
   return ATTRIBUTED.has(key);
@@ -211,7 +199,6 @@ export function assertedClaims(item: DietFlags): DietaryClaimKey[] {
   if (item.isVegan) claimed.push("vegan");
   if (item.isHalal) claimed.push("halal");
   if (item.isKosher) claimed.push("kosher");
-  if (item.isHighProtein) claimed.push("high-protein");
   return claimed;
 }
 
@@ -228,9 +215,6 @@ export function claimSentence(
   restaurantName: string,
 ): string | null {
   if (!claimNeedsAttribution(key)) return null;
-  const what =
-    key === "high-protein"
-      ? "is high in protein"
-      : `is ${DIETARY_CLAIMS.find((c) => c.key === key)!.label.toLowerCase()}`;
-  return `${restaurantName} states this dish ${what}.`;
+  const label = DIETARY_CLAIMS.find((c) => c.key === key)!.label.toLowerCase();
+  return `${restaurantName} states this dish is ${label}.`;
 }
