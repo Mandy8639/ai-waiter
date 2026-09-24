@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Clock } from "lucide-react";
 import { AllergenNote } from "@/components/customer/allergen-note";
+import { assertedClaims, claimSentence } from "@/lib/menu/diet-filters";
 import { AskWaiterButton } from "@/components/customer/ask-waiter-card";
 import { DietBadges } from "@/components/customer/diet-badges";
 import { ItemDetailForm } from "@/components/customer/item-detail-form";
@@ -64,7 +65,7 @@ export default async function MenuItemDetailPage({
   const { data: itemRow } = await supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, spice_level",
+      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, spice_level",
     )
     .eq("id", id)
     .eq("restaurant_id", restaurant.id)
@@ -188,6 +189,18 @@ export default async function MenuItemDetailPage({
     item.contains_nuts && !lower.some((n) => n.includes("nut")) && "Nuts",
     item.contains_gluten && !lower.includes("gluten") && "Gluten",
   ].filter((v): v is string => Boolean(v));
+  // Only the claims that were actually asserted; claimSentence returns null
+  // for the conventional ones (vegetarian, vegan) that need no attribution.
+  const claimSentences = assertedClaims({
+    isVegetarian: item.is_vegetarian,
+    isVegan: item.is_vegan,
+    isSpicy: item.is_spicy,
+    isHalal: item.is_halal,
+    isKosher: item.is_kosher,
+  })
+    .map((claim) => claimSentence(claim, restaurant.name))
+    .filter((sentence): sentence is string => sentence !== null);
+
   const containsList = [...allergenNames, ...flagged];
 
   return (
@@ -224,6 +237,8 @@ export default async function MenuItemDetailPage({
             isVegetarian={item.is_vegetarian}
             isVegan={item.is_vegan}
             isSpicy={item.is_spicy}
+            isHalal={item.is_halal}
+            isKosher={item.is_kosher}
             spiceLabel={
               item.spice_level ? spiceLevelLabels[item.spice_level] : null
             }
@@ -254,6 +269,37 @@ export default async function MenuItemDetailPage({
           </p>
         )}
       </div>
+
+      {/*
+        Claims the restaurant has made, written out and attributed by name.
+        The card shows "Halal" as a word because two words is all a card
+        has room for; here there is room for the sentence, and a diner who
+        keeps halal deserves to know exactly who is saying it. This app
+        verifies none of it.
+
+        Nothing is rendered when a claim is absent. "Not stated" is not
+        printed either — a line saying the restaurant has not confirmed
+        something invites reading it as a denial, which is the mistake this
+        whole feature is built to avoid.
+      */}
+      {claimSentences.length > 0 && (
+        <section
+          aria-labelledby="claims-heading"
+          className="flex flex-col gap-1"
+        >
+          <h2
+            id="claims-heading"
+            className="type-overline text-muted-foreground"
+          >
+            From the restaurant
+          </h2>
+          {claimSentences.map((sentence) => (
+            <p key={sentence} className="type-body-sm text-muted-foreground">
+              {sentence}
+            </p>
+          ))}
+        </section>
+      )}
 
       {/*
         Only CONFIRMED allergens reach this point — the query above filters

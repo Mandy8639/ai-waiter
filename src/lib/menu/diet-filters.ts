@@ -10,6 +10,14 @@
  * acts on. Allergens stay on every card instead, stated as the restaurant
  * lists them.
  *
+ * halal and kosher ARE filterable, and are not an exception to the rule
+ * above — they are flags the restaurant sets, exactly like `is_vegetarian`.
+ * The filter means "dishes the restaurant states are halal", never "dishes
+ * we worked out are halal". A dish without the flag is simply absent from
+ * the filtered list, which is the honest outcome: the restaurant has not
+ * said. Nothing derives these from ingredients; see the migration
+ * 20260925090000_dietary_claims.sql for why that would be wrong.
+ *
  * A filter is offered only when it would actually narrow the menu: at
  * least one dish matches and at least one does not. An all-vegetarian
  * restaurant showing a "Vegetarian" chip that changes nothing is noise.
@@ -20,6 +28,8 @@
 export const DIET_FILTERS = [
   { key: "vegetarian", label: "Vegetarian" },
   { key: "vegan", label: "Vegan" },
+  { key: "halal", label: "Halal" },
+  { key: "kosher", label: "Kosher" },
   { key: "spicy", label: "Spicy" },
   { key: "mild", label: "Not spicy" },
 ] as const;
@@ -30,6 +40,8 @@ export interface DietFlags {
   isVegetarian: boolean;
   isVegan: boolean;
   isSpicy: boolean;
+  isHalal: boolean;
+  isKosher: boolean;
 }
 
 const KEYS = new Set<string>(DIET_FILTERS.map((f) => f.key));
@@ -48,6 +60,12 @@ export function matchesDietFilter(
       return item.isVegetarian || item.isVegan;
     case "vegan":
       return item.isVegan;
+    case "halal":
+      // Only what the restaurant asserted. Never inferred, and never the
+      // negation: a dish without the flag is unstated, not "not halal".
+      return item.isHalal;
+    case "kosher":
+      return item.isKosher;
     case "spicy":
       return item.isSpicy;
     case "mild":
@@ -121,4 +139,82 @@ export function menuHref(
   }
   const query = search.toString();
   return `/r/${restaurantSlug}/menu${query ? `?${query}` : ""}`;
+}
+
+/* -------------------------------------------------------------------------
+ * Claims
+ *
+ * A "claim" is something the restaurant has affirmatively stated about a
+ * dish. The list is deliberately narrower than DIET_FILTERS: "Not spicy" is
+ * a filter but not a claim (it is the absence of a flag), and spiciness is
+ * a description rather than a dietary assertion.
+ *
+ * THE POINT OF THIS SHAPE. Everything below reports only what is TRUE.
+ * There is no function here that returns "is this halal?" as a boolean,
+ * because the honest answer has three states — stated, not stated, and (a
+ * state this schema does not model) explicitly denied — and a boolean
+ * collapses the first two into a denial. Callers get a list of what the
+ * restaurant said; anything absent from that list is unstated, and the
+ * caller must say so rather than negate it.
+ *
+ * That is also why the AI tools return `dietaryClaims: string[]` instead of
+ * `isHalal: false`. A model handed `false` will eventually tell a diner
+ * "no, that dish isn't halal" about a dish nobody ever assessed.
+ * ---------------------------------------------------------------------- */
+
+export const DIETARY_CLAIMS = [
+  { key: "vegetarian", label: "Vegetarian" },
+  { key: "vegan", label: "Vegan" },
+  { key: "halal", label: "Halal" },
+  { key: "kosher", label: "Kosher" },
+] as const;
+
+export type DietaryClaimKey = (typeof DIETARY_CLAIMS)[number]["key"];
+
+/**
+ * Claims that must be shown as the restaurant's own statement rather than
+ * as a bare badge.
+ *
+ * halal and kosher, because they are religious certifications a diner may
+ * act on for reasons far beyond preference, and the restaurant — not this
+ * software — is the party making the claim.
+ *
+ * Vegetarian and vegan are absent on purpose: they are conventional, and
+ * this product has shown them as plain labels since the first menu.
+ * Attributing those and not the allergen list would be inconsistent
+ * theatre.
+ */
+const ATTRIBUTED: ReadonlySet<string> = new Set(["halal", "kosher"]);
+
+export function claimNeedsAttribution(key: DietaryClaimKey): boolean {
+  return ATTRIBUTED.has(key);
+}
+
+/** Only what the restaurant has stated. Never a negation, never inferred. */
+export function assertedClaims(item: DietFlags): DietaryClaimKey[] {
+  const claimed: DietaryClaimKey[] = [];
+  // A vegan dish is vegetarian even when only the vegan flag was ticked —
+  // the same rule matchesDietFilter applies.
+  if (item.isVegetarian || item.isVegan) claimed.push("vegetarian");
+  if (item.isVegan) claimed.push("vegan");
+  if (item.isHalal) claimed.push("halal");
+  if (item.isKosher) claimed.push("kosher");
+  return claimed;
+}
+
+/**
+ * How a claim is worded to a diner when it needs attributing.
+ *
+ * "Nashta states this dish is halal" rather than a bare "Halal", so the
+ * diner knows who is making the claim and can weigh it. The restaurant's
+ * name is passed in rather than the word "restaurant", because the diner
+ * is sitting in a specific one and a generic sentence reads like boilerplate.
+ */
+export function claimSentence(
+  key: DietaryClaimKey,
+  restaurantName: string,
+): string | null {
+  if (!claimNeedsAttribution(key)) return null;
+  const label = DIETARY_CLAIMS.find((c) => c.key === key)!.label.toLowerCase();
+  return `${restaurantName} states this dish is ${label}.`;
 }

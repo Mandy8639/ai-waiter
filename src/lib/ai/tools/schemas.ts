@@ -24,10 +24,10 @@ export const searchMenuSchema = z
         "Free-text keyword search over item name/description only (e.g. a dish name, ingredient, or cuisine) — this is a plain substring match, not a semantic search. Leave this empty when the customer's request is already fully covered by `dietary`/`spicyOnly` (e.g. for 'what vegetarian dishes do you have', set dietary: 'vegetarian' and leave query empty — do NOT also pass query: 'vegetarian' or 'vegetarian dishes', since that text won't literally appear in most item names/descriptions and combining it with the filter can incorrectly return zero results even when matching items exist).",
       ),
     dietary: z
-      .enum(["vegetarian", "vegan"])
+      .enum(["vegetarian", "vegan", "halal", "kosher"])
       .optional()
       .describe(
-        "Filter to only vegetarian or vegan items. Use this for dietary requests instead of putting 'vegetarian'/'vegan' into `query`.",
+        "Filter to items the restaurant has stated are vegetarian, vegan, halal or kosher. Use this for dietary requests instead of putting the word into `query`. IMPORTANT for halal and kosher: this returns only the dishes the restaurant has explicitly marked. A dish missing from the results has NOT been declared unsuitable — the restaurant simply has not said. Never tell a customer a dish is not halal or not kosher on the strength of it being absent here; say the menu doesn't specify and suggest they ask staff.",
       ),
     spicyOnly: z
       .boolean()

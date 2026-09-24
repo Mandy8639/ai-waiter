@@ -5,7 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
-import { asRowsWithImageColumns } from "@/lib/menu-images/menu-item-rows";
+import { asRowsWithNewColumns } from "@/lib/menu-images/menu-item-rows";
 import type { ImageSource } from "@/lib/menu-images/resolve";
 
 export const metadata = {
@@ -55,7 +55,7 @@ export default async function MenuPhotosPage() {
     .eq("restaurant_id", restaurant.id)
     .order("display_order", { ascending: true });
 
-  const rows = asRowsWithImageColumns<PhotoRow>(data);
+  const rows = asRowsWithNewColumns<PhotoRow>(data);
 
   const missing = rows.filter((row) => !row.active_image_id);
   const aiGenerated = rows.filter(

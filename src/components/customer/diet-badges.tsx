@@ -4,14 +4,23 @@ import { cn } from "@/lib/utils";
 /**
  * The restaurant's own dietary flags for a dish, as quiet inline labels.
  *
- * Only the three flags a restaurant sets directly. Nothing here is derived
- * from missing allergen data — see src/lib/menu/diet-filters.ts for why
+ * Only flags a restaurant sets directly. Nothing here is derived from
+ * missing allergen data — see src/lib/menu/diet-filters.ts for why
  * "dairy-free" and friends are never shown.
+ *
+ * halal and kosher appear as plain words with no icon. Every
+ * icon that fits would overclaim: a tick or a badge reads as "verified",
+ * and this software verifies nothing — the restaurant is the one asserting
+ * it. On the dish page the claim is written out in full and attributed by
+ * name (see claimSentence); here, where a card has room for two words, the
+ * word alone is the most that can honestly be said.
  */
 export function DietBadges({
   isVegetarian,
   isVegan,
   isSpicy,
+  isHalal = false,
+  isKosher = false,
   spiceLabel,
   hideVegetarian = false,
   className,
@@ -21,12 +30,19 @@ export function DietBadges({
   isVegetarian: boolean;
   isVegan: boolean;
   isSpicy: boolean;
+  isHalal?: boolean;
+  isKosher?: boolean;
   /** A specific heat ("Medium", "Hot") when known; otherwise "Spicy". */
   spiceLabel?: string | null;
   className?: string;
 }) {
   const showVegetarian = isVegetarian && !hideVegetarian;
-  if (!showVegetarian && !isVegan && !isSpicy) return null;
+  const claims = [isHalal && "Halal", isKosher && "Kosher"].filter(
+    (c): c is string => Boolean(c),
+  );
+  if (!showVegetarian && !isVegan && !isSpicy && claims.length === 0) {
+    return null;
+  }
 
   return (
     <span
@@ -54,6 +70,11 @@ export function DietBadges({
           {spiceLabel ?? "Spicy"}
         </span>
       )}
+      {claims.map((claim) => (
+        <span key={claim} className="text-muted-foreground type-caption">
+          {claim}
+        </span>
+      ))}
     </span>
   );
 }

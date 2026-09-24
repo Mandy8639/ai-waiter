@@ -5,6 +5,9 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { toFriendlyError } from "@/lib/errors/database-error";
+
+/** Exactly what toFriendlyError accepts, so the casts below need no second cast. */
+type DatabaseError = Parameters<typeof toFriendlyError>[0] | null;
 import { emptyToUndefined, toBoolean, toNumber } from "@/lib/forms/form-data";
 import { menuItemSchema, spiceLevels } from "./schema";
 
@@ -26,6 +29,8 @@ function parse(formData: FormData) {
     imageUrl: emptyToUndefined(formData.get("imageUrl")),
     isAvailable: toBoolean(formData.get("isAvailable")),
     isVegetarian: toBoolean(formData.get("isVegetarian")),
+    isHalal: toBoolean(formData.get("isHalal")),
+    isKosher: toBoolean(formData.get("isKosher")),
     isVegan: toBoolean(formData.get("isVegan")),
     isSpicy: toBoolean(formData.get("isSpicy")),
     spiceLevel:
@@ -58,7 +63,17 @@ export async function createMenuItem(
   if (!parsed.success)
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
 
-  const { error } = await auth.context.supabase.from("menu_items").insert({
+  // is_halal / is_kosher postdate database.types.ts, so
+  // the generated insert payload types them as `never`. Asserted here
+  // against 20260925090000_dietary_claims.sql; the Zod schema above is
+  // what actually validates the values.
+  const { error } = await (
+    auth.context.supabase.from("menu_items") as unknown as {
+      insert: (row: Record<string, unknown>) => Promise<{
+        error: DatabaseError;
+      }>;
+    }
+  ).insert({
     restaurant_id: restaurantId,
     category_id: parsed.data.categoryId,
     name: parsed.data.name,
@@ -68,6 +83,8 @@ export async function createMenuItem(
     image_url: parsed.data.imageUrl ?? null,
     is_available: parsed.data.isAvailable,
     is_vegetarian: parsed.data.isVegetarian,
+    is_halal: parsed.data.isHalal,
+    is_kosher: parsed.data.isKosher,
     is_vegan: parsed.data.isVegan,
     is_spicy: parsed.data.isSpicy,
     spice_level: parsed.data.spiceLevel ?? null,
@@ -101,8 +118,22 @@ export async function updateMenuItem(
   if (!parsed.success)
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
 
-  const { error } = await auth.context.supabase
-    .from("menu_items")
+  // Same assertion as the insert above.
+  const { error } = await (
+    auth.context.supabase.from("menu_items") as unknown as {
+      update: (row: Record<string, unknown>) => {
+        eq: (
+          column: string,
+          value: string,
+        ) => {
+          eq: (
+            column: string,
+            value: string,
+          ) => Promise<{ error: DatabaseError }>;
+        };
+      };
+    }
+  )
     .update({
       category_id: parsed.data.categoryId,
       name: parsed.data.name,
@@ -120,6 +151,8 @@ export async function updateMenuItem(
       spice_level_source: "restaurant",
       is_available: parsed.data.isAvailable,
       is_vegetarian: parsed.data.isVegetarian,
+      is_halal: parsed.data.isHalal,
+      is_kosher: parsed.data.isKosher,
       is_vegan: parsed.data.isVegan,
       is_spicy: parsed.data.isSpicy,
       spice_level: parsed.data.spiceLevel ?? null,

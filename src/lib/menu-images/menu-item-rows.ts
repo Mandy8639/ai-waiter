@@ -1,10 +1,14 @@
 /**
- * Row shapes for the image columns phase 1 added to `menu_items`.
+ * Row shapes for `menu_items` columns the generated Supabase types do not
+ * know about yet.
  *
- * `src/lib/supabase/database.types.ts` predates that migration, so the
- * generated client rejects `active_image_id`, `image_source` and
- * `image_variants` by name and infers `SelectQueryError` for any select
- * mentioning them.
+ * Originally the image columns from phase 1; phase B added the dietary
+ * claim columns (`is_halal`, `is_kosher`) to the same
+ * problem and so to the same place.
+ *
+ * `src/lib/supabase/database.types.ts` predates both migrations, so the
+ * generated client rejects those columns by name and infers
+ * `SelectQueryError` for any select mentioning them.
  *
  * Regenerating is not possible in this environment: `supabase gen types`
  * shells out to Docker even when given `--db-url`, Docker is not installed
@@ -30,8 +34,48 @@ export interface MenuItemImageFields {
   image_variants: Record<string, string> | null;
 }
 
+/**
+ * The two columns phase B added. Kept as their own interface so the
+ * dietary claims travel together and a select that forgets one fails to
+ * type-check rather than silently reading `undefined` as "not stated".
+ */
+export interface MenuItemDietaryClaimFields {
+  is_halal: boolean;
+  is_kosher: boolean;
+}
+
+/** Selected by the owner's edit form. */
+export interface MenuItemEditRow extends MenuItemDietaryClaimFields {
+  id: string;
+  name: string;
+  slug: string;
+  category_id: string;
+  description: string | null;
+  price: number | string;
+  image_url: string | null;
+  is_available: boolean;
+  is_vegetarian: boolean;
+  is_vegan: boolean;
+  is_spicy: boolean;
+  spice_level: string | null;
+  contains_nuts: boolean;
+  contains_dairy: boolean;
+  contains_gluten: boolean;
+  preparation_time: number | null;
+  portion_note: string | null;
+  display_order: number;
+}
+
+/** Selected by the menu page purely to decide which filter chips to offer. */
+export interface DietFlagRow extends MenuItemDietaryClaimFields {
+  is_vegetarian: boolean;
+  is_vegan: boolean;
+  is_spicy: boolean;
+}
+
 /** Selected by the diner menu list. */
-export interface MenuListRow extends MenuItemImageFields {
+export interface MenuListRow
+  extends MenuItemImageFields, MenuItemDietaryClaimFields {
   id: string;
   name: string;
   description: string | null;
@@ -46,6 +90,9 @@ export interface MenuListRow extends MenuItemImageFields {
 export const MENU_ITEM_IMAGE_COLUMNS =
   "image_url, active_image_id, image_source, image_variants";
 
+/** The column list to add to a select that needs the dietary claims. */
+export const MENU_ITEM_DIETARY_CLAIM_COLUMNS = "is_halal, is_kosher";
+
 /**
  * Narrows rows the generated types cannot describe yet.
  *
@@ -53,12 +100,13 @@ export const MENU_ITEM_IMAGE_COLUMNS =
  * when the types are regenerated, and it documents at every call site that
  * the shape is asserted against the migration rather than inferred.
  */
-export function asRowsWithImageColumns<T>(rows: unknown): T[] {
+export function asRowsWithNewColumns<T>(rows: unknown): T[] {
   return (rows ?? []) as T[];
 }
 
 /** Selected by the dish detail page. */
-export interface MenuItemDetailRow extends MenuItemImageFields {
+export interface MenuItemDetailRow
+  extends MenuItemImageFields, MenuItemDietaryClaimFields {
   id: string;
   name: string;
   description: string | null;
