@@ -7,16 +7,12 @@ import { StaffRoleSelect } from "@/components/staff/staff-role-select";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { updateStaffRole, removeStaffMember } from "@/lib/staff/actions";
+import { revokeInvitation } from "@/lib/staff/invitation-actions";
+import { expiryLabel, roleLabel } from "@/lib/staff/invitations-core";
+import { getPendingInvitations } from "@/lib/staff/get-invitations";
 
 export const metadata = {
   title: "Staff — Tableside",
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: "Owner",
-  manager: "Manager",
-  kitchen: "Kitchen",
-  staff: "Staff",
 };
 
 export default async function StaffPage() {
@@ -27,11 +23,19 @@ export default async function StaffPage() {
     target_restaurant_id: restaurant.id,
   });
 
+  // Owners and managers only — get_staff_invitations() raises for anyone
+  // else, so it isn't called for them at all.
+  const canInvite =
+    restaurant.role === "owner" || restaurant.role === "manager";
+  const invitations = canInvite
+    ? await getPendingInvitations(restaurant.id)
+    : [];
+
   // Per restaurant_users_update_owner/_delete_owner (see docs/security.md),
   // only owners can change roles or remove members at all — a
   // manager/kitchen/staff viewer sees everyone's role but no controls.
   const canManageExisting = restaurant.role === "owner";
-  const canAdd = restaurant.role === "owner" || restaurant.role === "manager";
+  const canAdd = canInvite;
   const ownerCount = (staff ?? []).filter((m) => m.role === "owner").length;
 
   return (
@@ -44,12 +48,20 @@ export default async function StaffPage() {
           </p>
         </div>
         {canAdd && (
-          <Link
-            href="/dashboard/staff/new"
-            className={buttonVariants({ variant: "default" })}
-          >
-            Add member
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/staff/invite"
+              className={buttonVariants({ variant: "default" })}
+            >
+              Invite by link
+            </Link>
+            <Link
+              href="/dashboard/staff/new"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Add existing account
+            </Link>
+          </div>
         )}
       </div>
 
@@ -79,7 +91,7 @@ export default async function StaffPage() {
                   {!showControls && (
                     <div className="mt-1 flex items-center gap-2">
                       <Badge variant="secondary">
-                        {ROLE_LABELS[member.role] ?? member.role}
+                        {roleLabel(member.role)}
                       </Badge>
                       {canManageExisting && isOnlyOwner && (
                         <span className="text-muted-foreground text-xs">
@@ -113,6 +125,81 @@ export default async function StaffPage() {
           );
         })}
       </div>
+
+      {canInvite && (
+        <div className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Invitation links
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              Links you&apos;ve created that nobody has used yet. Each one works
+              once.
+            </p>
+          </div>
+
+          {invitations.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No links waiting.{" "}
+              <Link
+                href="/dashboard/staff/invite"
+                className="text-foreground underline-offset-4 hover:underline"
+              >
+                Invite someone by link
+              </Link>
+              .
+            </p>
+          ) : (
+            invitations.map((invitation) => (
+              <Card key={invitation.id}>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+                  <div className="flex flex-col gap-1">
+                    <p className="font-medium">
+                      {invitation.label ?? (
+                        <span className="text-muted-foreground font-normal">
+                          No note
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">
+                        {roleLabel(invitation.invited_role)}
+                      </Badge>
+                      <span
+                        className={
+                          invitation.is_expired
+                            ? "text-destructive text-xs"
+                            : "text-muted-foreground text-xs"
+                        }
+                      >
+                        {expiryLabel(new Date(invitation.expires_at))}
+                      </span>
+                      {invitation.created_by_email && (
+                        <span className="text-muted-foreground text-xs">
+                          · invited by {invitation.created_by_email}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* The link itself is deliberately absent: only its
+                      fingerprint is stored, so there is nothing to show.
+                      Cancelling and making a new one is the recovery. */}
+                  <DeleteButton
+                    onDelete={revokeInvitation.bind(
+                      null,
+                      restaurant.id,
+                      invitation.id,
+                    )}
+                    confirmTitle="Cancel this invitation link?"
+                    confirmDescription="The link stops working immediately. Anyone who already has it won't be able to join."
+                    triggerLabel="Cancel"
+                  />
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

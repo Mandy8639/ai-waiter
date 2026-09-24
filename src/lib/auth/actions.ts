@@ -4,6 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import type { AuthError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { isInviteToken } from "@/lib/staff/invitations-core";
 
 /**
  * Supabase Auth's own error messages ("Invalid login credentials", "User
@@ -47,6 +48,21 @@ const signUpSchema = z.object({
   password: signUpPasswordSchema,
 });
 
+/**
+ * Where to send someone after they authenticate.
+ *
+ * Deliberately NOT a general `redirectTo` parameter. The only off-the-happy-
+ * path destination this app needs is a staff invitation, and a 64-hex token
+ * validated against INVITE_TOKEN_PATTERN and then interpolated into a fixed
+ * path cannot express an external URL, a protocol-relative one, or a path
+ * traversal — which is exactly what a general redirect parameter would have
+ * to be defended against.
+ */
+function destinationAfterAuth(formData: FormData, fallback: string): string {
+  const token = formData.get("inviteToken");
+  return isInviteToken(token) ? `/join/${token}` : fallback;
+}
+
 export interface AuthFormState {
   error?: string;
   message?: string;
@@ -73,7 +89,7 @@ export async function signIn(
     return { error: friendlyAuthError(error) };
   }
 
-  redirect("/dashboard");
+  redirect(destinationAfterAuth(formData, "/dashboard"));
 }
 
 export async function signUp(
@@ -100,11 +116,18 @@ export async function signUp(
   // returns no session — there's nothing to redirect into yet.
   if (!data.session) {
     return {
-      message: "Check your email to confirm your account, then sign in.",
+      message: isInviteToken(formData.get("inviteToken"))
+        ? // The invitation is not lost: it stays pending, so opening the
+          // original link again after confirming picks up where they left
+          // off. Saying so beats leaving them wondering.
+          "Check your email to confirm your account, then open the invitation link again."
+        : "Check your email to confirm your account, then sign in.",
     };
   }
 
-  redirect("/onboarding");
+  // A new hire joining someone else's restaurant must not be asked to
+  // create one of their own, which is what /onboarding would do.
+  redirect(destinationAfterAuth(formData, "/onboarding"));
 }
 
 export async function signOut(): Promise<void> {

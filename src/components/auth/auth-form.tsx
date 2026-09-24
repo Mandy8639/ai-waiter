@@ -16,6 +16,12 @@ interface AuthFormProps {
   pendingLabel: string;
   passwordAutoComplete: "current-password" | "new-password";
   passwordHint?: string;
+  /**
+   * Set when the visitor arrived from a staff invitation link. Carried
+   * through the form so signing in or up returns them to /join/<token>
+   * instead of the dashboard or onboarding — see src/lib/auth/actions.ts.
+   */
+  inviteToken?: string;
 }
 
 const initialState: AuthFormState = {};
@@ -26,11 +32,15 @@ export function AuthForm({
   pendingLabel,
   passwordAutoComplete,
   passwordHint,
+  inviteToken,
 }: AuthFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-5" noValidate>
+      {inviteToken && (
+        <input type="hidden" name="inviteToken" value={inviteToken} />
+      )}
       {state.error && (
         <Alert variant="destructive">
           <AlertDescription>{state.error}</AlertDescription>

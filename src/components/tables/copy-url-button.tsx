@@ -3,7 +3,14 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
-export function CopyUrlButton({ url }: { url: string }) {
+export function CopyUrlButton({
+  url,
+  label = "Copy URL",
+}: {
+  url: string;
+  /** "Copy URL" suits a QR page; an invitation link wants "Copy link". */
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -19,7 +26,7 @@ export function CopyUrlButton({ url }: { url: string }) {
 
   return (
     <Button type="button" variant="outline" size="sm" onClick={handleCopy}>
-      {copied ? "Copied!" : "Copy URL"}
+      {copied ? "Copied!" : label}
     </Button>
   );
 }

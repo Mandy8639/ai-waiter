@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:disposable": "sh -c 'set -a; . ./.env.e2e-disposable.local; set +a; next dev --port 3099'",
     "build": "next build && npm run sourcemaps",
     "sourcemaps": "tsx scripts/upload-sourcemaps.ts",
     "start": "next start",
