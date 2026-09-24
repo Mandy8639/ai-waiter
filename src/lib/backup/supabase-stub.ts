@@ -24,7 +24,17 @@ export const SUPABASE_PLATFORM_STUB_SQL = `
 
   create table auth.users (
     id uuid primary key default gen_random_uuid(),
-    email text unique,
+    -- varchar(255), NOT text, because that is what GoTrue actually
+    -- declares — and the difference is not cosmetic. A SECURITY DEFINER
+    -- function declared "returns table (email text)" whose body selects
+    -- auth.users.email raises 42804 ("Returned type character
+    -- varying(255) does not match expected type text") on a real project
+    -- and returns nothing through the API. With text here, the same broken
+    -- function passes every test in this repo. Found 2026-09-24 against a
+    -- live project; get_restaurant_staff() had shipped with exactly that
+    -- defect since 20260829090000. Any function crossing into auth.users
+    -- for an email must cast it: u.email::text.
+    email varchar(255) unique,
     -- Real Supabase sets this for identities created via Anonymous Auth —
     -- every diner who scans a table's QR code. create_restaurant() reads
     -- it to refuse a guest session.
