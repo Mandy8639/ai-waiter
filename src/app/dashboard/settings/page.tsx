@@ -7,12 +7,15 @@ import {
 } from "@/components/ui/card";
 import { RestaurantProfileForm } from "@/components/settings/restaurant-profile-form";
 import { OperationalSettingsForm } from "@/components/settings/operational-settings-form";
+import { AiPersonaForm } from "@/components/settings/ai-persona-form";
+import { toAiPersona } from "@/lib/ai/persona";
 import { HeroVideoManager } from "@/components/dashboard/hero-video-manager";
 import { loadOwnerHeroVideoState } from "@/lib/hero-video/owner-state";
 import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import {
+  updateAiPersona,
   updateOperationalSettings,
   updateRestaurantProfile,
 } from "@/lib/settings/actions";
@@ -41,6 +44,20 @@ export default async function SettingsPage() {
       .eq("restaurant_id", restaurant.id)
       .single(),
   ]);
+
+  // A separate read because database.types.ts predates 20260927090000 and
+  // would type these two columns as a query error. toAiPersona() turns
+  // whatever comes back into a valid persona, defaulting on anything odd.
+  const { data: personaRow } = await supabase
+    .from("restaurant_settings")
+    .select("ai_tone, ai_instructions" as "restaurant_id")
+    .eq("restaurant_id", restaurant.id)
+    .maybeSingle();
+  const persona = toAiPersona({
+    tone: (personaRow as { ai_tone?: unknown } | null)?.ai_tone,
+    instructions: (personaRow as { ai_instructions?: unknown } | null)
+      ?.ai_instructions,
+  });
 
   const heroVideoState = await loadOwnerHeroVideoState(
     supabase,
@@ -133,6 +150,24 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">AI waiter voice</CardTitle>
+          <CardDescription>
+            How the AI waiter sounds to your diners. This changes its style,
+            never its facts — answers about your menu always come from your
+            menu.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AiPersonaForm
+            action={updateAiPersona.bind(null, restaurant.id)}
+            defaultValues={persona}
+            disabled={!canManage}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

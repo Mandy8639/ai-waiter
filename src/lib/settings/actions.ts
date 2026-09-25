@@ -5,7 +5,11 @@ import { revalidatePath } from "next/cache";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { toFriendlyError } from "@/lib/errors/database-error";
 import { emptyToUndefined, toBoolean, toNumber } from "@/lib/forms/form-data";
-import { operationalSettingsSchema, restaurantProfileSchema } from "./schema";
+import {
+  aiPersonaSchema,
+  operationalSettingsSchema,
+  restaurantProfileSchema,
+} from "./schema";
 
 export interface SettingsFormState {
   error?: string;
@@ -96,6 +100,46 @@ export async function updateOperationalSettings(
       allow_upselling: parsed.data.allowUpselling,
       max_order_items: parsed.data.maxOrderItems,
     })
+    .eq("restaurant_id", restaurantId);
+
+  if (error) return { error: toFriendlyError(error, "settings") };
+
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}
+
+/**
+ * The AI waiter's tone and the owner's note (phase D). A separate action
+ * from updateOperationalSettings so saving one card cannot silently
+ * overwrite what someone else just changed in the other.
+ */
+export async function updateAiPersona(
+  restaurantId: string,
+  _prevState: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  const auth = await authorizeRestaurantAction(restaurantId, [
+    "owner",
+    "manager",
+  ]);
+  if (!auth.ok) return { error: auth.error };
+
+  const parsed = aiPersonaSchema.safeParse({
+    tone: formData.get("tone"),
+    instructions: emptyToUndefined(formData.get("instructions")),
+  });
+
+  if (!parsed.success)
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
+
+  // database.types.ts predates 20260927090000, so the new columns are not
+  // in the generated Update type. Cast confined to this one call.
+  const { error } = await auth.context.supabase
+    .from("restaurant_settings")
+    .update({
+      ai_tone: parsed.data.tone,
+      ai_instructions: parsed.data.instructions,
+    } as never)
     .eq("restaurant_id", restaurantId);
 
   if (error) return { error: toFriendlyError(error, "settings") };

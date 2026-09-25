@@ -22,6 +22,7 @@ a tool that succeeded in the same turn.
 | `config.ts`                                         | Models and fallback lists, timeouts, tool-call ceiling, history length, input cap, rate limit — all env-overridable.                  |
 | `rate-limit.ts`, `rate-limit-core.ts`               | 20 messages per 10 minutes per customer session (not per IP — diners share restaurant Wi-Fi).                                         |
 | `system-prompt.ts`, `conversation.ts`, `history.ts` | The prompt, and how past turns are stored and replayed to the model.                                                                  |
+| `persona.ts`, `get-persona.ts`                      | The owner's tone preset and style note (phase D): normalisation, and the session-scoped read. Style only — the guards never read it.  |
 | `logging.ts`, `provider-error.ts`                   | Structured turn/tool/error logs, and classifying provider failures.                                                                   |
 
 Files without `server-only` (`loop.ts`, `*-core.ts`, the detection modules, provider mappings) are

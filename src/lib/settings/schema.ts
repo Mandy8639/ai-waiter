@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  AI_INSTRUCTIONS_MAX_LENGTH,
+  AI_TONES,
+  tidyAiInstructions,
+} from "@/lib/ai/persona";
 
 export const restaurantProfileSchema = z.object({
   name: z.string().trim().min(1, "Name is required.").max(200),
@@ -41,3 +46,28 @@ export const operationalSettingsSchema = z.object({
 export type OperationalSettingsInput = z.infer<
   typeof operationalSettingsSchema
 >;
+
+/**
+ * Phase D. The note is normalised BEFORE its length is checked, so a note
+ * that is long only because of pasted line breaks is not rejected for
+ * whitespace the owner cannot see — and so what is validated is exactly
+ * what is stored (see tidyAiInstructions for what that does). Tidied, not
+ * capped: an over-long note is refused, never silently cut mid-sentence.
+ */
+export const aiPersonaSchema = z.object({
+  tone: z.enum(AI_TONES, "Pick a tone."),
+  instructions: z
+    .string()
+    .max(
+      AI_INSTRUCTIONS_MAX_LENGTH * 4,
+      `Keep the note under ${AI_INSTRUCTIONS_MAX_LENGTH} characters.`,
+    )
+    .optional()
+    .transform((value) => tidyAiInstructions(value))
+    .refine(
+      (value) => value === null || value.length <= AI_INSTRUCTIONS_MAX_LENGTH,
+      `Keep the note under ${AI_INSTRUCTIONS_MAX_LENGTH} characters.`,
+    ),
+});
+
+export type AiPersonaInput = z.infer<typeof aiPersonaSchema>;
