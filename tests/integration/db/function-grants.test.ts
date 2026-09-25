@@ -40,6 +40,20 @@ const SIGNED_IN_ONLY = [
  * revoke. Shrink this list as the review proceeds; never grow it without
  * deciding that anon really should call the function.
  */
+/**
+ * Functions anon is MEANT to call, each with a decision behind it. Distinct
+ * from the pending-review list below, which is a backlog: this list is the
+ * reviewed answer, and it is expected to stay small.
+ *
+ * - get_staff_invitation_preview: the person following a staff invitation
+ *   link has no account yet by definition, so the page that tells them what
+ *   they have been invited to runs signed out. Read-only, returns the
+ *   restaurant name / role / state and nothing else, and the token is the
+ *   authorization — the same trust model as get_table_by_token. See
+ *   20260926090000_staff_invitations.sql.
+ */
+const ANON_BY_DESIGN = ["get_staff_invitation_preview"];
+
 const ANON_EXECUTABLE_PENDING_REVIEW = [
   "add_restaurant_staff_by_email",
   "assert_can_view_reports",
@@ -155,11 +169,22 @@ describe("function EXECUTE grants", () => {
     const anonCallable = (await grants())
       .filter((r) => r.anon)
       .map((r) => r.name);
-    const unexpected = anonCallable.filter(
-      (name) => !ANON_EXECUTABLE_PENDING_REVIEW.includes(name),
-    );
+    const reviewed = [...ANON_BY_DESIGN, ...ANON_EXECUTABLE_PENDING_REVIEW];
+    const unexpected = anonCallable.filter((name) => !reviewed.includes(name));
     expect(unexpected).toEqual([]);
   });
+
+  it.each(ANON_BY_DESIGN)(
+    "%s is anon-callable on purpose, and still is",
+    async (name) => {
+      // The mirror of the honesty test below: if a later migration revokes
+      // anon from a by-design entry, that is a deliberate change of mind and
+      // this list should say so rather than quietly disagreeing.
+      const row = (await grants()).find((r) => r.name === name);
+      expect(row).toBeDefined();
+      expect(row).toMatchObject({ anon: true });
+    },
+  );
 
   it("keeps the pending-review list honest: every entry still exists and is still anon-callable", async () => {
     // When a later migration revokes anon from one of these, this fails

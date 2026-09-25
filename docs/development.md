@@ -136,6 +136,23 @@ from that config's `testDir`), but it **skips** there: it requires `E2E_DISPOSAB
 only `playwright.e2e-disposable.config.ts` sets. `npm run test:e2e:disposable` is the one that
 actually exercises it.
 
+### A dev server against the disposable project
+
+```bash
+npm run dev:disposable
+```
+
+Runs `next dev` on port **3099** with `.env.e2e-disposable.local` exported first, so the process
+environment wins over `.env.local` and the app talks to the disposable project instead of the live
+one. Useful for clicking through a feature whose migration has not been applied to production yet
+— phase C's invitation links were verified this way before the PR was opened. The port matches
+`playwright.e2e-disposable.config.ts`'s, and differs from `npm run dev`'s, for the same reason
+that config gives: a disposable-project run must never reuse a server built against `.env.local`.
+
+Both need `SUPABASE_DB_URL` in `.env.e2e-disposable.local` if you also want to push migrations
+there: `npx supabase db push --db-url "$SUPABASE_DB_URL"`. Prefer that over `npx supabase db push`,
+which uses the _linked_ project — production.
+
 That marker exists because the skip used to be theoretical. The spec's only guard was "is
 `NEXT_PUBLIC_SUPABASE_URL` a placeholder?", which is false for the live project — so `npm run
 test:e2e` ran this spec's real `/signup` **against production**, creating auth users there, and

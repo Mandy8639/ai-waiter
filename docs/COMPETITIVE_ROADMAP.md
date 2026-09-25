@@ -40,6 +40,9 @@ condition — not "the code is written".
 
 ## Phase A — Call waiter / ask for the bill
 
+**Shipped 2026-09-24.** `20260924090000_table_requests.sql` +
+`20260924100000_table_requests_realtime.sql`.
+
 **Why first.** It is the only gap on the list that is a total absence of a
 capability rather than a thinner version of one: there is no diner→staff
 channel in this product at all. `/r/{slug}/table/{token}/staff` is a notice
@@ -64,6 +67,10 @@ same request from a sentence.
 
 ## Phase B — More dietary tags
 
+**Shipped 2026-09-24.** `20260925090000_dietary_claims.sql` +
+`20260925100000_drop_high_protein_claim.sql` (high-protein dropped before it
+shipped; it belongs in phase M).
+
 **Why here.** Cheapest item on the entire list, and for Nashta's menu
 `halal` is not a nice-to-have. `menu_items` already carries
 `is_vegetarian`, `is_vegan`, `is_spicy`, `spice_level`, `contains_nuts`,
@@ -83,6 +90,11 @@ asserted it. Getting this wrong is worse than not shipping it.
 and the AI refuses to guess when the field is unset.
 
 ## Phase C — Staff invitation links
+
+**Shipped 2026-09-24.** `20260926090000_staff_invitations.sql`. Live-verified
+end to end; see docs/security.md#staff-invitation-links. The same pass found
+and fixed a pre-existing break in `get_restaurant_staff()`
+(`20260926100000_staff_email_text_cast.sql`).
 
 **Why here.** A real onboarding blocker: `add_restaurant_staff_by_email()`
 requires the invitee to already hold an AI Waiter account (an explicit v1

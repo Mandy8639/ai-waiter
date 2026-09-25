@@ -885,6 +885,57 @@ sync, and no window where both tokens work. Verified in
 old-token invalidation, no-enumeration) and exercised end-to-end in
 `tests/e2e/customer-flow.spec.ts`.
 
+## Staff invitation links — (phase C)
+
+An invitation link is a bearer credential: whoever holds `/join/{token}` becomes staff at one
+restaurant. Nothing else gates it — no email binding, no approval step — so `staff_invitations`
+(`20260926090000_staff_invitations.sql`) enforces four properties in the database rather than the
+application. **Single use**: accepting sets `status = 'accepted'`, so a link forwarded to a group
+chat admits one person. **Seven-day expiry**, fixed at creation; expiry is a comparison against
+`expires_at`, never a stored state that something has to run and update. **Revocable** by any owner
+or manager, because the person who must kill a mis-sent link is not always the one who sent it.
+**The role is fixed at creation** — `accept_staff_invitation()` takes the token and nothing else,
+so no URL, form field or payload can influence what the accepter becomes, the same reasoning as
+`create_restaurant()`'s hardcoded `'owner'`.
+
+The token is stored as `sha256(token)`, hex, never in plaintext: the link exists once, in
+`create_staff_invitation()`'s return value, so a leaked backup or a stray read of the table yields
+no usable invitations. The accepted cost is that the dashboard can show a link only on the screen
+that created it. `staff_invitations` has RLS enabled and **no policies at all** — every read and
+write goes through the `SECURITY DEFINER` functions, which shape their own output and return no
+token and no hash to anyone.
+
+Two escalation paths are closed explicitly. A manager cannot mint an `owner` link, mirroring
+`add_restaurant_staff_by_email()`'s own rule, which `SECURITY DEFINER` would otherwise bypass. And
+accepting **never changes an existing member's role**: a `manager` link followed by someone already
+`staff` consumes the link and leaves them `staff`, because a promotion nobody performed and nobody
+sees is worse than a wasted link. Role changes stay on the staff page, where an owner makes them
+and can reverse them.
+
+`accept_staff_invitation()` refuses anonymous identities, reading `auth.users.is_anonymous` — the
+server's own record of how the identity was made, not a claim the caller presents. A diner who
+scanned a table QR code holds a real `authenticated` session, so without this an invitation
+forwarded to a phone mid-meal would attach staff access to an identity that disappears with the
+browser storage and can never be signed back into. This is the same trap
+`20260912100000_restaurants_need_a_real_account.sql` closed for restaurant creation.
+
+`get_staff_invitation_preview()` is the one function in this schema deliberately granted to `anon`.
+The person following an invitation link has no account yet by definition, so the page naming the
+restaurant and the role runs signed out; the trust model is `get_table_by_token()`'s, and the
+function is read-only and returns no restaurant id, no inviter, no private label and no token. It
+is listed under `ANON_BY_DESIGN` in `tests/integration/db/function-grants.test.ts`, kept separate
+from the pending-review backlog so the reviewed answer never blends into it. The alternative — a
+page asking a stranger to create an account for an unnamed organisation — is indistinguishable
+from phishing.
+
+Verified in `tests/integration/db/staff-invitations.test.ts` (50 cases against real Postgres:
+expiry, revocation, reuse, the guest-session refusal, the manager ceiling, the pending cap, RLS
+denial and the token-hash shape constraint), in `tests/unit/staff-invitations-core.test.ts` (the
+anchored token pattern, which is what stops a URL-supplied value being interpolated into a path,
+and the wording of every state), and end-to-end against a live Supabase project on 2026-09-24 —
+owner creates a link, a person with no account follows it, signs up, and lands as `staff` of
+exactly that restaurant.
+
 ## Health check endpoint — (implemented in Batch 8)
 
 `GET /api/health` (`src/app/api/health/route.ts`) reports high-level readiness — `status: "ok"`,
