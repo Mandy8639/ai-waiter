@@ -1,4 +1,5 @@
 import "server-only";
+import { scheduleTableRequestPush } from "@/lib/push/dispatch";
 import type { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -53,6 +54,9 @@ async function createRequest(
   if (error) {
     return { ok: false, error: requestErrorMessage(error.message) };
   }
+
+  // Same hook as the diner's own buttons (src/lib/table-requests/actions.ts).
+  scheduleTableRequestPush(data as string);
 
   return {
     ok: true,

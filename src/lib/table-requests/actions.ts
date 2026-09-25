@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireActiveCustomerSession } from "@/lib/customer/session";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { isRequestKind, requestErrorMessage, type RequestKind } from "./core";
+import { scheduleTableRequestPush } from "@/lib/push/dispatch";
 
 /**
  * Server actions for the diner -> staff channel.
@@ -77,6 +78,10 @@ export async function requestService(
     p_note: note ?? null,
   });
   if (error) return { ok: false, error: requestErrorMessage(error.message) };
+
+  // A repeat tap returns the existing open request's id; the sender
+  // recognises it and does not buzz the kitchen twice.
+  scheduleTableRequestPush(data as string);
 
   return { ok: true, requestId: data as string };
 }

@@ -978,6 +978,46 @@ read the persona of the restaurant they are seated at and no other. It is delibe
 the note is accepted rather than defended against, because prompt text can always be coaxed out of
 a model; the settings page tells owners not to write anything they wouldn't want a customer to read.
 
+## Kitchen push — (phase F)
+
+Web Push lets the kitchen hear about a new order or a table request with the Tableside tab closed.
+A staff member presses **Turn on alerts** on the kitchen page; the browser asks permission (only
+ever from that click — a "Block" is remembered forever), subscribes with our VAPID public key, and
+`save_push_subscription()` stores the endpoint and keys (`20260928090000_push_subscriptions.sql`).
+
+**A subscription is a credential.** Endpoint plus keys is enough to put a notification on that
+device, so `push_subscriptions` shows a member only their **own** rows — not a colleague's, not the
+owner's — and a diner none. Writes go through membership-checking `SECURITY DEFINER` functions; the
+endpoint must be `https://`. A composite foreign key onto `restaurant_users` cascades, so removing
+someone from the staff page removes every device they turned alerts on for.
+
+**The second deliberate exception to "application code never uses the admin client".** The order
+that triggers a push is placed by a diner, whose session must never read a subscription. So the
+diner's request creates the order exactly as before, and `src/lib/push/dispatch.ts` reads the
+subscriptions as the system, with the service-role key. What contains it:
+
+- It is **not a server action** (no `"use server"`, and `server-only`), so no browser can call it.
+- Its entry points take an id the caller's server code **just got back from the database** — never
+  a request value — and `tests/unit/push-dispatch.test.ts` pins the exact four files allowed to
+  import it.
+- It runs inside `after()`, once the diner's response has gone, and swallows every failure: a
+  kitchen that misses a push still has the board; a diner must never see an order "fail" because a
+  tablet was offline.
+- It reads only the one order or request, its table, and that restaurant's subscriptions, and
+  writes only delivery bookkeeping and `push_dispatches`, which makes each order announced **once**
+  even though `submit_order()` is idempotent and a retry returns the same order.
+- With no VAPID keys configured it does nothing at all.
+
+**What a notification says, and where it goes.** "New order #1042 · Table 4 · 3 items" — no dish
+names, prices or diner notes, because notifications show on lock screens. Tapping one opens a
+`/dashboard` path only: the server checks the URL before sending and the service worker
+(`public/sw.js`) checks it again on the device, so a malformed payload can never become a link
+off-site. A test pins the two checks to the same pattern.
+
+Verified end to end on 2026-09-25 against the disposable project: a real Chrome subscribed, its
+Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
+Table 4 · 1 item".
+
 ## Health check endpoint — (implemented in Batch 8)
 
 `GET /api/health` (`src/app/api/health/route.ts`) reports high-level readiness — `status: "ok"`,
