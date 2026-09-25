@@ -1,4 +1,5 @@
 import type { LoopToolOutcome } from "../loop";
+import { fallbackText } from "../fallback-text";
 
 /**
  * The cart-state guard's pure logic — like menu-fact-detection.ts it
@@ -132,5 +133,4 @@ export const CART_STATE_CORRECTIVE_INSTRUCTION =
   "[System note: your reply states what the customer's cart contains or what it costs, but you have not read the cart this turn. Call get_cart now and restate it from that result — your own earlier messages in this conversation are not a reliable record of the cart, since an add may have failed or the customer may have changed it another way.]";
 
 /** Customer-facing fallback if the model still won't call get_cart after the one corrective retry — never surfaces the internal instruction text. */
-export const CART_STATE_GUARD_FALLBACK_TEXT =
-  "I couldn't confirm what's in your cart just now — could you open the cart to check, or ask me again?";
+export const CART_STATE_GUARD_FALLBACK_TEXT = fallbackText("cartState", "en");

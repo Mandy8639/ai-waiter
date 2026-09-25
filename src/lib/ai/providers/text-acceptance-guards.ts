@@ -1,5 +1,7 @@
 import type { TextAcceptanceGuard } from "../loop";
 import {
+  ALLERGEN_SOURCE_CORRECTIVE_INSTRUCTION,
+  hasAllergenSource,
   hasAuthoritativeMenuFactSource,
   MENU_FACT_CORRECTIVE_INSTRUCTION,
 } from "../tools/menu-fact-detection";
@@ -19,6 +21,7 @@ import {
  * module so neither has to know the other exists.
  */
 export const MENU_FACT_GUARD_ID = "menu_fact";
+export const ALLERGEN_SOURCE_GUARD_ID = "allergen_source";
 export const CART_STATE_GUARD_ID = "cart_state";
 export const MENU_CLAIM_GUARD_ID = "menu_claim";
 
@@ -32,10 +35,31 @@ export const MENU_CLAIM_GUARD_ID = "menu_claim";
 export function buildTextAcceptanceGuards<TMessages>(params: {
   /** From the turn — the menu guard only applies when the customer's message asked for restaurant facts (see tools/menu-fact-detection.ts). */
   requiresAuthoritativeMenuSource?: boolean;
+  /** From the turn — the customer asked about allergens or ingredients (see tools/menu-fact-detection.ts#looksLikeAllergenQuestion). */
+  requiresAllergenSource?: boolean;
   appendUserMessage: (messages: TMessages, text: string) => TMessages;
 }): Array<TextAcceptanceGuard<TMessages>> {
-  const { requiresAuthoritativeMenuSource, appendUserMessage } = params;
+  const {
+    requiresAuthoritativeMenuSource,
+    requiresAllergenSource,
+    appendUserMessage,
+  } = params;
   const guards: Array<TextAcceptanceGuard<TMessages>> = [];
+
+  // First, because it is the most specific: an allergen question whose
+  // only lookup was search_menu satisfies the menu guard below, and it
+  // should get this guard's correction ("search_menu has no allergens —
+  // call get_menu_item"), not the menu guard's generic one. See
+  // tools/menu-fact-detection.ts#hasAllergenSource for the failure that
+  // put it here.
+  if (requiresAllergenSource) {
+    guards.push({
+      id: ALLERGEN_SOURCE_GUARD_ID,
+      shouldAccept: hasAllergenSource,
+      correctiveInstruction: ALLERGEN_SOURCE_CORRECTIVE_INSTRUCTION,
+      appendUserMessage,
+    });
+  }
 
   if (requiresAuthoritativeMenuSource) {
     guards.push({

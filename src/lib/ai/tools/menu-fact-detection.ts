@@ -1,4 +1,5 @@
 import type { LoopToolOutcome } from "../loop";
+import { fallbackText } from "../fallback-text";
 
 /**
  * The menu-factuality guard's pure logic — deliberately has no
@@ -63,14 +64,91 @@ const MENU_FACT_KEYWORD_GROUPS: RegExp[] = [
 ];
 
 /**
+ * The same questions in the languages diners actually use here (phase E):
+ * Hindi in Devanagari, Hindi typed in English letters ("Hinglish"), and
+ * Spanish.
+ *
+ * Why this exists: the waiter has always answered in whatever language it
+ * was spoken to, but every guard above keyed on English words. A diner who
+ * asked "चिकन बिरयानी कितने की है?" was never required to get a grounded
+ * answer — in the phase E baseline the model happened to look the dish up,
+ * but nothing made it.
+ *
+ * Devanagari is matched as a plain substring. JavaScript's `\b` does not
+ * understand it, and Hindi vowel signs are combining marks, so a
+ * letter-boundary check would split words in the wrong places. A stray
+ * substring match costs one unnecessary menu lookup; a missed question
+ * costs an ungrounded answer. Latin-script words use letter lookarounds
+ * (with the `u` flag) so accented Spanish ("alérgenos") is bounded properly.
+ *
+ * Deliberately NOT here: greetings ("नमस्ते", "namaste", "hola"). They ask
+ * for nothing, and forcing a menu lookup on a hello is how a guard gets
+ * turned off by whoever is annoyed by it.
+ *
+ * Other languages still get the reply-side guards (menu-claim-detection.ts
+ * checks prices by value in any language), but not this one. Adding a
+ * language means adding its words here, with tests.
+ */
+const MULTILINGUAL_MENU_FACT_PATTERNS: RegExp[] = [
+  // Hindi (Devanagari): price, allergen/diet, ingredients, menu,
+  // availability, suggestion, time, portion.
+  /कितने|कितना|कितनी|कीमत|दाम|रेट|एलर्जी|शाकाहारी|मांसाहारी|वीगन|हलाल|कोशर|मसालेदार|तीखा|ग्लूटेन|मूंगफली|सामग्री|क्या क्या|मेनू|मेन्यू|उपलब्ध|मिलेगा|मिलता|सुझाव|सलाह|बनता|बनाते|बनाया|देर लगेगी|समय लगेगा/u,
+  // Hinglish: the same questions typed in English letters.
+  /(?<![\p{L}])(kitne|kitna|kitni|keemat|kimat|daam|shakahari|masaledar|teekha|tikha|mungfali|milega|milta|banta|banate|kya kya|isme kya|ismein kya|kitni der|kitne log|kitne logon)(?![\p{L}])/iu,
+  // Spanish.
+  /(?<![\p{L}])(cu[aá]nto|cu[aá]nta|precio|precios|cuesta|cuestan|al[eé]rgenos?|alergias?|al[eé]rgic[oa]s?|vegetarian[oa]s?|vegan[oa]s?|picantes?|gluten|l[aá]cteos?|nuez|nueces|cacahuetes?|man[ií]|ingredientes?|contiene|contienen|lleva|llevan|hech[oa] con|men[uú]|disponibles?|recomienda|recomiendas|recomendaci[oó]n|recomendar|sugerencias?|tarda|tardan|cu[aá]ntas personas|porci[oó]n|raci[oó]n)(?![\p{L}])/iu,
+];
+
+/**
  * Deliberately narrow (see the header comment) — generic words like
  * "dish", "food", "item", "good", "order", "want" are excluded on
  * purpose, since matching them created excessive false positives against
  * ordinary ordering/confirmation chat ("Place the order", "Sounds good").
  */
 export function looksLikeMenuFactQuestion(message: string): boolean {
-  return MENU_FACT_KEYWORD_GROUPS.some((pattern) => pattern.test(message));
+  return (
+    MENU_FACT_KEYWORD_GROUPS.some((pattern) => pattern.test(message)) ||
+    MULTILINGUAL_MENU_FACT_PATTERNS.some((pattern) => pattern.test(message))
+  );
 }
+
+/**
+ * Allergen and ingredient questions, in every language the menu guard
+ * knows. A strict subset of looksLikeMenuFactQuestion, with a stricter
+ * requirement (see hasAllergenSource).
+ *
+ * Found in the phase E baseline: asked in Hindi what allergens the Peanut
+ * Chikki Shake had, the model ran search_menu, saw no allergen field —
+ * search_menu has none — and told the diner the menu had no allergen
+ * information. The dish had two confirmed allergens, Peanuts and Milk. The
+ * menu guard was satisfied, because search_menu is an authoritative menu
+ * source; it just isn't a source for THIS.
+ */
+const ALLERGEN_QUESTION_PATTERNS: RegExp[] = [
+  /\b(allergens?|allerg(y|ies|ic)|ingredients?|contains?|gluten|dairy|lactose|nuts?|peanuts?|tree nuts?|sesame|soy|shellfish|egg|eggs)\b/i,
+  /एलर्जी|सामग्री|मूंगफली|ग्लूटेन|क्या डाला|इसमें क्या/u,
+  /(?<![\p{L}])(mungfali|isme kya|ismein kya|kya daala|kya dala)(?![\p{L}])/iu,
+  /(?<![\p{L}])(al[eé]rgenos?|alergias?|al[eé]rgic[oa]s?|ingredientes?|contiene|contienen|lleva|llevan|gluten|l[aá]cteos?|lactosa|nuez|nueces|cacahuetes?|man[ií]|s[eé]samo|soja|mariscos?|huevos?)(?![\p{L}])/iu,
+];
+
+export function looksLikeAllergenQuestion(message: string): boolean {
+  return ALLERGEN_QUESTION_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+/**
+ * True only if get_menu_item SUCCEEDED this turn. It is the one tool that
+ * returns a dish's confirmed allergens and its ingredients; search_menu and
+ * get_restaurant_info return neither, so neither can support an answer
+ * about them — including "the menu doesn't list any".
+ */
+export function hasAllergenSource(toolOutcomes: LoopToolOutcome[]): boolean {
+  return toolOutcomes.some(
+    (outcome) => outcome.toolName === "get_menu_item" && outcome.result.ok,
+  );
+}
+
+export const ALLERGEN_SOURCE_CORRECTIVE_INSTRUCTION =
+  "[System note: the customer asked about allergens or ingredients. Only get_menu_item returns a dish's declared allergens and ingredients — search_menu does not, so a search result showing no allergens tells you nothing. Call get_menu_item for the dish (or, for a question about the whole menu, the likeliest dishes) and answer from what it returns. If it lists none, say the menu doesn't specify and suggest checking with staff.]";
 
 export const AUTHORITATIVE_MENU_TOOL_NAMES = new Set([
   "search_menu",
@@ -99,5 +177,4 @@ export const MENU_FACT_CORRECTIVE_INSTRUCTION =
   "[System note: the customer's last message asks about menu items, prices, dietary information, ingredients, how a dish is made, how long it takes, how many people it feeds, availability, or restaurant details. Call search_menu, get_menu_item, or get_restaurant_info now and answer from its result — do not answer from memory or general knowledge about this kind of food, even if this was discussed earlier in this conversation.]";
 
 /** Customer-facing fallback if the model still won't call a menu tool after the one corrective retry — never surfaces the internal instruction text. */
-export const MENU_FACT_GUARD_FALLBACK_TEXT =
-  "I wasn't able to pull that up from the menu just now — could you try asking again, or check with the staff?";
+export const MENU_FACT_GUARD_FALLBACK_TEXT = fallbackText("menuFact", "en");

@@ -70,6 +70,7 @@ export function createOpenRouterProvider(): AiProvider {
         appendToolResultMessage,
         textAcceptanceGuards: buildTextAcceptanceGuards({
           requiresAuthoritativeMenuSource: turn.requiresAuthoritativeMenuSource,
+          requiresAllergenSource: turn.requiresAllergenSource,
           appendUserMessage,
         }),
       });

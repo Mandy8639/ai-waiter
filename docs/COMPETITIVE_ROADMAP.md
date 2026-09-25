@@ -145,6 +145,12 @@ fact without a tool call.
 
 ## Phase E — Multilingual replies
 
+**Shipped 2026-09-25.** No migration. The premise below was wrong — the waiter
+already replied in the diner's language — so the phase fixed what the baseline
+found instead: English-only guards, allergen answers from `search_menu`, and
+dish cards lost to transliteration. The stored language preference was
+deliberately skipped. See docs/ai.md#replying-in-the-diners-language-phase-e.
+
 **Why here.** The audit's single biggest gap, and it splits cleanly. This
 phase is **half** of it: the waiter replies in the diner's language. It
 already understands them; it just always answers in English.

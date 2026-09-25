@@ -18,7 +18,8 @@ import type { LoopToolOutcome } from "./loop";
  * two would bury the answer. Matching a name the database supplied against
  * the reply is a membership test on known strings, not free-form parsing,
  * so the failure mode is benign: a dish the model renamed ("the dosa")
- * simply gets no card, and the reply still reads correctly.
+ * simply gets no card, and the reply still reads correctly — except in the
+ * one case covered by singleDishInPlay() below.
  *
  * Why not a dedicated "show these dishes" tool the model calls with ids?
  * It was considered. Every tool call is another model round trip (2–10 s
@@ -106,6 +107,9 @@ function normalize(text: string): string {
 
 const WORD_CHAR = /[\p{L}\p{N}]/u;
 
+/** Any letter outside the Latin script — Devanagari, Arabic, CJK, and so on. */
+const NON_LATIN_LETTER = /(?=\p{L})\P{Script=Latin}/u;
+
 function occurrences(
   haystack: string,
   needle: string,
@@ -165,8 +169,51 @@ export function selectMentionedItems(
     }))
     .filter((m) => m.ranges.length > 0);
 
-  return standalone
-    .sort((a, b) => a.ranges[0][0] - b.ranges[0][0])
-    .slice(0, limit)
-    .map((m) => m.item);
+  if (standalone.length > 0) {
+    return standalone
+      .sort((a, b) => a.ranges[0][0] - b.ranges[0][0])
+      .slice(0, limit)
+      .map((m) => m.item);
+  }
+
+  // Only for replies in another script. A Latin-script reply that names a
+  // dish already matched above; one that names none is genuinely about
+  // something else, and a card there would be a guess ("a teacake would be
+  // nice" is not about the Tea a search happened to return).
+  return NON_LATIN_LETTER.test(reply) ? singleDishInPlay(toolOutcomes) : [];
+}
+
+/**
+ * The fallback when the reply names no dish the matcher can find: if
+ * exactly ONE dish is in play this turn, the reply is about that dish, so
+ * it gets its card.
+ *
+ * Why it exists (phase E): replies in Hindi write "Chicken Biryani" as
+ * "चिकन बिरयानी", and live testing showed the free models do this even when
+ * the system prompt tells them not to. The name match above then finds
+ * nothing, so no card appears — and the card is the one place the diner
+ * sees the restaurant's own allergen text ("Contains Peanuts, Milk")
+ * exactly as the restaurant wrote it, rather than as the model translated
+ * it. Losing it in exactly the replies that are already machine-translated
+ * is the wrong way round, so this does not rely on the model obeying.
+ *
+ * "Exactly one dish in play", in order of preference:
+ *   1. one dish looked up in detail with get_menu_item (however many
+ *      search results came back alongside it), else
+ *   2. one dish across everything the tools returned — typically a search
+ *      for a named dish that matched only that dish.
+ * Two or more, and there is no telling which dish the reply is about, so
+ * no card is safer than a wrong one.
+ */
+function singleDishInPlay(
+  toolOutcomes: LoopToolOutcome[],
+): MentionedMenuItem[] {
+  const detailed = collectToolMenuItems(
+    toolOutcomes.filter((outcome) => outcome.toolName === "get_menu_item"),
+  );
+  if (detailed.length === 1) return detailed;
+  if (detailed.length > 1) return [];
+
+  const all = collectToolMenuItems(toolOutcomes);
+  return all.length === 1 ? all : [];
 }

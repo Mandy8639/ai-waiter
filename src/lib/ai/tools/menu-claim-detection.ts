@@ -76,7 +76,9 @@ export function extractPriceAmounts(text: string): number[] {
   return amounts;
 }
 
-const RELIGIOUS_CLAIM = /\b(?:halal|kosher)\b/i;
+// Latin script covers English and Spanish; Devanagari covers a Hindi reply
+// (phase E). Devanagari is a substring match — `\b` does not work there.
+const RELIGIOUS_CLAIM = /\b(?:halal|kosher)\b|हलाल|कोशर/iu;
 
 /** Does the reply mention halal or kosher at all? See the header for why wording can't matter. */
 export function mentionsReligiousClaim(text: string): boolean {

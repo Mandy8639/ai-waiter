@@ -18,6 +18,7 @@ a tool that succeeded in the same turn.
 | `tools/menu-fact-detection.ts`                      | Menu-fact guard: a menu question must be answered from `search_menu` / `get_menu_item` / `get_restaurant_info`.                       |
 | `tools/cart-fact-detection.ts`                      | Cart-state guard: a reply stating what the cart holds or costs must follow a successful `get_cart`.                                   |
 | `tools/menu-claim-detection.ts`                     | Menu-claim guard: a price or halal/kosher claim in a reply must be backed by a tool call this turn — even when nobody asked.          |
+| `fallback-text.ts`                                  | The fixed replies the diner gets when the model isn't trusted this turn, hand-written in English, Hindi and Spanish (phase E).        |
 | `tools/order-confirmation.ts`                       | Server-enforced confirmation gate on `submit_order` (earlier-turn confirmation + cart fingerprint).                                   |
 | `providers/`                                        | Anthropic and OpenRouter behind one interface; `text-acceptance-guards.ts` builds the guards once for both.                           |
 | `config.ts`                                         | Models and fallback lists, timeouts, tool-call ceiling, history length, input cap, rate limit — all env-overridable.                  |
