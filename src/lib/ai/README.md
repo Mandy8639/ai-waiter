@@ -17,12 +17,13 @@ a tool that succeeded in the same turn.
 | `tools/`                                            | The 12 tools (`menu.ts`, `cart.ts`, `order.ts`), their schemas, and the registry that validates arguments before anything runs.       |
 | `tools/menu-fact-detection.ts`                      | Menu-fact guard: a menu question must be answered from `search_menu` / `get_menu_item` / `get_restaurant_info`.                       |
 | `tools/cart-fact-detection.ts`                      | Cart-state guard: a reply stating what the cart holds or costs must follow a successful `get_cart`.                                   |
+| `tools/menu-claim-detection.ts`                     | Menu-claim guard: a price or halal/kosher claim in a reply must be backed by a tool call this turn — even when nobody asked.          |
 | `tools/order-confirmation.ts`                       | Server-enforced confirmation gate on `submit_order` (earlier-turn confirmation + cart fingerprint).                                   |
 | `providers/`                                        | Anthropic and OpenRouter behind one interface; `text-acceptance-guards.ts` builds the guards once for both.                           |
 | `config.ts`                                         | Models and fallback lists, timeouts, tool-call ceiling, history length, input cap, rate limit — all env-overridable.                  |
 | `rate-limit.ts`, `rate-limit-core.ts`               | 20 messages per 10 minutes per customer session (not per IP — diners share restaurant Wi-Fi).                                         |
 | `system-prompt.ts`, `conversation.ts`, `history.ts` | The prompt, and how past turns are stored and replayed to the model.                                                                  |
-| `persona.ts`, `get-persona.ts`                      | The owner's tone preset and style note (phase D): normalisation, and the session-scoped read. Style only — the guards never read it.  |
+| `persona.ts`, `get-persona.ts`                      | The owner's tone preset and style note (phase D): normalisation, and the session-scoped read. Style only — see the guard above.       |
 | `logging.ts`, `provider-error.ts`                   | Structured turn/tool/error logs, and classifying provider failures.                                                                   |
 
 Files without `server-only` (`loop.ts`, `*-core.ts`, the detection modules, provider mappings) are

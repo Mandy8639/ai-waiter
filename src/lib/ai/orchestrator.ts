@@ -15,7 +15,10 @@ import {
   MENU_FACT_GUARD_FALLBACK_TEXT,
 } from "./tools/menu-fact-detection";
 import { CART_STATE_GUARD_FALLBACK_TEXT } from "./tools/cart-fact-detection";
-import { CART_STATE_GUARD_ID } from "./providers/text-acceptance-guards";
+import {
+  CART_STATE_GUARD_ID,
+  MENU_CLAIM_GUARD_ID,
+} from "./providers/text-acceptance-guards";
 import type { ToolContext } from "./tools/types";
 import {
   selectMentionedItems,
@@ -228,9 +231,15 @@ export async function sendAiMessage(
         latencyMs: Date.now() - start,
         model: loopResult.servedModel ?? aiConfig.model,
         provider: aiConfig.provider,
+        // Logged per guard even where the diner sees the same words: the
+        // menu-claim guard (phase D) fires on a price or halal claim the
+        // model VOLUNTEERED, which is a different failure to investigate
+        // from one where the customer asked and the model wouldn't look.
         outcome: isCartStateGuard
           ? "cart_state_guard_exhausted"
-          : "menu_fact_guard_exhausted",
+          : loopResult.exhaustedGuardId === MENU_CLAIM_GUARD_ID
+            ? "menu_claim_guard_exhausted"
+            : "menu_fact_guard_exhausted",
       });
     }
 
