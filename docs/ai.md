@@ -477,6 +477,45 @@ substitutes that guard's own fallback wording and logs `cart_state_guard_exhaust
 `menu_fact_guard_exhausted` or `menu_claim_guard_exhausted`. As with every other rule here, the system prompt states the policy and
 the guard is what actually enforces it — see `docs/security.md#ai-tool-authorization`.
 
+## Replying in the diner's language (phase E)
+
+The waiter has always answered in the language it was spoken to — the phase E baseline (free model,
+2026-09-25) got Hindi and Spanish replies with no change at all. So the roadmap's premise ("it
+always answers in English") was wrong, and this phase is about keeping the waiter **safe** in other
+languages rather than making it speak them. The baseline found three ways it wasn't:
+
+- **The guards only knew English.** `looksLikeMenuFactQuestion` keyed on "how much", "price",
+  "halal"…, so "चिकन बिरयानी कितने की है?" was never required to be grounded.
+  `tools/menu-fact-detection.ts` now also matches Hindi (Devanagari, as substrings — `\b` does not
+  understand Devanagari), Hindi typed in English letters, and Spanish. Greetings and thanks are
+  deliberately not matched. Other languages still get the reply-side menu-claim guard, which
+  checks prices by value in any language.
+- **Allergen questions could be answered from `search_menu`, which has no allergen data.** Asked in
+  Hindi for a dish's allergens, the model searched, saw no allergen field, and said the menu had
+  none. It had two. A new `allergen_source` guard requires a successful `get_menu_item` for any
+  allergen or ingredient question, in every language — and first in the guard order, so its
+  correction ("search_menu has no allergens") wins over the menu guard's generic one.
+- **Dish names were transliterated, so the dish card vanished.** The card is the one place a diner
+  sees the restaurant's own allergen text untranslated. The prompt now says to keep dish, allergen
+  and claim names exactly as the tools return them (a translation may follow in brackets, never
+  replace them) — and because live testing showed free models ignore that, `recommendations.ts`
+  also falls back, for replies in a non-Latin script only, to the single dish in play this turn.
+
+**Allergen text is never silently machine-translated.** The model's own sentence in Hindi or
+Spanish is, by nature, a translation; what makes it not silent is that the restaurant's original
+words sit beside it — in brackets in the reply when the model follows the prompt, and in the dish
+card (rendered from the database, not the model) whether it does or not.
+
+**The fixed replies are hand-written per language.** When a guard exhausts, the model refuses, or a
+turn returns nothing, the diner gets a fixed string instead of model output. `fallback-text.ts` has
+each in English, Hindi and Spanish, chosen from the script and a few unmistakable words of the
+diner's message; anything else gets English. They are never generated, because they exist for the
+turns where the model is not trusted.
+
+**Deliberately not built:** a stored per-session language preference (browser detection plus a
+picker). The waiter already mirrors the diner's language, and most Indian phones report English,
+so detection would rarely choose Hindi. Translating menu content itself is phase K.
+
 ## Allergen safety
 
 Allergen and dietary questions are answered strictly from the `menu_item_allergens`/dietary-flag

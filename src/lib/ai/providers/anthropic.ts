@@ -94,6 +94,7 @@ export function createAnthropicProvider(): AiProvider {
         appendToolResultMessage,
         textAcceptanceGuards: buildTextAcceptanceGuards({
           requiresAuthoritativeMenuSource: turn.requiresAuthoritativeMenuSource,
+          requiresAllergenSource: turn.requiresAllergenSource,
           appendUserMessage,
         }),
       });

@@ -11,11 +11,12 @@ import { isRateLimited } from "./rate-limit";
 import { logAiTurn, logAiToolCall, logAiError } from "./logging";
 import { categorizeAiError } from "./provider-error";
 import {
+  looksLikeAllergenQuestion,
   looksLikeMenuFactQuestion,
-  MENU_FACT_GUARD_FALLBACK_TEXT,
 } from "./tools/menu-fact-detection";
-import { CART_STATE_GUARD_FALLBACK_TEXT } from "./tools/cart-fact-detection";
+import { fallbackLanguage, fallbackText } from "./fallback-text";
 import {
+  ALLERGEN_SOURCE_GUARD_ID,
   CART_STATE_GUARD_ID,
   MENU_CLAIM_GUARD_ID,
 } from "./providers/text-acceptance-guards";
@@ -139,6 +140,10 @@ export async function sendAiMessage(
     turnIdempotencyKey: crypto.randomUUID(),
   };
 
+  // Which language the fixed replies below are in, if one is needed. From
+  // the diner's own message — see fallback-text.ts.
+  const replyLanguage = fallbackLanguage(trimmed);
+
   const system = buildSystemPrompt({
     restaurantName,
     allowUpselling: params.allowUpselling,
@@ -153,6 +158,7 @@ export async function sendAiMessage(
       userMessage: trimmed,
       maxToolCalls: aiConfig.maxToolCallsPerTurn,
       requiresAuthoritativeMenuSource: looksLikeMenuFactQuestion(trimmed),
+      requiresAllergenSource: looksLikeAllergenQuestion(trimmed),
       callTool: async (name, args) => {
         const toolStart = Date.now();
         const outcome = await executeTool(name, args, context);
@@ -184,8 +190,7 @@ export async function sendAiMessage(
         provider: aiConfig.provider,
         outcome: "refused",
       });
-      const declineText =
-        "I'm not able to help with that. Is there something else about the menu or your order I can help with?";
+      const declineText = fallbackText("decline", replyLanguage);
       await insertMessage(
         restaurantId,
         customerSessionId,
@@ -198,8 +203,7 @@ export async function sendAiMessage(
     let finalText = loopResult.finalText;
 
     if (loopResult.toolLimitExceeded) {
-      finalText =
-        "I'm having trouble finishing that in one go — could you break that into a smaller request?";
+      finalText = fallbackText("toolLimit", replyLanguage);
       logAiTurn({
         restaurantId,
         customerSessionId,
@@ -221,9 +225,10 @@ export async function sendAiMessage(
       // the other "I couldn't confirm your cart".
       const isCartStateGuard =
         loopResult.exhaustedGuardId === CART_STATE_GUARD_ID;
-      finalText = isCartStateGuard
-        ? CART_STATE_GUARD_FALLBACK_TEXT
-        : MENU_FACT_GUARD_FALLBACK_TEXT;
+      finalText = fallbackText(
+        isCartStateGuard ? "cartState" : "menuFact",
+        replyLanguage,
+      );
       logAiTurn({
         restaurantId,
         customerSessionId,
@@ -239,13 +244,14 @@ export async function sendAiMessage(
           ? "cart_state_guard_exhausted"
           : loopResult.exhaustedGuardId === MENU_CLAIM_GUARD_ID
             ? "menu_claim_guard_exhausted"
-            : "menu_fact_guard_exhausted",
+            : loopResult.exhaustedGuardId === ALLERGEN_SOURCE_GUARD_ID
+              ? "allergen_source_guard_exhausted"
+              : "menu_fact_guard_exhausted",
       });
     }
 
     if (!finalText) {
-      finalText =
-        "Sorry, I didn't quite catch that — could you say it a different way?";
+      finalText = fallbackText("didNotCatch", replyLanguage);
     }
 
     const orderId = loopResult.toolOutcomes.find(
