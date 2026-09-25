@@ -3,6 +3,7 @@ import {
   buildTextAcceptanceGuards,
   MENU_FACT_GUARD_ID,
   CART_STATE_GUARD_ID,
+  MENU_CLAIM_GUARD_ID,
 } from "@/lib/ai/providers/text-acceptance-guards";
 
 const appendUserMessage = (messages: string[], text: string) => [
@@ -11,9 +12,12 @@ const appendUserMessage = (messages: string[], text: string) => [
 ];
 
 describe("buildTextAcceptanceGuards", () => {
-  it("always includes the cart-state guard — it gates itself on the model's reply, not on a per-turn flag", () => {
+  it("always includes the cart-state and menu-claim guards — both gate themselves on the model's reply, not on a per-turn flag", () => {
     const guards = buildTextAcceptanceGuards({ appendUserMessage });
-    expect(guards.map((g) => g.id)).toEqual([CART_STATE_GUARD_ID]);
+    expect(guards.map((g) => g.id)).toEqual([
+      CART_STATE_GUARD_ID,
+      MENU_CLAIM_GUARD_ID,
+    ]);
   });
 
   it("adds the menu guard only when the customer's message asked for restaurant facts", () => {
@@ -21,9 +25,13 @@ describe("buildTextAcceptanceGuards", () => {
       requiresAuthoritativeMenuSource: true,
       appendUserMessage,
     });
+    // Order matters: the first guard to reject owns the one corrective
+    // round. The cart guard sits before the menu-claim guard so a cart
+    // total gets the more specific instruction (read the cart).
     expect(guards.map((g) => g.id)).toEqual([
       MENU_FACT_GUARD_ID,
       CART_STATE_GUARD_ID,
+      MENU_CLAIM_GUARD_ID,
     ]);
   });
 

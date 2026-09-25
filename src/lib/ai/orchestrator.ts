@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getAiProvider, isAiConfigured } from "./providers";
 import { aiConfig } from "./config";
 import { buildSystemPrompt } from "./system-prompt";
+import type { AiPersona } from "./persona";
 import { executeTool } from "./tools/index";
 import { getRecentMessages, insertMessage } from "./conversation";
 import { buildHistoryMessages, buildRecentToolContext } from "./history";
@@ -14,7 +15,10 @@ import {
   MENU_FACT_GUARD_FALLBACK_TEXT,
 } from "./tools/menu-fact-detection";
 import { CART_STATE_GUARD_FALLBACK_TEXT } from "./tools/cart-fact-detection";
-import { CART_STATE_GUARD_ID } from "./providers/text-acceptance-guards";
+import {
+  CART_STATE_GUARD_ID,
+  MENU_CLAIM_GUARD_ID,
+} from "./providers/text-acceptance-guards";
 import type { ToolContext } from "./tools/types";
 import {
   selectMentionedItems,
@@ -27,6 +31,14 @@ export interface SendAiMessageParams {
   restaurantName: string;
   customerSessionId: string;
   allowUpselling: boolean;
+  /**
+   * How the waiter sounds at this restaurant (phase D). Goes into the
+   * system prompt and nowhere else — in particular, NOT into the
+   * menu-fact guard below, which is decided from the customer's message
+   * alone. That separation is what stops an owner's note from switching
+   * the guard off. Omitted means the default voice.
+   */
+  persona?: AiPersona;
   message: string;
 }
 
@@ -131,6 +143,7 @@ export async function sendAiMessage(
     restaurantName,
     allowUpselling: params.allowUpselling,
     recentToolContext,
+    persona: params.persona,
   });
 
   try {
@@ -218,9 +231,15 @@ export async function sendAiMessage(
         latencyMs: Date.now() - start,
         model: loopResult.servedModel ?? aiConfig.model,
         provider: aiConfig.provider,
+        // Logged per guard even where the diner sees the same words: the
+        // menu-claim guard (phase D) fires on a price or halal claim the
+        // model VOLUNTEERED, which is a different failure to investigate
+        // from one where the customer asked and the model wouldn't look.
         outcome: isCartStateGuard
           ? "cart_state_guard_exhausted"
-          : "menu_fact_guard_exhausted",
+          : loopResult.exhaustedGuardId === MENU_CLAIM_GUARD_ID
+            ? "menu_claim_guard_exhausted"
+            : "menu_fact_guard_exhausted",
       });
     }
 

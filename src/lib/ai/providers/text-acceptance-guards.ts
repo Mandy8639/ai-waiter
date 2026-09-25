@@ -7,6 +7,10 @@ import {
   acceptsCartStateClaim,
   CART_STATE_CORRECTIVE_INSTRUCTION,
 } from "../tools/cart-fact-detection";
+import {
+  acceptsMenuClaims,
+  MENU_CLAIM_CORRECTIVE_INSTRUCTION,
+} from "../tools/menu-claim-detection";
 
 /**
  * Guard ids, shared between the providers that build the guards and the
@@ -16,6 +20,7 @@ import {
  */
 export const MENU_FACT_GUARD_ID = "menu_fact";
 export const CART_STATE_GUARD_ID = "cart_state";
+export const MENU_CLAIM_GUARD_ID = "menu_claim";
 
 /**
  * Builds the turn's text-acceptance guards. Both providers call this with
@@ -50,6 +55,20 @@ export function buildTextAcceptanceGuards<TMessages>(params: {
     id: CART_STATE_GUARD_ID,
     shouldAccept: acceptsCartStateClaim,
     correctiveInstruction: CART_STATE_CORRECTIVE_INSTRUCTION,
+    appendUserMessage,
+  });
+
+  // Unconditional too, and after the cart guard: "your total is $17.98"
+  // trips both, and the cart guard's instruction (read the cart) is the
+  // more specific correction. This one catches a price or a halal/kosher
+  // claim the model volunteers when the customer asked no menu question —
+  // the hole the menu guard above cannot see, and the one an owner's
+  // persona note (phase D) is most likely to open. See
+  // tools/menu-claim-detection.ts.
+  guards.push({
+    id: MENU_CLAIM_GUARD_ID,
+    shouldAccept: acceptsMenuClaims,
+    correctiveInstruction: MENU_CLAIM_CORRECTIVE_INSTRUCTION,
     appendUserMessage,
   });
 

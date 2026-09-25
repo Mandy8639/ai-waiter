@@ -456,11 +456,25 @@ questions like _"Do you have any allergies?"_ must not be flagged, since a false
 corrective round-trip and, if the model doesn't comply, replaces a perfectly good reply with the
 fallback text.
 
-Both guards run through the same bounded mechanism (`loop.ts#textAcceptanceGuards`): the first
+**A third guard, for claims nobody asked about (phase D).** Both guards above leave one hole: a
+menu fact the model _volunteers_. The customer says "hi", the model says "welcome — the thali is only
+$12 today!", and nothing fires, because "hi" is not a menu question and "$12" is not a cart claim.
+Owner persona notes made that hole matter — owners write facts into notes ("our thali is only $12!",
+"everything here is halal"), and a note goes stale the day the menu price changes.
+`tools/menu-claim-detection.ts` inspects the reply, like the cart guard, and checks two things in
+deliberately different ways. **Prices by value**: every currency-marked amount must equal a number a
+tool returned _this turn_, so a stale "$1" is caught even when a real search ran and said 12.99.
+**Halal and kosher by source**: the reply needs an authoritative menu tool call this turn — not a
+wording check, because "the menu doesn't say whether it's halal" is the correct answer and contains
+the word. "Nut-free"/"gluten-free" are left out on purpose: same assertion-versus-denial problem,
+and no data that could ever back one. Wired unconditionally, after the cart guard so a cart total
+gets the cart guard's more specific correction. It never reads the system prompt or the note.
+
+All three guards run through the same bounded mechanism (`loop.ts#textAcceptanceGuards`): the first
 guard to reject a reply injects its corrective instruction, and the turn gets **exactly one** retry
 shared across all guards — never one retry per guard. If the retry doesn't help, the orchestrator
-substitutes that guard's own fallback wording and logs `cart_state_guard_exhausted` or
-`menu_fact_guard_exhausted`. As with every other rule here, the system prompt states the policy and
+substitutes that guard's own fallback wording and logs `cart_state_guard_exhausted`,
+`menu_fact_guard_exhausted` or `menu_claim_guard_exhausted`. As with every other rule here, the system prompt states the policy and
 the guard is what actually enforces it — see `docs/security.md#ai-tool-authorization`.
 
 ## Allergen safety

@@ -6,6 +6,7 @@ import {
   getPublicOrderSettings,
 } from "@/lib/customer/restaurant";
 import { sendAiMessage } from "./orchestrator";
+import { getAiPersonaForSession } from "./get-persona";
 import { isAiConfigured } from "./client";
 import { getRecentMessages } from "./conversation";
 import {
@@ -58,12 +59,17 @@ export async function sendChatMessage(
     return { error: "The AI waiter isn't available at this restaurant." };
   }
 
+  // Read from the diner's own session inside the database, never from an
+  // argument, so it is always the persona of the restaurant checked above.
+  const persona = await getAiPersonaForSession();
+
   const result = await sendAiMessage({
     restaurantId: restaurant.id,
     restaurantSlug,
     restaurantName: restaurant.name,
     customerSessionId: session.id,
     allowUpselling: orderSettings.allowUpselling,
+    persona,
     message,
   });
 
