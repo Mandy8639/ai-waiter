@@ -147,3 +147,36 @@ export async function updateAiPersona(
   revalidatePath("/dashboard/settings");
   return { success: true };
 }
+
+/**
+ * The signing-in owner's own email preferences (phase F). Owners only, since
+ * only owners receive these emails; set_my_email_preferences() writes the
+ * caller's own membership row and nobody else's.
+ */
+export async function updateEmailPreferences(
+  restaurantId: string,
+  _prevState: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  const auth = await authorizeRestaurantAction(restaurantId, ["owner"]);
+  if (!auth.ok) return { error: auth.error };
+
+  // database.types.ts predates 20260929090000.
+  const rpc = auth.context.supabase.rpc.bind(
+    auth.context.supabase,
+  ) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ error: { message: string } | null }>;
+  const { error } = await rpc("set_my_email_preferences", {
+    target_restaurant_id: restaurantId,
+    p_daily_summary: toBoolean(formData.get("emailDailySummary")),
+    p_payment_alerts: toBoolean(formData.get("emailPaymentAlerts")),
+  });
+
+  if (error)
+    return { error: "Couldn't save your email settings. Please try again." };
+
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}

@@ -1018,6 +1018,47 @@ Verified end to end on 2026-09-25 against the disposable project: a real Chrome 
 Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
 Table 4 · 1 item".
 
+## Owner emails — (phase F)
+
+Two kinds of email go to restaurant **owners** through Resend, from `mail.tableside.menu` (SPF,
+DKIM and DMARC records at Porkbun; `20260929090000_owner_email.sql`):
+
+- a **daily summary** of the restaurant's yesterday in its own timezone, sent by Vercel Cron
+  (`vercel.json`, once a day) to `GET /api/cron/daily-summary`, and only on a day with orders;
+- **payment alerts** for the three events an owner can act on: their Tableside subscription going
+  `past_due`, their Stripe account's `charges_enabled` switching from true to false, and a diner's
+  delayed payment failing (`checkout.session.async_payment_failed`).
+
+Each owner turns either off for themselves in Settings. `set_my_email_preferences()` writes only
+the caller's own `restaurant_users` row — `restaurant_users_update_owner` would let an owner change
+a co-owner's row, which is right for roles and wrong for someone else's inbox. Managers, staff,
+kitchen accounts and anonymous (diner) users never receive these: `get_owner_email_recipients()`
+filters to owners with a real email.
+
+**The third deliberate exception to "application code never uses the admin client".**
+`src/lib/email/dispatch.ts` runs with the service-role key, because nothing that triggers it is a
+signed-in person: a scheduled job and two Stripe webhooks. What contains it:
+
+- It is **not a server action** (no `"use server"`, and `server-only`), and
+  `tests/unit/owner-email.test.ts` pins its importers to exactly the cron route and the two
+  webhook routes.
+- The cron route refuses every call without `Authorization: Bearer $CRON_SECRET` (compared in
+  constant time), and refuses everything when `CRON_SECRET` is unset. The webhooks verify Stripe's
+  signature before anything reaches the database, as before.
+- `get_owner_email_recipients()` and `get_daily_summary()` are executable by `service_role`
+  only — not `anon`, not `authenticated` — so no browser can read an owner's address or another
+  restaurant's numbers through them.
+- **Once only.** Each email is claimed in `email_dispatches` (unique on kind, dedupe key and
+  recipient) before it is sent, and the same key goes to Resend as its `Idempotency-Key`. Vercel's
+  scheduler can deliver a run twice and Stripe redelivers webhooks; neither sends a second copy.
+- Webhook alerts run in `after()` and swallow every failure, so an email problem never fails a
+  webhook (which Stripe would retry, re-applying nothing but re-trying the email).
+- With no `RESEND_API_KEY` it does nothing at all.
+
+Emails carry no tracking pixels or click tracking (tracking is off on the Resend domain too), escape
+every database value into HTML, and say why they arrived with a link to the setting that stops
+them.
+
 ## Health check endpoint — (implemented in Batch 8)
 
 `GET /api/health` (`src/app/api/health/route.ts`) reports high-level readiness — `status: "ok"`,

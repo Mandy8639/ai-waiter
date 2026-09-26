@@ -1,8 +1,12 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe, isStripeConfigured } from "@/lib/payments/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report";
+import {
+  alertCardPaymentsDisabled,
+  alertDinerPaymentFailed,
+} from "@/lib/email/dispatch";
 
 /**
  * Stripe's webhook endpoint.
@@ -14,8 +18,9 @@ import { reportError } from "@/lib/observability/report";
  * about and no SECURITY DEFINER function that could authorise it. The
  * request signature is the entire authentication story — which is why the
  * signature check below happens before anything else touches the database,
- * and why this handler does exactly two things and nothing else: record
- * that an event was seen, and mirror Stripe's capability flags.
+ * and why this handler only records what Stripe reports. (Since phase F it
+ * may also queue an owner email, in `after()`, once the response is sent —
+ * src/lib/email/dispatch.ts, which is a sanctioned admin-client use too.)
  *
  * See docs/security.md#payments. If a future change needs the admin client
  * somewhere else, that is a design discussion, not a detail.
@@ -145,6 +150,14 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
+
+    // Phase F: a delayed payment (a bank debit, say) that fails has
+    // usually failed after the diner left, so the owner is told by email.
+    // An expired checkout is not news — the diner is still at the table
+    // and simply didn't finish — so it sends nothing.
+    if (event.type === "checkout.session.async_payment_failed") {
+      after(() => alertDinerPaymentFailed(session.id));
+    }
   }
 
   // Phase 3: a refund Stripe settled after we asked for it.
@@ -185,20 +198,24 @@ export async function POST(request: Request) {
     }
   }
 
-  // `account.updated` is an Accounts v1 event. Connected accounts are now
-  // created through Accounts v2 (v1 creation is rejected outright — see
-  // src/lib/payments/actions.ts), and v2 accounts report changes through
-  // v2 event destinations rather than this endpoint. So in practice this
-  // branch does not fire today, and the "Refresh status" button on the
-  // payments page — not this webhook — is what keeps the flags current.
-  //
-  // It is kept rather than deleted because it is correct for any v1
-  // account and costs nothing, and because the surrounding endpoint
-  // (signature verification and the replay-proof event ledger) is what
-  // phase 2's charge events will arrive through. Do not describe account
-  // status as automatically synced until a v2 event destination exists.
+  // Keeps restaurant_payment_accounts in step with Stripe. Connected
+  // accounts are created through Accounts v2, and v2 accounts still deliver
+  // `account.updated` to the `@accounts` destination — verified live on
+  // 2026-09-11, when Nashta's onboarding synced its flags through this
+  // branch without anyone pressing "Refresh status". The button on the
+  // payments page is a fallback, not the only path.
   if (event.type === "account.updated") {
     const account = event.data.object as Stripe.Account;
+
+    // Read before writing, to tell "card payments just switched off" apart
+    // from an account that was never enabled — onboarding sends many of
+    // these while charges are still false, and none of them is news.
+    const { data: before } = await admin
+      .from("restaurant_payment_accounts")
+      .select("restaurant_id, charges_enabled")
+      .eq("stripe_account_id", account.id)
+      .maybeSingle();
+
     const { error } = await admin
       .from("restaurant_payment_accounts")
       .update({
@@ -212,6 +229,16 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "could not apply event" },
         { status: 500 },
+      );
+    }
+
+    if (before?.charges_enabled && account.charges_enabled === false) {
+      after(() =>
+        alertCardPaymentsDisabled({
+          restaurantId: before.restaurant_id,
+          stripeAccountId: account.id,
+          eventId: event.id,
+        }),
       );
     }
   }
