@@ -5,6 +5,7 @@ import { requireActiveCustomerSession } from "@/lib/customer/session";
 import { submitOrderSchema } from "./schemas";
 import { parseOrderError } from "./errors";
 import { isOrderSubmissionRateLimited } from "./rate-limit";
+import { scheduleOrderPush } from "@/lib/push/dispatch";
 
 export interface SubmitOrderResult {
   error?: string;
@@ -65,6 +66,14 @@ export async function submitOrder(
       error: "Something went wrong placing your order. Please try again.",
     };
   }
+
+  // Tell the kitchen's devices, after this response has gone (phase F).
+  // Both ordering paths — the diner's own button and the AI waiter's
+  // submit_order tool — come through here, so this is the one hook. The
+  // id is the one the database just returned, never a client value, and a
+  // retry of the same idempotency key returns the same id, which the
+  // sender recognises and skips.
+  scheduleOrderPush(data.id);
 
   return { orderId: data.id };
 }

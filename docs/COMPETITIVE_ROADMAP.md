@@ -174,6 +174,10 @@ silently machine-translated.
 
 ## Phase F — Notifications
 
+**Web Push half shipped 2026-09-25** (`20260928090000_push_subscriptions.sql`):
+verified with the kitchen tab closed. Needs VAPID keys set per environment to
+turn on. Email half not started — needs a provider decision.
+
 **Why here.** The first phase that needs infrastructure this project does
 not have: no `web-push`, no service worker, no mail provider (verified —
 none in `package.json`, no `public/` service worker). Today the kitchen

@@ -1,4 +1,5 @@
 import { KitchenBoard } from "@/components/kitchen/kitchen-board";
+import { PushAlertsToggle } from "@/components/kitchen/push-alerts-toggle";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { getActiveOrdersForRestaurant } from "@/lib/orders/kitchen";
 
@@ -20,10 +21,14 @@ export default async function KitchenPage() {
   const orders = await getActiveOrdersForRestaurant(restaurant.id);
 
   return (
-    <KitchenBoard
-      restaurantId={restaurant.id}
-      role={restaurant.role}
-      initialOrders={orders}
-    />
+    <div className="flex flex-col gap-4">
+      {/* Renders nothing when push isn't configured for this deployment. */}
+      <PushAlertsToggle restaurantId={restaurant.id} />
+      <KitchenBoard
+        restaurantId={restaurant.id}
+        role={restaurant.role}
+        initialOrders={orders}
+      />
+    </div>
   );
 }

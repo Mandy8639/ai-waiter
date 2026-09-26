@@ -1,0 +1,185 @@
+/**
+ * Kitchen push, the part with no network and no database in it (phase F).
+ *
+ * Everything that decides WHAT gets sent, to WHOM, and WHAT HAPPENS AFTER
+ * lives here, with its I/O handed in as functions — so the rules can be
+ * unit-tested without a push service, a VAPID key or a Supabase project.
+ * src/lib/push/dispatch.ts supplies the real I/O. No `server-only`, per
+ * the extract-the-core convention.
+ *
+ * The rules, each of which a test pins:
+ *
+ *   1. ONCE PER ORDER. submit_order() is idempotent — a double tap or a
+ *      retry returns the same order — so the event is claimed first and a
+ *      second call for the same order sends nothing.
+ *   2. A DEAD DEVICE IS FORGOTTEN, A FLAKY ONE IS NOT. The push service
+ *      answers 404 or 410 when a subscription no longer exists (the app
+ *      was uninstalled, the permission revoked); that row is deleted. Any
+ *      other failure only counts against it.
+ *   3. NEVER THE DINER'S PROBLEM. This runs after the diner's response has
+ *      gone out, and nothing here may throw back into the request that
+ *      placed the order. A kitchen that misses a push still has the board;
+ *      a diner whose order "failed" because a tablet was offline has
+ *      nothing.
+ */
+
+export type PushEventKind = "order" | "table_request";
+
+export interface PushPayload {
+  title: string;
+  body: string;
+  /** Where tapping the notification takes the member — always a dashboard path. */
+  url: string;
+  /**
+   * Notifications with the same tag replace each other on the device, so
+   * a re-sent order never stacks a second copy in the tray.
+   */
+  tag: string;
+}
+
+export interface PushTarget {
+  id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+export type SendOutcome =
+  { ok: true } | { ok: false; gone: boolean; statusCode?: number };
+
+export interface DispatchDeps {
+  /** True when this call claimed the event; false when it was already sent. */
+  claim: () => Promise<boolean>;
+  targets: () => Promise<PushTarget[]>;
+  send: (target: PushTarget, payload: PushPayload) => Promise<SendOutcome>;
+  markDelivered: (ids: string[]) => Promise<void>;
+  markFailed: (ids: string[]) => Promise<void>;
+  remove: (ids: string[]) => Promise<void>;
+}
+
+export interface DispatchReport {
+  skipped?: "already_sent" | "no_devices";
+  delivered: number;
+  failed: number;
+  removed: number;
+}
+
+export async function dispatchPush(
+  deps: DispatchDeps,
+  payload: PushPayload,
+): Promise<DispatchReport> {
+  const report: DispatchReport = { delivered: 0, failed: 0, removed: 0 };
+
+  if (!(await deps.claim())) return { ...report, skipped: "already_sent" };
+
+  const targets = await deps.targets();
+  if (targets.length === 0) return { ...report, skipped: "no_devices" };
+
+  // In parallel: a kitchen with three tablets should not wait for the
+  // slowest push service before the other two ring.
+  const outcomes = await Promise.all(
+    targets.map(async (target) => {
+      try {
+        return { target, outcome: await deps.send(target, payload) };
+      } catch {
+        // A thrown send is a failure of unknown kind — not proof the
+        // device is gone, so it is counted, not deleted.
+        return {
+          target,
+          outcome: { ok: false, gone: false } as SendOutcome,
+        };
+      }
+    }),
+  );
+
+  const delivered = outcomes
+    .filter((o) => o.outcome.ok)
+    .map((o) => o.target.id);
+  const gone = outcomes
+    .filter((o) => !o.outcome.ok && o.outcome.gone)
+    .map((o) => o.target.id);
+  const failed = outcomes
+    .filter((o) => !o.outcome.ok && !o.outcome.gone)
+    .map((o) => o.target.id);
+
+  if (delivered.length) await deps.markDelivered(delivered);
+  if (failed.length) await deps.markFailed(failed);
+  if (gone.length) await deps.remove(gone);
+
+  return {
+    delivered: delivered.length,
+    failed: failed.length,
+    removed: gone.length,
+  };
+}
+
+/** 404 and 410 are the push services' "this subscription no longer exists". */
+export function isGoneStatus(statusCode: number | undefined): boolean {
+  return statusCode === 404 || statusCode === 410;
+}
+
+// What the kitchen reads -------------------------------------------------------
+
+function tableLabel(table: {
+  number: string | null;
+  displayName: string | null;
+}): string {
+  if (table.displayName && table.number) {
+    return `Table ${table.number} (${table.displayName})`;
+  }
+  if (table.number) return `Table ${table.number}`;
+  return table.displayName ?? "A table";
+}
+
+/**
+ * "New order #1042" / "Table 4 · 3 items". Deliberately no dish names, no
+ * prices and no diner note: a notification shows on a lock screen that
+ * anyone passing the counter can read, and the kitchen board one tap away
+ * has all of it. What the cook needs from the buzz is that there IS an
+ * order, and from where.
+ */
+export function orderPayload(order: {
+  id: string;
+  orderNumber: number | null;
+  itemCount: number;
+  table: { number: string | null; displayName: string | null };
+}): PushPayload {
+  const items = order.itemCount === 1 ? "1 item" : `${order.itemCount} items`;
+  return {
+    title:
+      order.orderNumber !== null
+        ? `New order #${order.orderNumber}`
+        : "New order",
+    body: `${tableLabel(order.table)} · ${items}`,
+    url: "/dashboard/kitchen",
+    tag: `order-${order.id}`,
+  };
+}
+
+export function tableRequestPayload(request: {
+  id: string;
+  kind: "waiter" | "bill";
+  table: { number: string | null; displayName: string | null };
+}): PushPayload {
+  const who = tableLabel(request.table);
+  return {
+    title:
+      request.kind === "bill"
+        ? `${who} asked for the bill`
+        : `${who} is asking for a waiter`,
+    body: "Tap to see who is waiting.",
+    // The overview's "Tables waiting" is where these are resolved.
+    url: "/dashboard",
+    tag: `request-${request.id}`,
+  };
+}
+
+/**
+ * The only thing a notification click may open. The service worker trusts
+ * the URL in the payload, so the payload builders above are the only
+ * source of it — and this is checked again at send time, so a future
+ * builder that got it wrong cannot turn a push into a link off-site.
+ */
+export function isSafeNotificationUrl(url: string): boolean {
+  return /^\/dashboard(\/[a-z0-9/_-]*)?$/i.test(url);
+}
