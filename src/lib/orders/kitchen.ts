@@ -17,6 +17,14 @@ export interface KitchenOrderItem {
   /** The diner's free-text request for this line, or null. */
   notes: string | null;
   ticketGroupId: string | null;
+  /** The kitchen station this line was sent to when ordered, or null (shown on every station). */
+  stationId: string | null;
+}
+
+/** A kitchen station (phase I). */
+export interface KitchenStation {
+  id: string;
+  name: string;
 }
 
 /** A kitchen ticket group's own status is independent of the order's — see order_status_rank()/recompute_order_status_from_groups() in the migration for how the order's own status is derived from these. */
@@ -38,6 +46,8 @@ export interface KitchenOrder {
   ticketGroups: KitchenTicketGroup[];
   /** Other order ids sharing at least one of this order's ticket groups (a merge) — empty unless merged. */
   mergedWithOrderIds: string[];
+  /** Stations that have marked their part of this order done (phase I). */
+  stationsDone: string[];
 }
 
 /** How long a served order stays visible on the board before it drops off — long enough to catch a mistake, short enough not to clutter the screen (spec: "recent served orders for a limited period"). */
@@ -104,7 +114,8 @@ export async function getActiveOrdersForRestaurant(
     supabase
       .from("order_items")
       .select(
-        "id, order_id, item_name, quantity, ticket_group_id, spice_preference, notes",
+        // station_id: 20261001090000, newer than database.types.ts.
+        "id, order_id, item_name, quantity, ticket_group_id, spice_preference, notes, station_id" as "id, order_id, item_name, quantity, ticket_group_id, spice_preference, notes",
       )
       .in("order_id", orderIds)
       .order("created_at", { ascending: true }),
@@ -158,6 +169,32 @@ export async function getActiveOrdersForRestaurant(
           }[],
         };
 
+  // Phase I: which stations have finished their part. database.types.ts
+  // predates the table, hence the cast.
+  const { data: doneRows } = await (
+    supabase as unknown as {
+      from: (table: string) => {
+        select: (columns: string) => {
+          in: (
+            column: string,
+            values: string[],
+          ) => Promise<{
+            data: { order_id: string; station_id: string }[] | null;
+          }>;
+        };
+      };
+    }
+  )
+    .from("order_station_done")
+    .select("order_id, station_id")
+    .in("order_id", orderIds);
+  const stationsDoneByOrderId = new Map<string, string[]>();
+  for (const row of doneRows ?? []) {
+    const list = stationsDoneByOrderId.get(row.order_id) ?? [];
+    list.push(row.station_id);
+    stationsDoneByOrderId.set(row.order_id, list);
+  }
+
   const tableById = new Map((tables ?? []).map((t) => [t.id, t]));
   const modifiersByItemId = new Map<string, KitchenOrderModifier[]>();
   for (const m of modifiers ?? []) {
@@ -178,6 +215,8 @@ export async function getActiveOrdersForRestaurant(
       spicePreference: item.spice_preference,
       notes: item.notes,
       ticketGroupId,
+      stationId:
+        (item as unknown as { station_id?: string | null }).station_id ?? null,
     });
     itemsByOrderId.set(item.order_id, list);
 
@@ -216,6 +255,7 @@ export async function getActiveOrdersForRestaurant(
         })
         .filter((g): g is KitchenTicketGroup => g !== null),
       mergedWithOrderIds: [...mergedWithOrderIds],
+      stationsDone: stationsDoneByOrderId.get(o.id) ?? [],
     };
   });
 }
@@ -249,3 +289,38 @@ export async function getOrderStatusHistory(
 }
 
 export { ACTIVE_KITCHEN_STATUSES };
+
+/** The restaurant's kitchen stations, in their display order (phase I). */
+export async function getKitchenStations(
+  restaurantId: string,
+): Promise<KitchenStation[]> {
+  const supabase = await createClient();
+  const { data } = await (
+    supabase as unknown as {
+      from: (table: string) => {
+        select: (columns: string) => {
+          eq: (
+            column: string,
+            value: string,
+          ) => {
+            order: (
+              column: string,
+              options: { ascending: boolean },
+            ) => {
+              order: (
+                column: string,
+                options: { ascending: boolean },
+              ) => Promise<{ data: { id: string; name: string }[] | null }>;
+            };
+          };
+        };
+      };
+    }
+  )
+    .from("kitchen_stations")
+    .select("id, name")
+    .eq("restaurant_id", restaurantId)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+  return (data ?? []).map((s) => ({ id: s.id, name: s.name }));
+}

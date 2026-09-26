@@ -59,6 +59,10 @@ vi.mock("@/lib/orders/transition", () => ({
   transitionOrderStatus: vi.fn(),
 }));
 
+vi.mock("@/lib/kitchen/station-actions", () => ({
+  setStationDone: vi.fn(async () => ({})),
+}));
+
 vi.mock("@/lib/orders/ticket-groups", () => ({
   transitionTicketGroupStatus: vi.fn(),
   splitOrderIntoTickets: vi.fn(),
@@ -76,6 +80,7 @@ function makeOrder(overrides: Partial<KitchenOrder> = {}): KitchenOrder {
     items: [],
     ticketGroups: [],
     mergedWithOrderIds: [],
+    stationsDone: [],
     ...overrides,
   };
 }

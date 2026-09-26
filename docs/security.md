@@ -1018,6 +1018,26 @@ Verified end to end on 2026-09-25 against the disposable project: a real Chrome 
 Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
 Table 4 · 1 item".
 
+## Kitchen stations — (phase I)
+
+`20261001090000_kitchen_stations.sql`. Stations are ordinary restaurant data with the same shape
+as categories: RLS lets members **read** them, and only owners and managers **create, rename or
+delete** them. A dish is assigned through the existing `menu_items` update policy (owners and
+managers). Composite foreign keys make it impossible to send a dish, or an order line, to another
+restaurant's station, and deleting a station unassigns its dishes and lines rather than deleting
+them (`ON DELETE SET NULL (station_id)`).
+
+An order line takes its dish's station **when the order is placed**, through a `BEFORE INSERT`
+trigger on `order_items`, so `submit_order()` is unchanged.
+
+`set_order_station_done()` is the only way to write `order_station_done`: RLS allows members to
+select from it, and nobody can write to it directly. It lets the **owner, manager or kitchen**
+role mark a station's part of an **active** order done or undone. Floor staff can't, which
+matches the kitchen steps in the status matrix. It never changes the order's status. The function
+touches `orders.updated_at` so every kitchen screen's existing realtime subscription refreshes.
+It is restricted to confirmed, preparing and ready orders, so it can't extend a served order's
+30-minute stay on the board.
+
 ## Dish funnel — (phase H)
 
 The Reports page shows, per dish, how many visits **opened** it, **added** it to the cart and
