@@ -8,6 +8,7 @@ import { DietBadges } from "@/components/customer/diet-badges";
 import { ItemDetailForm } from "@/components/customer/item-detail-form";
 import { formatPrice } from "@/lib/format/price";
 import { DishPhoto } from "@/components/customer/dish-photo";
+import { DishViewBeacon } from "@/components/customer/dish-view-beacon";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { DETAIL_SIZES, resolveDinerImage } from "@/lib/menu-images/resolve";
@@ -205,6 +206,7 @@ export default async function MenuItemDetailPage({
 
   return (
     <div className="flex flex-1 flex-col gap-6">
+      <DishViewBeacon menuItemId={item.id} />
       <Link
         href={`/r/${restaurantSlug}/menu`}
         className="type-label text-muted-foreground hover:text-foreground -ml-1 inline-flex w-fit items-center gap-1 rounded-lg px-1 py-1 transition-colors"

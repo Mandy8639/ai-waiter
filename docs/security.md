@@ -1018,6 +1018,37 @@ Verified end to end on 2026-09-25 against the disposable project: a real Chrome 
 Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
 Table 4 · 1 item".
 
+## Dish funnel — (phase H)
+
+The Reports page shows, per dish, how many visits **opened** it, **added** it to the cart and
+**ordered** it, plus "opened → ordered": of the visits that opened it, the share that ordered it
+(`20260930090000_dish_funnel.sql`).
+
+**This is the first feature that records diner behaviour, and a QR scan is a real anonymous auth
+user, so the rule is: nothing stored identifies a diner beyond the visit.**
+
+- **What is kept:** `dish_daily_stats`, counts per dish per restaurant-local day. Its columns are
+  the restaurant, the dish, the day and four counters. It has no session, user, table or time of
+  day, and a test pins that exact column list. It is kept for as long as the dish exists and is
+  deleted with the dish.
+- **What is forgotten:** `dish_visit_marks` records "this visit has been counted for this dish",
+  only so that opening a dish five times counts once. Rows are deleted after **2 days**, and
+  immediately when the visit is deleted. Reports never read it.
+- **The rate is computed as events happen:** "opened → ordered" goes up when the order is placed,
+  and only if the same visit opened the dish earlier. After the marks are gone, a true rate
+  couldn't be reconstructed. It can't exceed 100%.
+- **Who is counted:** only a diner seated at the dish's own restaurant. `record_dish_view()`
+  finds the caller's active visit from `auth.uid()` and does nothing for anyone else (an owner
+  previewing the menu, an expired visit, another restaurant's dish). Adds and orders are counted by
+  triggers on `cart_items` and `order_items`, so the menu and the AI waiter are both covered.
+- **Who reads it:** `get_dish_funnel()` uses the same owner/manager gate as the other reporting
+  functions (`assert_can_view_reports`). Both tables have RLS on with no policies. The internal
+  writer `record_dish_signal()` and the trigger functions are executable by no client role.
+- **Never in the diner's way:** every counting path swallows its own errors, and a test proves a
+  broken counter doesn't stop a dish being added to the cart. A dish open is recorded from the
+  browser after the page shows (`DishViewBeacon`), not while the server renders it, so link
+  prefetches don't count as opens.
+
 ## Owner emails — (phase F)
 
 Two kinds of email go to restaurant **owners** through Resend, from `mail.tableside.menu` (SPF,
