@@ -18,7 +18,13 @@ import {
   splitOrderIntoTickets,
   mergeOrdersIntoTicket,
 } from "@/lib/orders/ticket-groups";
-import type { KitchenOrder } from "@/lib/orders/kitchen";
+import type { KitchenOrder, KitchenStation } from "@/lib/orders/kitchen";
+import { setStationDone } from "@/lib/kitchen/station-actions";
+import {
+  hasOwnLines,
+  ordersForStation,
+  stationProgress,
+} from "@/lib/kitchen/stations-core";
 import { STATUS_LABELS, type OrderStatus } from "@/lib/orders/status";
 import { OrderCard } from "./order-card";
 import { OrderDetailDialog } from "./order-detail-dialog";
@@ -89,14 +95,30 @@ const BOARD_COLUMNS: OrderStatus[] = [
  * the resyncSeqRef guard below for why a stale response can never overwrite
  * fresher state.
  */
+/** Roles that cook, and so can mark a station's part done — set_order_station_done()'s own list. */
+const CAN_MARK_STATION: Role[] = ["owner", "manager", "kitchen"];
+
+/** Stable default, so the remembered-station effect doesn't re-run every render. */
+const NO_STATIONS: KitchenStation[] = [];
+
+/** "all" is the pass: every line, every status step. */
+type StationChoice = "all" | string;
+
+function stationStorageKey(restaurantId: string) {
+  return `tableside.kitchen.station.${restaurantId}`;
+}
+
 export function KitchenBoard({
   restaurantId,
   role,
   initialOrders,
+  stations = NO_STATIONS,
 }: {
   restaurantId: string;
   role: Role;
   initialOrders: KitchenOrder[];
+  /** Phase I. With none, the board is exactly the one-screen board it always was. */
+  stations?: KitchenStation[];
 }) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [detailOrder, setDetailOrder] = useState<KitchenOrder | null>(null);
@@ -106,6 +128,38 @@ export function KitchenBoard({
   const [actionError, setActionError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const { muted, toggleMuted, unlock, play } = useNotificationSound();
+  const [stationChoice, setStationChoice] = useState<StationChoice>("all");
+
+  // Each tablet is one station, so the choice is remembered per device.
+  // Read after mount, like the mute preference, to avoid a hydration
+  // mismatch; a remembered station that has since been deleted falls back
+  // to the pass.
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(stationStorageKey(restaurantId));
+    } catch {
+      // Private mode or blocked storage: start on the pass.
+    }
+    if (stored && stations.some((st) => st.id === stored)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStationChoice(stored);
+    }
+  }, [restaurantId, stations]);
+
+  function chooseStation(choice: StationChoice) {
+    setStationChoice(choice);
+    try {
+      window.localStorage.setItem(stationStorageKey(restaurantId), choice);
+    } catch {
+      // Not remembered; still applied.
+    }
+  }
+
+  const activeStation =
+    stationChoice === "all"
+      ? null
+      : (stations.find((st) => st.id === stationChoice) ?? null);
   const [, startTransitionAction] = useTransition();
 
   const knownIdsRef = useRef<Set<string>>(
@@ -248,6 +302,28 @@ export function KitchenBoard({
     });
   }
 
+  function handleStationDone(
+    orderId: string,
+    stationId: string,
+    done: boolean,
+  ) {
+    setActionError(null);
+    setPendingIds((prev) => new Set(prev).add(orderId));
+    startTransitionAction(async () => {
+      const result = await setStationDone(orderId, stationId, done);
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+      if (result.error) {
+        setActionError(result.error);
+      } else {
+        void resync(false);
+      }
+    });
+  }
+
   async function handleSplit(
     orderId: string,
     groups: { label?: string; itemIds: string[] }[],
@@ -288,7 +364,14 @@ export function KitchenBoard({
   // Orders nobody has accepted yet. `pending` already means exactly that —
   // the state machine's first transition is pending -> confirmed, which IS
   // the "Accept" a DoorDash tablet demands — so this needs no new column.
-  const unacceptedCount = orders.filter((o) => o.status === "pending").length;
+  const visibleOrders = useMemo(
+    () => (activeStation ? ordersForStation(orders, activeStation.id) : orders),
+    [orders, activeStation],
+  );
+
+  const unacceptedCount = visibleOrders.filter(
+    (o) => o.status === "pending",
+  ).length;
 
   // Keep chiming until someone accepts.
   //
@@ -345,6 +428,40 @@ export function KitchenBoard({
         </div>
       )}
 
+      {stations.length > 0 && (
+        <div
+          role="group"
+          aria-label="Which station is this screen?"
+          className="flex flex-wrap gap-2"
+        >
+          {[{ id: "all", name: "All stations" }, ...stations].map((st) => {
+            const selected =
+              st.id === "all"
+                ? activeStation === null
+                : activeStation?.id === st.id;
+            return (
+              <Button
+                key={st.id}
+                type="button"
+                size="sm"
+                variant={selected ? "default" : "outline"}
+                aria-pressed={selected}
+                onClick={() => chooseStation(st.id)}
+              >
+                {st.name}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+      {activeStation && (
+        <p className="text-muted-foreground text-sm">
+          Showing {activeStation.name}&apos;s dishes and any dish with no
+          station. Mark your part done here; the order is marked ready from All
+          stations.
+        </p>
+      )}
+
       {actionError && (
         <div className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">
           {actionError}
@@ -358,7 +475,7 @@ export function KitchenBoard({
       */}
       <div className="-mx-4 flex flex-1 snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:snap-none sm:px-0">
         {BOARD_COLUMNS.map((status) => {
-          const columnOrders = orders.filter((o) => o.status === status);
+          const columnOrders = visibleOrders.filter((o) => o.status === status);
           return (
             <section
               key={status}
@@ -394,6 +511,30 @@ export function KitchenBoard({
                     onOpenSplit={setSplitOrder}
                     onOpenMerge={setMergeOrder}
                     orderNumberById={orderNumberById}
+                    station={
+                      activeStation
+                        ? {
+                            name: activeStation.name,
+                            done: order.stationsDone.includes(activeStation.id),
+                            // Only a station with its own lines has a part
+                            // to finish; unassigned-only orders have none.
+                            canMark:
+                              CAN_MARK_STATION.includes(role) &&
+                              hasOwnLines(order, activeStation.id),
+                            onToggle: (done) =>
+                              handleStationDone(
+                                order.id,
+                                activeStation.id,
+                                done,
+                              ),
+                          }
+                        : undefined
+                    }
+                    progress={
+                      activeStation
+                        ? undefined
+                        : stationProgress(order, stations)
+                    }
                   />
                 ))}
               </div>

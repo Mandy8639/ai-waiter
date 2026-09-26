@@ -253,6 +253,19 @@ date range, and nothing stored identifies a diner beyond the visit.
 
 ## Phase I — Kitchen printing and stations
 
+**Stations built 2026-09-26** (`20261001090000_kitchen_stations.sql`). Owners
+name stations and send each dish to one (Kitchen → Edit stations). Each
+kitchen tablet picks its station and sees only that station's lines, plus
+any dish with no station, labelled. A station marks **its part** done
+without changing the order's status; the "All stations" view (the pass)
+shows which stations are finished and marks the order ready. Lines keep the
+station they had when ordered. Verified live on the disposable project: an
+order of a grill dish and a fry dish showed only the dosa on the Grill
+screen, and after "Grill done" the pass showed Grill ✓ and Fry still
+cooking, with the order still Preparing. **Printing is not started**; it is
+the second deliverable. Push alerts still go to every kitchen device, not
+per station.
+
 **Why here.** High operational value, low software elegance: LAN thermal
 printing means talking to an ESC/POS printer from a browser, which
 realistically means a small local agent or a print-server appliance. That

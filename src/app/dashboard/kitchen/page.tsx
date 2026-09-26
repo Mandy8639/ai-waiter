@@ -1,7 +1,11 @@
 import { KitchenBoard } from "@/components/kitchen/kitchen-board";
 import { PushAlertsToggle } from "@/components/kitchen/push-alerts-toggle";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
-import { getActiveOrdersForRestaurant } from "@/lib/orders/kitchen";
+import Link from "next/link";
+import {
+  getActiveOrdersForRestaurant,
+  getKitchenStations,
+} from "@/lib/orders/kitchen";
 
 export const metadata = {
   title: "Kitchen — Tableside",
@@ -18,16 +22,32 @@ export const metadata = {
  */
 export default async function KitchenPage() {
   const { restaurant } = await requireCurrentRestaurant();
-  const orders = await getActiveOrdersForRestaurant(restaurant.id);
+  const [orders, stations] = await Promise.all([
+    getActiveOrdersForRestaurant(restaurant.id),
+    getKitchenStations(restaurant.id),
+  ]);
+  const canManageStations =
+    restaurant.role === "owner" || restaurant.role === "manager";
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Renders nothing when push isn't configured for this deployment. */}
-      <PushAlertsToggle restaurantId={restaurant.id} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* Renders nothing when push isn't configured for this deployment. */}
+        <PushAlertsToggle restaurantId={restaurant.id} />
+        {canManageStations && (
+          <Link
+            href="/dashboard/kitchen/stations"
+            className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
+          >
+            {stations.length > 0 ? "Edit stations" : "Set up stations"}
+          </Link>
+        )}
+      </div>
       <KitchenBoard
         restaurantId={restaurant.id}
         role={restaurant.role}
         initialOrders={orders}
+        stations={stations}
       />
     </div>
   );
