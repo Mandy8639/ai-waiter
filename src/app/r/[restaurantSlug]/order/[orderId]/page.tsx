@@ -165,7 +165,18 @@ export default async function OrderConfirmationPage({
         </div>
       </div>
 
-      {payment.paid && (
+      {payment.paid && payment.paid.payerCount > 1 && (
+        // Phase J: settled by a split bill. Each payer's amount is theirs,
+        // so no single figure or receipt here would be the truth.
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <span className="font-medium">Paid</span>
+          <span className="text-muted-foreground text-sm">
+            Split between {payment.paid.payerCount} people
+          </span>
+        </div>
+      )}
+
+      {payment.paid && payment.paid.payerCount === 1 && (
         <div className="flex flex-col gap-3 rounded-lg border p-4">
           <div className="flex items-center justify-between">
             <span className="font-medium">Paid</span>

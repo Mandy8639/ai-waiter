@@ -42,6 +42,29 @@ const PAYMENT_MESSAGES: Record<string, string> = {
   PAYMENT_NO_SESSION:
     "This table's session has ended. Scan the code again to start a new one.",
 
+  // Phase J — splitting a tab. Diner-facing, and read by guests who may
+  // never have scanned the table's code.
+  PAYMENT_ORDER_IN_SPLIT:
+    "This order is part of a bill being split. Pay your part from the split page.",
+  ORDER_IN_SPLIT:
+    "This order is part of a bill the table is splitting, so it can't be cancelled until they cancel the split.",
+  SPLIT_ALREADY_OPEN: "This bill is already being split.",
+  SPLIT_INVALID_SHARES: "Split the bill between 2 and 20 people.",
+  SPLIT_INVALID_MODE: "Choose how to split the bill.",
+  SPLIT_TOO_SMALL: "The bill is too small to split that many ways.",
+  SPLIT_ORDER_HAS_NO_ITEMS:
+    "One of these orders has nothing on it to split. Ask your server.",
+  SPLIT_NOT_FOUND: "This split link isn't valid any more.",
+  SPLIT_CLOSED: "This bill has already been paid, or the split was cancelled.",
+  SPLIT_NOTHING_CHOSEN: "Choose what you're paying for.",
+  SPLIT_UNKNOWN_PART:
+    "Something you chose isn't on this bill. Reload and try again.",
+  SPLIT_PART_TAKEN:
+    "Someone is already paying for part of what you chose. Reload to see what's left.",
+  SPLIT_NOTHING_TO_PAY: "What you chose comes to nothing.",
+  SPLIT_STARTED:
+    "Someone has already paid or started paying a part, so the split can't be cancelled.",
+
   // Phase 3, step 2 — raised by record_cash_payment()/reverse_cash_payment().
   // Staff-facing: the reader is holding the notes, so these say what to do
   // rather than apologising.

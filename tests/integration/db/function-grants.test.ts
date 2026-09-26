@@ -51,8 +51,22 @@ const SIGNED_IN_ONLY = [
  *   restaurant name / role / state and nothing else, and the token is the
  *   authorization — the same trust model as get_table_by_token. See
  *   20260926090000_staff_invitations.sql.
+ * - get_tab_split, start_split_payment, attach_split_checkout_session,
+ *   get_split_payment_checkout: a guest paying their part of a split bill
+ *   opens a link on their own phone and may never have scanned the table's
+ *   QR code, so they are signed out. The split's token is the
+ *   authorization; what it allows is reading the bill and PAYING part of
+ *   it, which takes nothing from anyone. No function a signed-out caller
+ *   can reach releases a claim or marks anything paid — only Stripe's
+ *   signed webhook does. See 20261002090000_split_bill.sql.
  */
-const ANON_BY_DESIGN = ["get_staff_invitation_preview"];
+const ANON_BY_DESIGN = [
+  "get_staff_invitation_preview",
+  "get_tab_split",
+  "start_split_payment",
+  "attach_split_checkout_session",
+  "get_split_payment_checkout",
+];
 
 const ANON_EXECUTABLE_PENDING_REVIEW = [
   "add_restaurant_staff_by_email",
@@ -99,7 +113,6 @@ const ANON_EXECUTABLE_PENDING_REVIEW = [
   "split_order_into_tickets",
   "start_order_payment",
   "start_refund",
-  "start_tab_payment",
   "submit_order",
   "sync_restaurant_payment_account_status",
   "transition_reservation_status",

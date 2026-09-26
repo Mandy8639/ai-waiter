@@ -11,6 +11,9 @@ import { formatMoney } from "@/lib/orders/format";
 import { CUSTOMER_STATUS_LABELS as STATUS_LABELS } from "@/lib/orders/status";
 import { getTabPaymentState } from "@/lib/payments/tab-queries";
 import { startTabCheckout } from "@/lib/payments/tab-checkout";
+import { SplitBillStart } from "@/components/customer/split-bill-start";
+import { createSplit } from "@/lib/payments/split-actions";
+import { createClient } from "@/lib/supabase/server";
 
 export async function generateMetadata({
   params,
@@ -69,11 +72,19 @@ export default async function OrderHistoryPage({
     );
   }
 
-  const [orders, tab, returned] = await Promise.all([
+  const supabase = (await createClient()) as unknown as {
+    rpc: (fn: string) => Promise<{ data: unknown }>;
+  };
+  const [orders, tab, returned, openSplitResult] = await Promise.all([
     getOrdersForSession(session.id),
     getTabPaymentState(session.id, restaurant.id),
     searchParams,
+    // Phase J; database.types.ts predates it.
+    supabase.rpc("get_my_open_split"),
   ]);
+  const openSplitToken =
+    (openSplitResult.data as Array<{ open_split_token: string }> | null)?.[0]
+      ?.open_split_token ?? null;
 
   const paidOrderIds = new Set(
     tab.orders.filter((o) => o.paid).map((o) => o.id),
@@ -82,8 +93,20 @@ export default async function OrderHistoryPage({
   // A tab is worth offering only for two or more unpaid orders — one is
   // what the order's own page already does, and a second button for the
   // same charge would just be a way to get it wrong.
+  // While the bill is being split, the split is the way to pay it: the
+  // tab's total would include orders the split has taken over.
   const canPayTab =
-    tab.canTakeCard && tab.unpaidCount >= 2 && !tab.mixedCurrency;
+    !openSplitToken &&
+    tab.canTakeCard &&
+    tab.unpaidCount >= 2 &&
+    !tab.mixedCurrency;
+  // One big order is the classic bill to split, so one unpaid order is
+  // enough to offer it.
+  const canSplit =
+    !openSplitToken &&
+    tab.canTakeCard &&
+    tab.unpaidCount >= 1 &&
+    !tab.mixedCurrency;
 
   return (
     <div className="flex flex-1 flex-col gap-5">
@@ -166,6 +189,25 @@ export default async function OrderHistoryPage({
           pendingTip={tab.pendingTip}
           payAction={startTabCheckout.bind(null, restaurantSlug)}
         />
+      )}
+
+      {openSplitToken && (
+        <section className="flex flex-col gap-2 rounded-lg border p-4">
+          <h2 className="font-medium">This bill is being split</h2>
+          <p className="text-muted-foreground text-sm">
+            Everyone pays their part from the split page.
+          </p>
+          <Link
+            href={`/r/${restaurantSlug}/split/${openSplitToken}`}
+            className={buttonVariants({ variant: "default" })}
+          >
+            Open the split
+          </Link>
+        </section>
+      )}
+
+      {canSplit && (
+        <SplitBillStart createAction={createSplit.bind(null, restaurantSlug)} />
       )}
 
       {/* Orders freeze their own currency, so a restaurant that changed

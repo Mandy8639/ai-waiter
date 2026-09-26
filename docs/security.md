@@ -1018,6 +1018,52 @@ Verified end to end on 2026-09-25 against the disposable project: a real Chrome 
 Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
 Table 4 · 1 item".
 
+## Split bill — (phase J)
+
+`20261002090000_split_bill.sql`. A diner splits their tab into **equal shares** or **one part per
+dish**. Anyone they share the link with pays for the parts they choose, on their own phone, through
+Stripe Checkout, so each person can use their own card, Apple Pay or Google Pay.
+
+**Exactness.** Parts are fixed when the split is made, in integer minor units, using the
+largest-remainder method (`allocate_minor`). For example, $100.00 split three ways is 33.34 + 33.33
+
+- 33.33, and a dish's part is its line total plus its exact slice of the order's tax and service
+  charge. `create_tab_split()` refuses to finish unless the parts add up to the bill. When the last
+  part is paid, the split writes coverage (`payment_orders`) with **both margins exact**: each
+  payment's rows add up to what it charged, and each order's rows add up to its total. The tests
+  check exactness over thousands of totals and every share count from 2 to 20. The list of
+  currencies without cents (yen and others) is kept in both SQL and `money.ts`, and a test keeps
+  the two lists identical.
+
+**Nothing is paid early, nothing twice.** A split payment covers **no** orders until every part is
+paid. Until then, every existing "is this order paid?" check correctly says no. A `BEFORE INSERT`
+trigger on `payment_orders` refuses to attach an order in an open split to any payment but the
+split's own. That single trigger stops all three other ways of paying those orders (one order,
+the whole tab, and staff cash) without editing them. `start_tab_payment()` gained one predicate so
+the _rest_ of a tab stays payable. An order in an open split can't be cancelled. A split can't be
+made while a Checkout on the tab is still open; the app asks Stripe to expire it first. Settlements
+lock the split row, so two parts paid at the same moment can't both think the other is
+outstanding.
+
+**Only Stripe moves money state.** Taking parts claims them (`pending`). The signed webhook, through
+the unchanged `mark_order_payment_succeeded`/`_failed`, is the only thing that marks them paid or
+releases them. No function a browser can call releases a claim, because a released claim whose
+Checkout was still payable would be a way to pay twice. A payer who backs out of Checkout makes
+the app ask Stripe to expire that session, and Stripe's own event frees the parts. Split Checkouts
+expire after 31 minutes, the shortest Stripe allows.
+
+**The link.** It's a 256-bit token, stored as a SHA-256 hash for lookup plus a copy only the
+split's owner can read back (`get_my_open_split`) to show the table again. Four functions are
+callable **without signing in, by design**, because a guest may never have scanned the table's
+code: `get_tab_split`, `start_split_payment`, `attach_split_checkout_session` and
+`get_split_payment_checkout`. Holding the link lets someone see the bill (dishes and amounts, but no
+session, table or names) and **pay** part of it. That takes nothing from anyone. The platform fee
+is computed inside `start_split_payment()`, since `platform_fee_for_payment()` needs a signed-in
+caller.
+
+**Not in v1:** paying a part in cash, receipts for guests (Stripe can email one), and a
+staff-side view of a split in progress. Staff see the orders as unpaid until the last part lands.
+
 ## Kitchen stations — (phase I)
 
 `20261001090000_kitchen_stations.sql`. Stations are ordinary restaurant data with the same shape
