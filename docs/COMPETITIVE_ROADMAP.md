@@ -225,6 +225,16 @@ input before it sends, and the button is absent where the API is not.
 
 ## Phase H — Behavioural analytics
 
+**Built 2026-09-25** (`20260930090000_dish_funnel.sql`): a dish funnel on the
+Reports page. Per dish, it shows visits that opened, added and ordered it,
+and the opened → ordered rate. Only daily counts are kept; which visit did
+what is forgotten after 2 days. See docs/security.md#dish-funnel-phase-h.
+"Upsell accepted" is not tracked: the AI waiter's suggestions aren't linked
+to what's added.
+Verified live on the disposable project: a diner opened, added and ordered a
+dish, and the owner's Reports page showed 1 / 1 / 1 / 100% for it, and only
+for their own restaurant.
+
 **Why here.** Real value for an owner, but it is the first phase that
 collects diner behaviour rather than restaurant data, and that deserves to
 come after the features that serve diners directly.

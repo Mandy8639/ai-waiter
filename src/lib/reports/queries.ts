@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import type { ReportRange } from "./range";
+import { toDishFunnelRows, type DishFunnelRow } from "./funnel";
 
 /**
  * Reads for the reports page.
@@ -128,4 +129,28 @@ export async function getReportData(
       orderCount: r.order_count,
     })),
   };
+}
+
+/**
+ * The dish funnel for a period (phase H). A separate call from
+ * getReportData so a problem here can never take the takings down with it.
+ */
+export async function getDishFunnel(
+  restaurantId: string,
+  range: ReportRange,
+): Promise<DishFunnelRow[]> {
+  const supabase = await createClient();
+  // database.types.ts predates 20260930090000.
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  const { data, error } = await rpc("get_dish_funnel", {
+    target_restaurant_id: restaurantId,
+    p_from: range.from,
+    p_to: range.to,
+    p_limit: 50,
+  });
+  if (error) throw new Error(error.message);
+  return toDishFunnelRows(data);
 }

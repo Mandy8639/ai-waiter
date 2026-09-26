@@ -10,7 +10,8 @@ import { ReverseCashDialog } from "@/components/reports/reverse-cash-dialog";
 import { refundPayment } from "@/lib/payments/refund-actions";
 import { reverseCashPayment } from "@/lib/payments/cash-actions";
 import { formatReservationTime } from "@/lib/reservations/timezone";
-import { getReportData } from "@/lib/reports/queries";
+import { getDishFunnel, getReportData } from "@/lib/reports/queries";
+import { formatRate, openToOrderRate } from "@/lib/reports/funnel";
 import {
   RANGE_LABELS,
   RANGE_PRESETS,
@@ -56,10 +57,10 @@ export default async function ReportsPage({
     .maybeSingle();
   const currency = row?.currency ?? "USD";
 
-  const { summary, byMethod, payments, items } = await getReportData(
-    restaurant.id,
-    range,
-  );
+  const [{ summary, byMethod, payments, items }, funnel] = await Promise.all([
+    getReportData(restaurant.id, range),
+    getDishFunnel(restaurant.id, range),
+  ]);
 
   const money = (value: string | number) =>
     formatMoney(Number(value), currency);
@@ -230,6 +231,57 @@ export default async function ReportsPage({
             </table>
           </div>
         )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">Dish funnel</h2>
+        <p className="text-muted-foreground text-sm">
+          How many visits opened each dish, added it to their order and ordered
+          it. Each visit counts once per dish. Diners aren&apos;t identified:
+          only these counts are kept.
+        </p>
+        {funnel.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No dishes opened or ordered in this period. Counting started when
+            this report was switched on, so earlier days are empty.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-muted-foreground text-left">
+                <tr>
+                  <th className="py-2 font-medium">Dish</th>
+                  <th className="py-2 text-right font-medium">Opened</th>
+                  <th className="py-2 text-right font-medium">Added</th>
+                  <th className="py-2 text-right font-medium">Ordered</th>
+                  <th
+                    className="py-2 text-right font-medium"
+                    title="Of the visits that opened the dish, the share that ordered it"
+                  >
+                    Opened → ordered
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {funnel.map((row) => (
+                  <tr key={row.dishId} className="border-t">
+                    <td className="py-2">{row.dishName}</td>
+                    <td className="py-2 text-right">{row.opened}</td>
+                    <td className="py-2 text-right">{row.added}</td>
+                    <td className="py-2 text-right">{row.ordered}</td>
+                    <td className="py-2 text-right">
+                      {formatRate(openToOrderRate(row))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-muted-foreground text-xs">
+          &ldquo;Added&rdquo; and &ldquo;Ordered&rdquo; include dishes the AI
+          waiter added, which diners may never have opened.
+        </p>
       </section>
 
       <section className="flex flex-col gap-3">
