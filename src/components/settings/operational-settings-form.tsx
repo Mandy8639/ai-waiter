@@ -19,7 +19,7 @@ export interface OperationalSettingsValues {
   maxOrderItems: number;
 }
 
-function Toggle({
+export function Toggle({
   id,
   label,
   description,

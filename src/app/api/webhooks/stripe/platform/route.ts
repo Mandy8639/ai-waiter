@@ -1,9 +1,10 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { getStripe, isStripeConfigured } from "@/lib/payments/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report";
 import { resolvePeriodEnd } from "@/lib/billing/subscription-period";
+import { alertSubscriptionPastDue } from "@/lib/email/dispatch";
 
 /**
  * Stripe's webhook for the PLATFORM account's own events.
@@ -143,6 +144,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "could not record subscription" },
         { status: 500 },
+      );
+    }
+
+    // Phase F: tell the owner their renewal failed. Every update while the
+    // subscription stays past due carries the same status and period end,
+    // so the dedupe key makes this one email per failed period, however
+    // many events Stripe sends about it.
+    if (subscription.status === "past_due") {
+      after(() =>
+        alertSubscriptionPastDue({
+          restaurantId,
+          subscriptionId: subscription.id,
+          status: subscription.status,
+          periodEnd,
+        }),
       );
     }
 

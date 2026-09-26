@@ -8,6 +8,7 @@ import {
 import { RestaurantProfileForm } from "@/components/settings/restaurant-profile-form";
 import { OperationalSettingsForm } from "@/components/settings/operational-settings-form";
 import { AiPersonaForm } from "@/components/settings/ai-persona-form";
+import { EmailPreferencesForm } from "@/components/settings/email-preferences-form";
 import { toAiPersona } from "@/lib/ai/persona";
 import { HeroVideoManager } from "@/components/dashboard/hero-video-manager";
 import { loadOwnerHeroVideoState } from "@/lib/hero-video/owner-state";
@@ -16,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import {
   updateAiPersona,
+  updateEmailPreferences,
   updateOperationalSettings,
   updateRestaurantProfile,
 } from "@/lib/settings/actions";
@@ -25,7 +27,7 @@ export const metadata = {
 };
 
 export default async function SettingsPage() {
-  const { restaurant } = await requireCurrentRestaurant();
+  const { user, restaurant } = await requireCurrentRestaurant();
   const supabase = await createClient();
 
   const [{ data: profile }, { data: settings }] = await Promise.all([
@@ -58,6 +60,19 @@ export default async function SettingsPage() {
     instructions: (personaRow as { ai_instructions?: unknown } | null)
       ?.ai_instructions,
   });
+
+  // Your own row: email preferences are per person (20260929090000, also
+  // newer than database.types.ts). A missing value reads as the default, on.
+  const { data: myMembership } = await supabase
+    .from("restaurant_users")
+    .select("email_daily_summary, email_payment_alerts" as "role")
+    .eq("restaurant_id", restaurant.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const emailPrefs = myMembership as {
+    email_daily_summary?: boolean;
+    email_payment_alerts?: boolean;
+  } | null;
 
   const heroVideoState = await loadOwnerHeroVideoState(
     supabase,
@@ -168,6 +183,28 @@ export default async function SettingsPage() {
           />
         </CardContent>
       </Card>
+
+      {restaurant.role === "owner" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Emails</CardTitle>
+            <CardDescription>
+              What Tableside emails you about this restaurant. These are your
+              own settings — other owners choose their own.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <EmailPreferencesForm
+              action={updateEmailPreferences.bind(null, restaurant.id)}
+              defaultValues={{
+                dailySummary: emailPrefs?.email_daily_summary !== false,
+                paymentAlerts: emailPrefs?.email_payment_alerts !== false,
+              }}
+              email={user.email ?? null}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

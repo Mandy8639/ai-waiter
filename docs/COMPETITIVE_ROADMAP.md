@@ -176,7 +176,13 @@ silently machine-translated.
 
 **Web Push half shipped 2026-09-25** (`20260928090000_push_subscriptions.sql`):
 verified with the kitchen tab closed. Needs VAPID keys set per environment to
-turn on. Email half not started — needs a provider decision.
+turn on.
+
+**Email half built 2026-09-25** (`20260929090000_owner_email.sql`): Resend,
+sending from `mail.tableside.menu`. A daily summary (Vercel Cron, only on days
+with orders) and three payment alerts, each owner opting out for themselves
+in Settings, each email sent once however often the trigger repeats. Needs
+`RESEND_API_KEY` and `CRON_SECRET` set per environment to turn on.
 
 **Why here.** The first phase that needs infrastructure this project does
 not have: no `web-push`, no service worker, no mail provider (verified —
