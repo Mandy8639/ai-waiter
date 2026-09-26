@@ -19,6 +19,7 @@ import {
 } from "@/lib/ai/actions";
 import { cn } from "@/lib/utils";
 import { ServiceRequestButtons } from "./service-request-buttons";
+import { VoiceInputButton } from "./voice-input-button";
 
 /**
  * Starter questions. Each is something the waiter genuinely answers from
@@ -101,6 +102,8 @@ export function AiWaiterPanel({
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [waitedSeconds, setWaitedSeconds] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -159,6 +162,7 @@ export function AiWaiterPanel({
     const trimmed = text.trim();
     if (!trimmed || isPending) return;
     setError(null);
+    setVoiceNotice(null);
     setInput("");
     setMessages((prev) => [
       ...prev,
@@ -332,6 +336,18 @@ export function AiWaiterPanel({
             Answers come from the restaurant&apos;s menu. For allergies, please
             also check with staff.
           </p>
+          {/* Said every time the mic is on, not once in a policy: the
+              audio goes to the browser's speech service, not to us. */}
+          {(listening || voiceNotice) && (
+            <p
+              className="type-caption text-muted-foreground mb-2 px-1"
+              role="status"
+            >
+              {listening
+                ? "Listening… Your browser's speech service (Google or Apple) turns your voice into text. Tableside only gets the text you send."
+                : voiceNotice}
+            </p>
+          )}
           <form
             className="flex items-center gap-2"
             onSubmit={(e) => {
@@ -343,12 +359,21 @@ export function AiWaiterPanel({
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about a dish or your order…"
+              placeholder={
+                listening ? "Listening…" : "Ask about a dish or your order…"
+              }
               maxLength={2000}
               disabled={isPending}
               aria-label="Message your waiter"
               enterKeyHint="send"
               className="bg-muted/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/40 type-body h-11 min-w-0 flex-1 rounded-full border border-transparent px-4 transition-colors focus-visible:ring-3 focus-visible:outline-none disabled:opacity-60"
+            />
+            <VoiceInputButton
+              value={input}
+              onDraft={setInput}
+              disabled={isPending}
+              onListeningChange={setListening}
+              onNotice={setVoiceNotice}
             />
             <button
               type="submit"

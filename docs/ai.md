@@ -516,6 +516,32 @@ turns where the model is not trusted.
 picker). The waiter already mirrors the diner's language, and most Indian phones report English,
 so detection would rarely choose Hindi. Translating menu content itself is phase K.
 
+## Voice input (phase G)
+
+A mic next to the message box, using the browser's own speech recognition
+(the Web Speech API). No model, no server code and no cost. The rules are
+in `src/lib/voice/dictation.ts` and the button is
+`src/components/customer/voice-input-button.tsx`:
+
+- **It never sends.** Speech fills the message box and the diner sends it,
+  so a mis-heard "no nuts" is seen and fixed before it reaches the waiter.
+  Anything already typed is kept, and the speech goes after it.
+- **Where the audio goes is said every time.** The Web Speech API passes the
+  audio to the browser's speech service (Google's servers in Chrome,
+  Apple's in Safari). Tableside never receives the audio, only the text the
+  diner sends. While the mic is on, the panel says exactly that.
+- **It's absent where it can't work.** Firefox has no API, so there is no
+  button. A browser that has the API but can't use it (a blocked
+  microphone, an in-app browser without the speech service) gets one plain
+  sentence ("You can still type your message") and the button goes away
+  for the rest of the visit.
+- **It listens in the diner's language**, the first one their browser asks
+  for. A phone set to Hindi or Spanish is heard in Hindi or Spanish, and
+  phase E answers in kind. A diner whose phone is set to English but who
+  speaks Hindi is heard as English. There is no language picker yet.
+- **It stops cleanly.** Recognition stops when a message starts sending, when
+  the chat closes, or when the diner taps the stop button.
+
 ## Allergen safety
 
 Allergen and dietary questions are answered strictly from the `menu_item_allergens`/dietary-flag
