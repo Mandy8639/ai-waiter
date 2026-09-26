@@ -204,6 +204,13 @@ order, and an owner gets one email they would actually read.
 
 ## Phase G — Voice input
 
+**Built 2026-09-25**: a mic in the AI waiter's message box
+(`src/lib/voice/dictation.ts`). It fills the box and never sends. It says
+where the audio goes while listening, and it is absent where it can't work.
+See docs/ai.md#voice-input-phase-g. Verified live in Chrome with a real
+microphone: spoken words appeared in the box as they were said, and nothing
+was sent until the diner pressed send.
+
 **Why here.** Genuinely small — the Web Speech API is built into the
 browser, so there is no model, no cost and no server work. It sits below
 Phase F only because it is a convenience rather than a gap in service.
