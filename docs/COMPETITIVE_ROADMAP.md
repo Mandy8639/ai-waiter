@@ -279,6 +279,17 @@ is explicitly a second deliverable.
 
 ## Phase J — Per-guest split bill
 
+**Built 2026-09-26** (`20261002090000_split_bill.sql`). From the tab, split the
+bill **equally (2–20 ways)** or **by dish**. Everyone pays their part on their
+own phone through Stripe Checkout, so with their own card, Apple Pay or Google
+Pay. The parts add up to exactly the bill: leftover cents go to the first
+shares, and dishes carry their exact slice of tax and service charge. No order
+is marked paid until the last part is. Proven by database tests over thousands
+of totals and on the disposable project, where four shares of a $27.00 order
+were paid by three simulated guests and the order was covered by exactly
+$27.00. **Not yet tested with a real Stripe Checkout.** See
+docs/security.md#split-bill-phase-j.
+
 **Why late.** Money. The payment path is live, takes real card payments,
 and went through a Stripe cutover. Today there is one tab across orders;
 per-item or per-guest shares touch the most expensive code to get wrong.

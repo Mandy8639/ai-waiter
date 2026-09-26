@@ -14,6 +14,8 @@ export interface OrderPaymentState {
     totalAmount: string;
     tipAmount: string;
     paidAt: string;
+    /** Phase J: more than one when the order was paid as part of a split bill, by several people. */
+    payerCount: number;
   } | null;
   /** True if an earlier attempt failed or was abandoned — the diner may retry. */
   hasFailedAttempt: boolean;
@@ -54,7 +56,8 @@ export async function getOrderPaymentState(
 
   const settings = settingsResult.data?.[0];
   const payments = paymentsResult.data ?? [];
-  const settled = payments.find((p) => p.status === "succeeded");
+  const succeeded = payments.filter((p) => p.status === "succeeded");
+  const settled = succeeded[0];
 
   return {
     canTakeCard: settings?.can_take_card ?? false,
@@ -65,6 +68,7 @@ export async function getOrderPaymentState(
           totalAmount: settled.total_amount,
           tipAmount: settled.tip_amount,
           paidAt: settled.paid_at as string,
+          payerCount: succeeded.length,
         }
       : null,
     hasFailedAttempt: payments.some(
