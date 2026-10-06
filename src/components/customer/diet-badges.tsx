@@ -1,5 +1,7 @@
 import { Flame, Leaf, Sprout } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { labelWithTranslation } from "@/lib/translations/glossary";
+import type { MenuLanguage } from "@/lib/translations/languages";
 
 /**
  * The restaurant's own dietary flags for a dish, as quiet inline labels.
@@ -24,7 +26,10 @@ export function DietBadges({
   spiceLabel,
   hideVegetarian = false,
   className,
+  language = null,
 }: {
+  /** Phase K: add the fixed glossary word beside each English label. */
+  language?: MenuLanguage | null;
   /** True when the whole menu is vegetarian and says so once, above it. */
   hideVegetarian?: boolean;
   isVegetarian: boolean;
@@ -54,25 +59,25 @@ export function DietBadges({
       {isVegan ? (
         <span className="text-success type-caption inline-flex items-center gap-1 font-medium">
           <Sprout className="size-3.5" aria-hidden="true" />
-          Vegan
+          {labelWithTranslation("Vegan", language)}
         </span>
       ) : (
         showVegetarian && (
           <span className="text-success type-caption inline-flex items-center gap-1 font-medium">
             <Leaf className="size-3.5" aria-hidden="true" />
-            Vegetarian
+            {labelWithTranslation("Vegetarian", language)}
           </span>
         )
       )}
       {isSpicy && (
         <span className="text-spice type-caption inline-flex items-center gap-1 font-medium">
           <Flame className="size-3.5" aria-hidden="true" />
-          {spiceLabel ?? "Spicy"}
+          {spiceLabel ?? labelWithTranslation("Spicy", language)}
         </span>
       )}
       {claims.map((claim) => (
         <span key={claim} className="text-muted-foreground type-caption">
-          {claim}
+          {labelWithTranslation(claim, language)}
         </span>
       ))}
     </span>

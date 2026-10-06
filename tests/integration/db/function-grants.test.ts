@@ -59,6 +59,10 @@ const SIGNED_IN_ONLY = [
  *   it, which takes nothing from anyone. No function a signed-out caller
  *   can reach releases a claim or marks anything paid — only Stripe's
  *   signed webhook does. See 20261002090000_split_bill.sql.
+ * - get_menu_translations, get_menu_languages: the menu is public — a
+ *   diner reads it before (or without) scanning a table — so its approved
+ *   translations are too. Read-only, approved and current rows only, for
+ *   active restaurants only. See 20261003090000_menu_translations.sql.
  */
 const ANON_BY_DESIGN = [
   "get_staff_invitation_preview",
@@ -66,6 +70,8 @@ const ANON_BY_DESIGN = [
   "start_split_payment",
   "attach_split_checkout_session",
   "get_split_payment_checkout",
+  "get_menu_translations",
+  "get_menu_languages",
 ];
 
 const ANON_EXECUTABLE_PENDING_REVIEW = [

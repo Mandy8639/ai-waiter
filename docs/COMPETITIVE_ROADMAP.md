@@ -300,6 +300,19 @@ phase.
 
 ## Phase K — Menu translation
 
+**Built 2026-09-27** (`20261003090000_menu_translations.sql`). Dish names,
+descriptions and category names in Hindi, Spanish, Gujarati and Telugu. The free
+AI model drafts, an owner or manager approves each one, and a translation
+stops showing the moment its original is edited. Allergens and dietary labels
+stay in English with a fixed glossary word beside them, never AI-translated.
+Diners get a language picker (only for approved languages, defaulting to their
+phone's language) and can always see the original. Verified live on the
+disposable project: the free model drafted 5 Hindi fields, one weak draft was
+corrected by hand and all were approved; the diner menu showed them with
+"Contains Peanuts (मूंगफली)"; editing an English description took its Hindi off
+the menu and flagged it "Original changed" for the owner. See
+docs/security.md#menu-translation-phase-k.
+
 The other half of multilingual. Per-field translations, a review workflow,
 and a staleness rule when the source text changes. Large, and genuinely
 useful only once Phase E proves diners are arriving in other languages.

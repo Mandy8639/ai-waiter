@@ -130,6 +130,14 @@ export default async function MenuPage() {
                 Add photos ({withoutPhoto})
               </Link>
             )}
+            {totalItems > 0 && (
+              <Link
+                href="/dashboard/menu/translations"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Translations
+              </Link>
+            )}
             {(draftSpice ?? 0) > 0 && (
               <Link
                 href="/dashboard/menu/spice-review"
