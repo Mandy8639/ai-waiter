@@ -9,6 +9,7 @@ import { ItemDetailForm } from "@/components/customer/item-detail-form";
 import { formatPrice } from "@/lib/format/price";
 import { DishPhoto } from "@/components/customer/dish-photo";
 import { DishViewBeacon } from "@/components/customer/dish-view-beacon";
+import { getDinerTranslations } from "@/lib/translations/queries";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { DETAIL_SIZES, resolveDinerImage } from "@/lib/menu-images/resolve";
@@ -80,6 +81,13 @@ export default async function MenuItemDetailPage({
   // describe the image columns and degrades the whole row. Asserted once
   // here against the migration; see src/lib/menu-images/menu-item-rows.ts.
   const item = itemRow as unknown as MenuItemDetailRow;
+
+  // Phase K: approved translations in the diner's language, if any.
+  const translations = await getDinerTranslations(restaurant.id);
+  const translatedName = translations.dishName(item.id);
+  const translatedDescription = item.description
+    ? translations.dishDescription(item.id)
+    : null;
 
   // database.types.ts predates phase 1, so the image columns are asserted
   // against the migration here; see src/lib/menu-images/menu-item-rows.ts.
@@ -228,7 +236,17 @@ export default async function MenuItemDetailPage({
 
       <div className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-4">
-          <h1 className="type-title text-balance">{item.name}</h1>
+          <div className="flex flex-col gap-1">
+            <h1 className="type-title text-balance">{item.name}</h1>
+            {translatedName && translatedName !== item.name && (
+              <p
+                lang={translations.language ?? undefined}
+                className="type-body text-foreground/80"
+              >
+                {translatedName}
+              </p>
+            )}
+          </div>
           <p className="type-price shrink-0 pt-0.5 text-xl">
             {formatPrice(Number(item.price), restaurant.currency)}
           </p>
@@ -244,6 +262,7 @@ export default async function MenuItemDetailPage({
             spiceLabel={
               item.spice_level ? spiceLevelLabels[item.spice_level] : null
             }
+            language={translations.language}
           />
           {item.preparation_time != null && (
             <span className="type-caption text-muted-foreground inline-flex items-center gap-1 font-medium">
@@ -253,10 +272,29 @@ export default async function MenuItemDetailPage({
           )}
         </div>
 
-        {item.description && (
-          <p className="type-body text-muted-foreground text-pretty">
-            {item.description}
-          </p>
+        {translatedDescription ? (
+          // The restaurant's own words stay one tap away: a translation,
+          // however reviewed, is not the original.
+          <div className="flex flex-col gap-1">
+            <p
+              lang={translations.language ?? undefined}
+              className="type-body text-muted-foreground text-pretty"
+            >
+              {translatedDescription}
+            </p>
+            <details className="type-body-sm text-muted-foreground">
+              <summary className="w-fit cursor-pointer">
+                Show the original
+              </summary>
+              <p className="mt-1 text-pretty">{item.description}</p>
+            </details>
+          </div>
+        ) : (
+          item.description && (
+            <p className="type-body text-muted-foreground text-pretty">
+              {item.description}
+            </p>
+          )
         )}
         {/*
           Sits with the description rather than among the badges: it is a
@@ -318,7 +356,10 @@ export default async function MenuItemDetailPage({
         >
           Allergens
         </h2>
-        <AllergenNote allergens={containsList} />
+        <AllergenNote
+          allergens={containsList}
+          language={translations.language}
+        />
       </section>
 
       {ingredients && ingredients.length > 0 && (

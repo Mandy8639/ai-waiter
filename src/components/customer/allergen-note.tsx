@@ -1,5 +1,14 @@
 import { Info, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { allergenWithTranslation } from "@/lib/translations/glossary";
+import type { MenuLanguage } from "@/lib/translations/languages";
+
+/** Phase K: "Peanuts (मूंगफली)" — the English word always, a fixed glossary translation beside it. */
+function listAllergens(allergens: string[], language?: MenuLanguage | null) {
+  return allergens
+    .map((a) => allergenWithTranslation(a, language ?? null))
+    .join(", ");
+}
 
 /**
  * Allergens, stated the way the restaurant stated them.
@@ -13,9 +22,11 @@ import { cn } from "@/lib/utils";
 export function AllergenLine({
   allergens,
   className,
+  language,
 }: {
   allergens: string[];
   className?: string;
+  language?: MenuLanguage | null;
 }) {
   if (allergens.length === 0) return null;
   return (
@@ -29,13 +40,19 @@ export function AllergenLine({
         className="text-warning mt-0.5 size-3.5 shrink-0"
         aria-hidden="true"
       />
-      <span>Contains {allergens.join(", ")}</span>
+      <span>Contains {listAllergens(allergens, language)}</span>
     </p>
   );
 }
 
 /** The fuller statement for the item page, including what to do about it. */
-export function AllergenNote({ allergens }: { allergens: string[] }) {
+export function AllergenNote({
+  allergens,
+  language,
+}: {
+  allergens: string[];
+  language?: MenuLanguage | null;
+}) {
   if (allergens.length === 0) {
     return (
       <div
@@ -62,7 +79,7 @@ export function AllergenNote({ allergens }: { allergens: string[] }) {
       />
       <p>
         <strong className="font-semibold">
-          Contains {allergens.join(", ")}
+          Contains {listAllergens(allergens, language)}
         </strong>
         <span className="text-muted-foreground">
           {" "}

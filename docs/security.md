@@ -1018,6 +1018,43 @@ Verified end to end on 2026-09-25 against the disposable project: a real Chrome 
 Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
 Table 4 · 1 item".
 
+## Menu translation — (phase K)
+
+`20261003090000_menu_translations.sql`. Dish names, dish descriptions and category names can be
+translated into Hindi, Spanish, Gujarati and Telugu.
+
+- **Nothing reaches a diner unreviewed.** Saving, whether from the AI or typed by a person, always
+  makes a **draft**. Only `approve_menu_translation()`, run by an owner or manager, publishes.
+  Diners read through `get_menu_translations()`, which returns approved rows only.
+- **Old translations are never shown.** Each translation stores a SHA-256 of the original it was
+  approved against (`source_hash`). When the owner edits the dish, the hashes stop matching and the
+  translation stops being served, without any edit path having to remember to flag it. The
+  translations screen marks it "Original changed — not shown" until someone re-approves it
+  against the new text. The app and the database hash the original identically, and a test checks
+  it.
+- **Writes only through the functions.** RLS lets members read and owners or managers delete
+  (reject). There's no insert or update policy: `save_menu_translation()` and
+  `approve_menu_translation()` read the original from the database themselves, so a client can't
+  claim a translation was made from text it wasn't.
+- **Safety text never goes through this.** Allergens and dietary labels aren't in the table and are
+  never sent to the AI. They're shown in English with a fixed glossary word beside them, for
+  example "Peanuts (मूंगफली)" (`src/lib/translations/glossary.ts`). An allergen not in the
+  glossary stays English-only. The glossary was written without a fluent reviewer for every
+  language, and says so.
+- **AI drafting uses free models only.** `draftTranslations()` refuses unless the configured model
+  is free (`openrouter/free` or a `:free` model), so pointing the waiter at a paid model doesn't
+  start spending money on menus. The prompt forbids adding or changing ingredients or claims, and
+  replies are parsed defensively: missing, empty, oversized or still-English (for non-Latin
+  scripts) fields are dropped.
+- **The diner keeps the original.** Dish names stay first, as written, with the translation
+  beneath. A translated description has a "Show the original" toggle. `get_menu_translations()`
+  and `get_menu_languages()` can be called without signing in, because the menu is public. They
+  return approved, current rows for active restaurants only.
+
+**Not in v1:** translating modifiers, ingredients, portion notes, or the app's own interface
+text (buttons and headings stay English). The AI waiter is unchanged; it already replies in the
+diner's language (phase E).
+
 ## Split bill — (phase J)
 
 `20261002090000_split_bill.sql`. A diner splits their tab into **equal shares** or **one part per

@@ -24,6 +24,8 @@ import {
   type MenuListRow,
 } from "@/lib/menu-images/menu-item-rows";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
+import { MenuLanguagePicker } from "@/components/customer/menu-language-picker";
+import { getDinerTranslations } from "@/lib/translations/queries";
 import {
   availableDietFilters,
   menuHref,
@@ -88,6 +90,8 @@ export default async function MenuPage({
   const search = q?.trim() ?? "";
   const diet = parseDietFilters(dietParam);
   const supabase = await createClient();
+  // Phase K: approved translations in the diner's language, if any.
+  const translations = await getDinerTranslations(restaurant.id);
 
   let itemsQuery = supabase
     .from("menu_items")
@@ -220,6 +224,9 @@ export default async function MenuPage({
       isKosher: item.is_kosher,
       allergens: allergensByItem.get(item.id) ?? [],
       categoryId: item.category_id,
+      translatedName: translations.dishName(item.id),
+      translatedDescription: translations.dishDescription(item.id),
+      language: translations.language,
     }),
   );
 
@@ -238,7 +245,7 @@ export default async function MenuPage({
       ? [
           ...(categories ?? []).map((category) => ({
             id: category.id,
-            name: category.name,
+            name: translations.categoryName(category.id) ?? category.name,
             items: cards.filter((card) => card.categoryId === category.id),
           })),
           // Never silently drop a dish the flat list used to show: anything
@@ -248,7 +255,10 @@ export default async function MenuPage({
       : [
           {
             id: "results",
-            name: activeCategory?.name ?? "",
+            name: activeCategory
+              ? (translations.categoryName(activeCategory.id) ??
+                activeCategory.name)
+              : "",
             items: cards,
           },
         ];
@@ -276,6 +286,10 @@ export default async function MenuPage({
       )}
 
       <div className="flex flex-col gap-3">
+        <MenuLanguagePicker
+          current={translations.language}
+          available={translations.available}
+        />
         <form
           role="search"
           action={`/r/${restaurantSlug}/menu`}
@@ -365,7 +379,7 @@ export default async function MenuPage({
                 active={categoryId === category.id}
                 scroll
               >
-                {category.name}
+                {translations.categoryName(category.id) ?? category.name}
               </FilterChip>
             ))}
           </nav>

@@ -4,6 +4,7 @@ import { DietBadges } from "@/components/customer/diet-badges";
 import { formatPrice } from "@/lib/format/price";
 import { DishPhoto } from "@/components/customer/dish-photo";
 import { CARD_SIZES, type DinerImage } from "@/lib/menu-images/resolve";
+import type { MenuLanguage } from "@/lib/translations/languages";
 
 export interface MenuItemCardData {
   id: string;
@@ -19,6 +20,10 @@ export interface MenuItemCardData {
   isKosher: boolean;
   /** Confirmed allergens only — never suggestions. */
   allergens: string[];
+  /** Phase K: approved translations in the diner's chosen language, when there are any. */
+  translatedName?: string | null;
+  translatedDescription?: string | null;
+  language?: MenuLanguage | null;
 }
 
 /**
@@ -52,9 +57,26 @@ export function MenuItemCard({
         <h3 className="type-dish text-foreground group-hover:text-primary transition-colors">
           {item.name}
         </h3>
-        {item.description && (
-          <p className="type-body-sm text-muted-foreground line-clamp-2">
-            {item.description}
+        {/* The name as written stays first: it's what the kitchen and the
+            waiter call it. The translation helps the diner read it. */}
+        {item.translatedName && item.translatedName !== item.name && (
+          <p
+            lang={item.language ?? undefined}
+            className="type-body-sm text-foreground/80 -mt-1"
+          >
+            {item.translatedName}
+          </p>
+        )}
+        {(item.translatedDescription ?? item.description) && (
+          <p
+            lang={
+              item.translatedDescription
+                ? (item.language ?? undefined)
+                : undefined
+            }
+            className="type-body-sm text-muted-foreground line-clamp-2"
+          >
+            {item.translatedDescription ?? item.description}
           </p>
         )}
         {/*
@@ -62,7 +84,7 @@ export function MenuItemCard({
           allergen is scanning a long menu, and making them open every dish
           to find out is how a mistake happens. Confirmed allergens only.
         */}
-        <AllergenLine allergens={item.allergens} />
+        <AllergenLine allergens={item.allergens} language={item.language} />
         <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
           <span className="type-price text-foreground text-[0.9375rem]">
             {formatPrice(item.price, currency)}
@@ -74,6 +96,7 @@ export function MenuItemCard({
             isHalal={item.isHalal}
             isKosher={item.isKosher}
             hideVegetarian={menuIsAllVegetarian}
+            language={item.language}
           />
         </div>
       </div>
