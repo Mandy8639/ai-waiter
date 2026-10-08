@@ -1018,6 +1018,34 @@ Verified end to end on 2026-09-25 against the disposable project: a real Chrome 
 Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
 Table 4 · 1 item".
 
+## Diner feedback — (phase N)
+
+`20261006090000_order_feedback.sql`. A diner can rate their visit from 1 to 5 stars, add an optional
+comment, and give a thumbs up or down for each dish on their order. **It's private to the
+restaurant.** Public reviews would need moderation and would invite an owner choosing which ones
+diners see; private feedback needs neither.
+
+- **Only the diner who ordered** can leave it. `submit_order_feedback()` finds the order through
+  the caller's own customer session (`auth.uid()`), the same rule as the orders read policy. Staff
+  opening the order page, other diners and anonymous callers are all refused
+  (`FEEDBACK_NOT_YOUR_ORDER`, or no grant at all).
+- **Only after the food arrived, and only once.** The order must be `served`, the order must be no
+  more than 2 days old, and each order takes one rating. It can't be edited later, so what the owner
+  read is what was said. Dish votes must be for lines on that order; anything else rolls the whole
+  submission back.
+- **Owners and managers read it; nobody else does.** Kitchen and staff members, the diner
+  afterwards and the AI waiter see nothing: comments can name staff. There are no write policies,
+  so the function is the only way in.
+- **`get_my_order_feedback_state()`** tells the diner's page what to show (`not_yours`, `not_yet`,
+  `open`, `given`, `closed`) and never returns the comment.
+- **A low rating (1–2 stars) offers help, not a summons.** The diner is asked "Would you like
+  someone to come over?". Only a yes raises an ordinary waiter call through
+  `create_table_request()`, from their own session, with the note "About their feedback: rated the
+  visit N of 5". The server action checks again that this diner gave this order a low rating.
+
+**Not in v1:** public reviews, replying to a diner, feedback through the AI waiter, and feedback in
+the daily summary email.
+
 ## Nutrition — (phase M)
 
 `20261005090000_menu_nutrition.sql`. Calories, protein, carbohydrate and fat for one serving of a

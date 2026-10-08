@@ -12,6 +12,8 @@ import { PayOrderPanel } from "@/components/customer/pay-order-panel";
 import { OrderProgress } from "@/components/customer/order-progress";
 import { getOrderEta } from "@/lib/orders/order-eta";
 import { etaSentence } from "@/lib/orders/prep-estimate";
+import { getMyFeedbackState } from "@/lib/feedback/queries";
+import { OrderFeedbackPanel } from "@/components/customer/order-feedback-panel";
 
 export async function generateMetadata({
   params,
@@ -48,9 +50,10 @@ export default async function OrderConfirmationPage({
   // Payment is offered only when a card could actually be charged: the
   // restaurant has switched card payments on AND its Stripe account can
   // take them. A cancelled order is never payable.
-  const [payment, eta] = await Promise.all([
+  const [payment, eta, feedback] = await Promise.all([
     getOrderPaymentState(order.id, order.restaurantId),
     getOrderEta(order),
+    getMyFeedbackState(order.id),
   ]);
   const payable =
     payment.canTakeCard && !payment.paid && order.status !== "cancelled";
@@ -205,6 +208,20 @@ export default async function OrderConfirmationPage({
           tippingEnabled={payment.tippingEnabled}
           hasFailedAttempt={payment.hasFailedAttempt}
           payAction={payForThisOrder}
+        />
+      )}
+
+      {/*
+        Phase N: only the diner who placed the order ever sees this — the
+        state is "not_yours" for staff opening the page — and only once the
+        food has reached the table.
+      */}
+      {(feedback.state === "open" || feedback.state === "given") && (
+        <OrderFeedbackPanel
+          restaurantSlug={restaurantSlug}
+          orderId={order.id}
+          items={order.items.map((i) => ({ id: i.id, name: i.itemName }))}
+          alreadyGiven={feedback.state === "given"}
         />
       )}
 

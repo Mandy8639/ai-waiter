@@ -48,8 +48,13 @@ export function orderProgress(status: OrderStatus | string): ProgressStep[] {
   // safe reading when we genuinely do not know.
   const index = currentIndex === -1 ? -1 : currentIndex;
 
+  // Served is the end of the line, not a step in progress: drawing it as
+  // "in progress" told a diner who had eaten that something was pending.
+  const finished = index === CUSTOMER_PROGRESS_STEPS.length - 1;
+
   return CUSTOMER_PROGRESS_STEPS.map((step, i) => ({
     label: step.label,
-    state: i < index ? "done" : i === index ? "current" : "upcoming",
+    state:
+      i < index || finished ? "done" : i === index ? "current" : "upcoming",
   }));
 }
