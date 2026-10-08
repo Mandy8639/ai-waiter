@@ -26,6 +26,8 @@ import {
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { MenuLanguagePicker } from "@/components/customer/menu-language-picker";
 import { getDinerTranslations } from "@/lib/translations/queries";
+import { getPublicMenus } from "@/lib/menus/queries";
+import { hoursLabel, onNowFilter } from "@/lib/menus/core";
 import {
   availableDietFilters,
   menuHref,
@@ -129,35 +131,54 @@ export default async function MenuPage({
   // Independent queries — run concurrently (Batch 8 performance audit).
   // The flags query reads three booleans for the whole menu so the page
   // only offers dietary filters that would actually narrow it.
-  const [{ data: categories }, { data: menuItems }, { data: flagRows }] =
-    await Promise.all([
-      supabase
-        .from("categories")
-        .select("id, name")
-        .eq("restaurant_id", restaurant.id)
-        .order("display_order", { ascending: true }),
-      itemsQuery,
-      // Same untyped-column problem as the list query above: the dietary
-      // claim columns postdate database.types.ts.
-      (
-        supabase.from("menu_items") as unknown as {
-          select: (columns: string) => {
-            eq: (
-              column: string,
-              value: string,
-            ) => { limit: (n: number) => Promise<{ data: unknown }> };
-          };
-        }
-      )
-        .select("is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher")
-        .eq("restaurant_id", restaurant.id)
-        .limit(500),
-    ]);
+  const [
+    { data: allCategories },
+    { data: menuItems },
+    { data: flagRows },
+    menusResult,
+  ] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("restaurant_id", restaurant.id)
+      .order("display_order", { ascending: true }),
+    itemsQuery,
+    // Same untyped-column problem as the list query above: the dietary
+    // claim columns postdate database.types.ts.
+    (
+      supabase.from("menu_items") as unknown as {
+        select: (columns: string) => {
+          eq: (
+            column: string,
+            value: string,
+          ) => { limit: (n: number) => Promise<{ data: unknown }> };
+        };
+      }
+    )
+      .select("is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher")
+      .eq("restaurant_id", restaurant.id)
+      .limit(500),
+    // Phase L: which menus are on right now (decided in the database,
+    // in the restaurant's timezone).
+    getPublicMenus(restaurant.id, supabase),
+  ]);
+
+  // Only sections on a menu that's on now. Null means the lookup failed:
+  // show everything rather than an empty menu — ordering is enforced in
+  // the database either way.
+  const onNow = onNowFilter(menusResult);
+  const menus = menusResult ?? [];
+  const categories = (allCategories ?? []).filter(
+    (c) => !onNow || onNow.has(c.id),
+  );
+  const nothingServedNow = onNow !== null && onNow.size === 0;
 
   // database.types.ts predates phase 1, so the generated client cannot
   // describe the image columns. Asserted once here against the migration;
   // see src/lib/menu-images/menu-item-rows.ts.
-  const itemRows = asRowsWithNewColumns<MenuListRow>(menuItems);
+  const itemRows = asRowsWithNewColumns<MenuListRow>(menuItems).filter(
+    (item) => !onNow || onNow.has(item.category_id),
+  );
 
   const flags = asRowsWithNewColumns<DietFlagRow>(flagRows).map((row) => ({
     isVegetarian: row.is_vegetarian,
@@ -273,6 +294,23 @@ export default async function MenuPage({
             <HeroVideo video={heroVideo} restaurantName={restaurant.name} />
           )}
           <RestaurantHero restaurant={restaurant} eyebrow="Menu" />
+          {menus.length > 1 && (
+            <p className="type-body-sm text-muted-foreground -mt-2">
+              {menus
+                .filter((m) => m.onNow)
+                .map((m) => m.name)
+                .join(" · ") || "Nothing is being served right now"}
+              {menus.some((m) => !m.onNow) && (
+                <>
+                  {" — "}
+                  {menus
+                    .filter((m) => !m.onNow)
+                    .map((m) => `${m.name}: ${hoursLabel(m.hours)}`)
+                    .join(" · ")}
+                </>
+              )}
+            </p>
+          )}
           {menuIsAllVegetarian && (
             <p className="type-label text-success -mt-2 inline-flex items-center gap-1.5">
               <Leaf className="size-4" aria-hidden="true" />
@@ -414,11 +452,21 @@ export default async function MenuPage({
       {cards.length === 0 ? (
         <EmptyState
           icon={<SearchX />}
-          title={search ? `Nothing matches “${search}”` : "No dishes here"}
+          title={
+            nothingServedNow
+              ? "Nothing is being served right now"
+              : search
+                ? `Nothing matches “${search}”`
+                : "No dishes here"
+          }
           description={
-            isFiltered
-              ? "Try a different word, or clear the filters to see the whole menu."
-              : "This restaurant hasn't added any dishes yet."
+            nothingServedNow
+              ? menus
+                  .map((m) => `${m.name}: ${hoursLabel(m.hours)}`)
+                  .join(" · ")
+              : isFiltered
+                ? "Try a different word, or clear the filters to see the whole menu."
+                : "This restaurant hasn't added any dishes yet."
           }
         >
           {isFiltered && (

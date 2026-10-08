@@ -25,8 +25,15 @@ interface FakeTables {
   modifier_options?: Record<string, unknown>[];
 }
 
-function fakeSupabase(tables: FakeTables) {
+function fakeSupabase(tables: FakeTables, options: { onNow?: boolean } = {}) {
   return {
+    // Phase L: category_on_now() — on unless a test says otherwise.
+    async rpc(fn: string) {
+      if (fn === "category_on_now") {
+        return { data: options.onNow ?? true, error: null };
+      }
+      return { data: null, error: { message: `unexpected rpc ${fn}` } };
+    },
     from(table: keyof FakeTables) {
       let rows = (tables[table] ?? []) as Record<string, unknown>[];
       const builder = {
@@ -128,6 +135,20 @@ function baseTables(overrides: Partial<FakeTables> = {}): FakeTables {
 }
 
 describe("validateAndPriceSelection", () => {
+  it("refuses a dish whose menu isn't on right now (phase L)", async () => {
+    const supabase = fakeSupabase(baseTables(), { onNow: false });
+    const result = await validateAndPriceSelection(
+      supabase,
+      RESTAURANT_A,
+      ITEM_ID,
+      [MEDIUM_OPTION],
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: "This dish isn't being served right now.",
+    });
+  });
+
   it("succeeds for a valid item and a valid required-modifier selection, pricing from DB values only", async () => {
     const supabase = fakeSupabase(baseTables());
     const result = await validateAndPriceSelection(

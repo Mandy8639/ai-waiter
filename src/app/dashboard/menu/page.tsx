@@ -130,6 +130,12 @@ export default async function MenuPage() {
                 Add photos ({withoutPhoto})
               </Link>
             )}
+            <Link
+              href="/dashboard/menu/menus"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Menus
+            </Link>
             {totalItems > 0 && (
               <Link
                 href="/dashboard/menu/translations"

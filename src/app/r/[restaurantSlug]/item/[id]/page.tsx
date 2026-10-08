@@ -10,6 +10,8 @@ import { formatPrice } from "@/lib/format/price";
 import { DishPhoto } from "@/components/customer/dish-photo";
 import { DishViewBeacon } from "@/components/customer/dish-view-beacon";
 import { getDinerTranslations } from "@/lib/translations/queries";
+import { getPublicMenus } from "@/lib/menus/queries";
+import { menusForCategory, onNowFilter, servedWhen } from "@/lib/menus/core";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { DETAIL_SIZES, resolveDinerImage } from "@/lib/menu-images/resolve";
@@ -67,7 +69,7 @@ export default async function MenuItemDetailPage({
   const { data: itemRow } = await supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, spice_level",
+      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, spice_level, contains_nuts, contains_dairy, contains_gluten, preparation_time, portion_note, spice_level, category_id",
     )
     .eq("id", id)
     .eq("restaurant_id", restaurant.id)
@@ -84,6 +86,18 @@ export default async function MenuItemDetailPage({
 
   // Phase K: approved translations in the diner's language, if any.
   const translations = await getDinerTranslations(restaurant.id);
+
+  // Phase L: is this dish's menu on right now? If not, the page still
+  // describes it but says when it's served instead of offering to add it.
+  const menusResult = await getPublicMenus(restaurant.id, supabase);
+  const onNow = onNowFilter(menusResult);
+  const menus = menusResult ?? [];
+  const categoryId = (itemRow as unknown as { category_id: string })
+    .category_id;
+  const servedNow = !onNow || onNow.has(categoryId);
+  const servedAt = servedNow
+    ? ""
+    : servedWhen(menusForCategory(menus, categoryId));
   const translatedName = translations.dishName(item.id);
   const translatedDescription = item.description
     ? translations.dishDescription(item.id)
@@ -383,20 +397,34 @@ export default async function MenuItemDetailPage({
         Ask the waiter about this dish
       </AskWaiterButton>
 
-      <ItemDetailForm
-        action={addToCart}
-        menuItemId={item.id}
-        basePrice={Number(item.price)}
-        currency={restaurant.currency}
-        groups={groups}
-        restaurantSlug={restaurantSlug}
-        dishSpiceLevel={item.spice_level}
-        offerSpiceChoice={
-          item.is_spicy ||
-          (item.spice_level !== null && item.spice_level !== "none")
-        }
-        allowNotes={settings.allowCustomerNotes}
-      />
+      {!servedNow ? (
+        <div
+          role="note"
+          className="bg-muted/60 type-body-sm flex flex-col gap-1 rounded-xl px-4 py-3"
+        >
+          <p className="font-medium">Not being served right now</p>
+          <p className="text-muted-foreground">
+            {servedAt
+              ? `It's on ${servedAt}.`
+              : "It isn't on a menu that's on at the moment."}
+          </p>
+        </div>
+      ) : (
+        <ItemDetailForm
+          action={addToCart}
+          menuItemId={item.id}
+          basePrice={Number(item.price)}
+          currency={restaurant.currency}
+          groups={groups}
+          restaurantSlug={restaurantSlug}
+          dishSpiceLevel={item.spice_level}
+          offerSpiceChoice={
+            item.is_spicy ||
+            (item.spice_level !== null && item.spice_level !== "none")
+          }
+          allowNotes={settings.allowCustomerNotes}
+        />
+      )}
     </div>
   );
 }

@@ -16,6 +16,8 @@ const PREFIXED_MESSAGES: Record<string, string> = {
 /** Prefixes whose full raised message (already customer-safe — see the migration) is shown as-is, not replaced. */
 const PASSTHROUGH_PREFIXES = [
   "ORDER_ITEM_UNAVAILABLE",
+  // Phase L: names the dish whose menu isn't on right now.
+  "ORDER_ITEM_NOT_SERVED_NOW",
   "ORDER_MODIFIER_UNAVAILABLE",
   "ORDER_MODIFIER_INVALID",
   "ORDER_INVALID_INPUT",
