@@ -7,6 +7,7 @@ import {
   HandCoins,
   LayoutDashboard,
   LayoutList,
+  MessageSquare,
   QrCode,
   ReceiptText,
   Settings,
@@ -123,6 +124,15 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/dashboard/reports",
     group: "Business",
     icon: ChartColumn,
+    roles: ["owner", "manager"],
+  },
+  // Phase N: private diner feedback. Owners and managers only, matching
+  // the database: comments can name staff.
+  {
+    label: "Feedback",
+    href: "/dashboard/feedback",
+    group: "Business",
+    icon: MessageSquare,
     roles: ["owner", "manager"],
   },
   {

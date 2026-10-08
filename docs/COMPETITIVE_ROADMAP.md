@@ -371,8 +371,33 @@ number people make medical decisions with.
 
 ## Phase N — Reviews and feedback
 
-New diner surface plus moderation. Moderation is the real cost, not the
-feature.
+**Built 2026-10-08** (`20261006090000_order_feedback.sql`) as **private
+feedback**, not public reviews. Public reviews would need moderation, and
+moderation is the real cost. They would also invite an owner choosing which
+reviews diners see.
+
+Once an order is served, the diner who placed it can rate the visit from 1
+to 5 stars and give a thumbs up or down for each dish, with an optional
+comment. They can do this once per order, within 2 days. Only owners and
+managers see it, on **Feedback**: the average, the star breakdown, dishes
+ranked most-disliked first, and the comments. A 1–2 star rating ends with
+"Would you like someone to come over?". A yes becomes an ordinary waiter
+call.
+
+Verified live on the disposable project:
+
+- A diner ordered two dishes. The panel stayed hidden until the owner moved
+  the order to served.
+- The owner trying to rate the diner's order was refused.
+- The diner gave 2 stars, a thumbs down for the dosa and a comment, then
+  accepted the offer. The overview showed "Table 4 — Wants a waiter · About
+  their feedback: rated the visit 2 of 5".
+- Feedback showed 2.0 from 1 rating, with the dosa at the top of the dish
+  list.
+- The live check also fixed the diner tracker, which drew "Served" as still
+  in progress.
+
+See docs/security.md#diner-feedback-phase-n.
 
 ---
 

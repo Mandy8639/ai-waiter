@@ -20,7 +20,7 @@ describe("orderProgress", () => {
 
   it("shows the whole journey done once served", () => {
     expect(stateOf("served", "Ready")).toBe("done");
-    expect(stateOf("served", "Served")).toBe("current");
+    expect(stateOf("served", "Served")).toBe("done");
   });
 
   it("gives a cancelled order no tracker at all", () => {
