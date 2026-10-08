@@ -338,6 +338,28 @@ doing only when a restaurant actually needs a lunch menu and a dinner menu.
 
 ## Phase M — Nutrition
 
+**Built 2026-10-08** (`20261005090000_menu_nutrition.sql`). Calories,
+protein, carbohydrate and fat per serving. Whether a person typed the
+numbers or the free AI model estimated them, they're saved as a draft, and
+only an owner or manager confirming them shows them to diners. Changing the
+numbers hides them again. The database refuses impossible values. Numbers
+that don't add up at 4/4/9 are flagged to the owner, and the AI's own
+estimates are dropped when they fail that check. Diners see confirmed values
+on the menu card ("387 kcal") and the dish page. The AI waiter quotes
+confirmed values and never estimates.
+Verified live on the disposable project:
+
+- An anonymous API read returned only the confirmed dish.
+- An owner trying to set `confirmed_at` directly changed nothing.
+- The free model's estimate landed as a draft. It needed retries: the
+  router answered once with a content-safety model, and once not at all.
+- A mistyped calorie value raised the warning.
+- Asked about two dishes, the waiter gave "387 calories per serving" for the
+  confirmed one and "doesn't have nutrition information listed" for the
+  other.
+
+See docs/security.md#nutrition-phase-m.
+
 **Deliberately last, and deliberately different from BioMenu.** Theirs is
 AI-generated; the audit caught an implausible value, and "zero errors" is
 their claim rather than a measurement.

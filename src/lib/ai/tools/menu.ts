@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { assertedClaims } from "@/lib/menu/diet-filters";
 import { getPublicMenus } from "@/lib/menus/queries";
+import { getConfirmedNutrition } from "@/lib/nutrition/queries";
 import {
   hoursLabel,
   menusForCategory,
@@ -340,6 +341,9 @@ async function getMenuItem(
   const allergenIds = (allergenLinks ?? []).map((l) => l.allergen_id);
   const groupIds = (groupRows ?? []).map((g) => g.id);
 
+  const nutrition =
+    (await getConfirmedNutrition([item.id], supabase)).get(item.id) ?? null;
+
   const [{ data: ingredients }, { data: allergens }, { data: optionRows }] =
     await Promise.all([
       ingredientIds.length > 0
@@ -398,6 +402,18 @@ async function getMenuItem(
       // Null means they have not said — the model must ask the customer to
       // check with staff rather than estimating from the dish name.
       portionNote: item.portion_note,
+      // Phase M: per-serving numbers a person at the restaurant confirmed.
+      // Null means none are confirmed — the model must say the menu doesn't
+      // list nutrition, never estimate it (see the system prompt).
+      nutrition: nutrition
+        ? {
+            perServing: true,
+            calories: nutrition.calories,
+            proteinGrams: nutrition.proteinG,
+            carbohydrateGrams: nutrition.carbsG,
+            fatGrams: nutrition.fatG,
+          }
+        : null,
       // What the dish is made from, as recorded by the restaurant. Empty
       // means the restaurant hasn't listed any — say so plainly rather than
       // describing the dish from general knowledge, which would be a
@@ -490,7 +506,7 @@ export const menuTools: ToolDefinition[] = [
   {
     name: "get_menu_item",
     description:
-      "Get full detail for one menu item by id (from a prior search_menu result) — description, price, dietary flags, ingredients, declared allergens, preparation time, portion size, and its modifier groups/options. Use this before adding an item to the cart if you need to know its required modifiers, and any time a customer asks about a specific item's price, ingredients, dietary suitability, how long it takes, or how many people it feeds — never state these from memory.",
+      "Get full detail for one menu item by id (from a prior search_menu result) — description, price, dietary flags, ingredients, declared allergens, preparation time, portion size, confirmed nutrition per serving, and its modifier groups/options. Use this before adding an item to the cart if you need to know its required modifiers, and any time a customer asks about a specific item's price, ingredients, dietary suitability, how long it takes, how many people it feeds, or its calories/nutrition — never state these from memory.",
     schema: getMenuItemSchema,
     execute: getMenuItem as ToolDefinition["execute"],
   },

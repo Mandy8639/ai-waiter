@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { deleteMenuItem, toggleMenuItemAvailability } from "@/lib/menu/actions";
+import { countDraftNutrition } from "@/lib/nutrition/queries";
 
 export const metadata = {
   title: "Menu — Tableside",
@@ -82,6 +83,10 @@ export default async function MenuPage() {
     .is("active_image_id", null);
   const totalItems = (menuItems ?? []).length;
 
+  // Phase M: nutrition waiting on a person. Drafts are invisible to
+  // diners, so the count is the only way an owner learns they're there.
+  const draftNutrition = await countDraftNutrition(restaurant.id);
+
   const categoryNameById = new Map(
     (categories ?? []).map((c) => [c.id, c.name]),
   );
@@ -142,6 +147,16 @@ export default async function MenuPage() {
                 className={buttonVariants({ variant: "outline" })}
               >
                 Translations
+              </Link>
+            )}
+            {totalItems > 0 && (
+              <Link
+                href="/dashboard/menu/nutrition"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                {draftNutrition > 0
+                  ? `Nutrition (${draftNutrition} to confirm)`
+                  : "Nutrition"}
               </Link>
             )}
             {(draftSpice ?? 0) > 0 && (
