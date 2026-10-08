@@ -11,6 +11,8 @@ import { DishPhoto } from "@/components/customer/dish-photo";
 import { DishViewBeacon } from "@/components/customer/dish-view-beacon";
 import { getDinerTranslations } from "@/lib/translations/queries";
 import { getPublicMenus } from "@/lib/menus/queries";
+import { getConfirmedNutrition } from "@/lib/nutrition/queries";
+import { nutritionRows } from "@/lib/nutrition/core";
 import { menusForCategory, onNowFilter, servedWhen } from "@/lib/menus/core";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
@@ -99,6 +101,10 @@ export default async function MenuItemDetailPage({
     ? ""
     : servedWhen(menusForCategory(menus, categoryId));
   const translatedName = translations.dishName(item.id);
+  // Phase M: confirmed values only — a draft is never shown, even to an
+  // owner previewing the page.
+  const nutrition =
+    (await getConfirmedNutrition([item.id], supabase)).get(item.id) ?? null;
   const translatedDescription = item.description
     ? translations.dishDescription(item.id)
     : null;
@@ -389,6 +395,41 @@ export default async function MenuItemDetailPage({
           </h2>
           <p className="type-body-sm">
             {ingredients.map((i) => i.name).join(", ")}
+          </p>
+        </section>
+      )}
+
+      {/*
+        Only CONFIRMED numbers reach this point: a person at the restaurant
+        checked them. Nothing is shown when there are none — no "0 kcal",
+        no estimate.
+      */}
+      {nutrition && (
+        <section
+          aria-labelledby="nutrition-heading"
+          className="flex flex-col gap-2"
+        >
+          <h2
+            id="nutrition-heading"
+            className="type-overline text-muted-foreground"
+          >
+            Nutrition · per serving
+          </h2>
+          <dl className="grid grid-cols-4 gap-2">
+            {nutritionRows(nutrition).map((r) => (
+              <div
+                key={r.label}
+                className="bg-muted/60 flex flex-col rounded-lg px-2 py-2 text-center"
+              >
+                <dt className="text-muted-foreground text-[0.6875rem]">
+                  {r.label}
+                </dt>
+                <dd className="type-body-sm font-medium">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-muted-foreground text-xs">
+            From the restaurant. Approximate — portions and recipes vary.
           </p>
         </section>
       )}

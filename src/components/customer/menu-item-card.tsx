@@ -24,6 +24,8 @@ export interface MenuItemCardData {
   translatedName?: string | null;
   translatedDescription?: string | null;
   language?: MenuLanguage | null;
+  /** Phase M: confirmed calories per serving, when the restaurant has confirmed them. */
+  calories?: number | null;
 }
 
 /**
@@ -89,6 +91,11 @@ export function MenuItemCard({
           <span className="type-price text-foreground text-[0.9375rem]">
             {formatPrice(item.price, currency)}
           </span>
+          {item.calories != null && (
+            <span className="type-body-sm text-muted-foreground">
+              {item.calories} kcal
+            </span>
+          )}
           <DietBadges
             isVegetarian={item.isVegetarian}
             isVegan={item.isVegan}

@@ -1018,6 +1018,39 @@ Verified end to end on 2026-09-25 against the disposable project: a real Chrome 
 Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
 Table 4 · 1 item".
 
+## Nutrition — (phase M)
+
+`20261005090000_menu_nutrition.sql`. Calories, protein, carbohydrate and fat for one serving of a
+dish. A calorie count is a number people make medical decisions with, so this follows the allergen
+rule.
+
+- **Nothing reaches a diner unconfirmed.** Every value, whether a person typed it or the AI
+  estimated it, is saved as a draft by `save_menu_item_nutrition()`. Only
+  `confirm_menu_item_nutrition()`, run by an owner or manager, sets `confirmed_at`. The table has
+  no insert or update policy, so nobody can write a row that is already confirmed.
+- **Changed numbers are not confirmed numbers.** Saving always clears `confirmed_at`, so whoever
+  confirms is confirming what's there now.
+- **Diners and the AI waiter see confirmed values only.** The public read policy requires
+  `confirmed_at` and `is_menu_item_publicly_visible()`, the same rule allergens use. Restaurant
+  members can also read drafts through the members' read policy, so every diner-side query (menu
+  cards, dish page, `get_menu_item`) also filters on `confirmed_at` explicitly. An owner
+  previewing their own menu sees what a diner sees.
+- **Impossible numbers are refused** by check constraints: 0–5,000 kcal and 0–500 g for each
+  macronutrient. The same limits in `src/lib/nutrition/core.ts` give the owner a sentence instead
+  of a constraint name.
+- **Numbers that don't add up are flagged, not refused.** Calories more than 20% (or 30 kcal) away
+  from 4/4/9 per gram of protein, carbohydrate and fat show a warning on the owner's screen; fibre,
+  alcohol and rounding move real labels. The AI's own estimates are held to the same check and
+  **dropped** when they fail it, because for a model that's the mark of a number it made up.
+- **AI estimates run on free models only** (`isFreeModel`, shared with translation drafting) and
+  only fill dishes with no nutrition. They never touch a person's draft or a confirmed value.
+- **The AI waiter never estimates.** `get_menu_item` returns `nutrition: null` when nothing is
+  confirmed. The system prompt tells the waiter to say the menu doesn't list it, never to work out
+  calories, and never to call a dish "healthy" or "low-calorie" unless the numbers show it.
+
+**Not in v1:** sugar, fibre, sodium or micronutrients; values per modifier (adding paneer doesn't
+change the count); filtering or sorting the menu by calories.
+
 ## Multiple menus — (phase L)
 
 `20261004090000_multiple_menus.sql`. A restaurant can run several **menus**, such as Lunch, Dinner and

@@ -26,6 +26,7 @@ import {
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { MenuLanguagePicker } from "@/components/customer/menu-language-picker";
 import { getDinerTranslations } from "@/lib/translations/queries";
+import { getConfirmedNutrition } from "@/lib/nutrition/queries";
 import { getPublicMenus } from "@/lib/menus/queries";
 import { hoursLabel, onNowFilter } from "@/lib/menus/core";
 import {
@@ -225,6 +226,9 @@ export default async function MenuPage({
     }
   }
 
+  // Phase M: confirmed calories for the cards.
+  const nutrition = await getConfirmedNutrition(itemIds, supabase);
+
   const cards: Array<MenuItemCardData & { categoryId: string }> = itemRows.map(
     (item) => ({
       id: item.id,
@@ -248,6 +252,7 @@ export default async function MenuPage({
       translatedName: translations.dishName(item.id),
       translatedDescription: translations.dishDescription(item.id),
       language: translations.language,
+      calories: nutrition.get(item.id)?.calories ?? null,
     }),
   );
 
