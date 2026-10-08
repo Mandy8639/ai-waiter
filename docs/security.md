@@ -1018,6 +1018,40 @@ Verified end to end on 2026-09-25 against the disposable project: a real Chrome 
 Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
 Table 4 · 1 item".
 
+## Multiple menus — (phase L)
+
+`20261004090000_multiple_menus.sql`. A restaurant can run several **menus**, such as Lunch, Dinner and
+Drinks. Each has a published or draft state, optional **hours** (day of week plus time window, in
+the restaurant's own timezone) and a set of **sections** (its existing categories). A section can
+be on several menus.
+
+- **Nothing changes until an owner acts.** Every restaurant has one **default** menu, "Menu",
+  published with no hours (always on), holding all its sections. New restaurants get one through a
+  trigger, and every new section, from the dashboard, from menu import or from anywhere else, joins
+  it through another trigger. No existing code path can make a section vanish. The default menu
+  can't be unpublished (a check constraint) or deleted (an RLS delete policy, so deleting a whole
+  restaurant still cascades), and a trigger stops `is_default` from changing.
+- **The database decides what's on.** `menu_on_now()` and `category_on_now()` compute it from
+  `now()` in the restaurant's timezone. A test pins a restaurant in Kolkata (UTC+5:30), so a
+  timezone mix-up shows up.
+- **A dish whose menu isn't on can't be ordered,** and each layer enforces it:
+  - The diner menu and the AI waiter's tools only show sections that are on now.
+  - The dish page says when the dish is served instead of offering it.
+  - The cart marks it unavailable.
+  - `validateAndPriceSelection()` refuses to add it.
+  - A `BEFORE INSERT` trigger on `order_items` refuses it at order time
+    (`ORDER_ITEM_NOT_SERVED_NOW`, naming the dish), so `submit_order()` itself is unchanged.
+- **A failed lookup never empties the menu.** Every active restaurant has a default menu, so
+  `get_public_menus()` returning nothing means it failed. The page then shows all active sections,
+  and ordering is still enforced in the database.
+- **Access** follows the same rules as categories: members read, owners and managers write. There
+  are composite foreign keys throughout. `get_public_menus()` can be called without signing in,
+  because the menu is public; it returns published menus of active restaurants only.
+
+**Not in v1:** overnight hours in a single window (use two windows, 22:00–24:00 and 00:00–02:00),
+per-menu prices for the same dish, and a menu picker for diners when several menus are on at once
+(their sections are simply shown together).
+
 ## Menu translation — (phase K)
 
 `20261003090000_menu_translations.sql`. Dish names, dish descriptions and category names can be

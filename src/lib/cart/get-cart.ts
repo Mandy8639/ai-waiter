@@ -1,5 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { getPublicMenus } from "@/lib/menus/queries";
+import { onNowFilter } from "@/lib/menus/core";
 
 export interface CartLineModifier {
   id: string;
@@ -102,11 +104,16 @@ export async function getCart(
   if (!items || items.length === 0) return { ...empty, taxRate };
 
   const menuItemIds = [...new Set(items.map((i) => i.menu_item_id))];
-  const { data: menuItems } = await supabase
-    .from("menu_items")
-    .select("id, name, image_url, is_available")
-    .in("id", menuItemIds);
+  const [{ data: menuItems }, menusResult] = await Promise.all([
+    supabase
+      .from("menu_items")
+      .select("id, name, image_url, is_available, category_id")
+      .in("id", menuItemIds),
+    // Phase L: a dish added while its menu was on may not be served now.
+    getPublicMenus(restaurantId, supabase),
+  ]);
   const menuItemById = new Map((menuItems ?? []).map((m) => [m.id, m]));
+  const onNow = onNowFilter(menusResult);
 
   const itemIds = items.map((i) => i.id);
   const { data: modifiers } =
@@ -149,7 +156,11 @@ export async function getCart(
       modifiers: modifiersByCartItemId.get(item.id) ?? [],
       spicePreference: item.spice_preference,
       notes: item.notes,
-      stillAvailable: menuItem?.is_available ?? false,
+      // Off the menu right now counts as unavailable: the order would be
+      // refused (ORDER_ITEM_NOT_SERVED_NOW), so the cart says so first.
+      stillAvailable:
+        (menuItem?.is_available ?? false) &&
+        (!onNow || onNow.has(menuItem!.category_id)),
     };
   });
 

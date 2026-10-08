@@ -64,6 +64,20 @@ export async function validateAndPriceSelection(
     return { ok: false, error: "This item is currently unavailable." };
   }
 
+  // Phase L: only while one of its menus is on (database-decided, in the
+  // restaurant's timezone). Covers the menu and the AI waiter's add-to-cart
+  // alike; submit_order() refuses it again at order time.
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: unknown }>;
+  const { data: onNow, error: onNowError } = await rpc("category_on_now", {
+    p_category_id: menuItem.category_id,
+  });
+  if (!onNowError && onNow === false) {
+    return { ok: false, error: "This dish isn't being served right now." };
+  }
+
   const { data: groups } = await supabase
     .from("menu_item_modifiers")
     .select("id, name, is_required, min_selections, max_selections")

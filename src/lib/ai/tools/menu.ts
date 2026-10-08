@@ -3,6 +3,13 @@ import type { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { assertedClaims } from "@/lib/menu/diet-filters";
+import { getPublicMenus } from "@/lib/menus/queries";
+import {
+  hoursLabel,
+  menusForCategory,
+  onNowFilter,
+  servedWhen,
+} from "@/lib/menus/core";
 import type { ToolContext, ToolDefinition, ToolResult } from "./types";
 import {
   searchMenuSchema,
@@ -62,6 +69,7 @@ interface SearchRow {
 interface MenuSearchQuery {
   select(columns: string): MenuSearchQuery;
   eq(column: string, value: unknown): MenuSearchQuery;
+  in(column: string, values: string[]): MenuSearchQuery;
   or(filter: string): MenuSearchQuery;
   order(column: string, options: { ascending: boolean }): MenuSearchQuery;
   limit(count: number): MenuSearchQuery;
@@ -79,16 +87,43 @@ async function searchMenu(
   // "just a snack" that isn't the model's opinion about the food. Read
   // first so the name the model passed can be resolved to an id, and so
   // every result can carry the category it belongs to.
-  const { data: categoryRows } = await supabase
-    .from("categories")
-    .select("id, name")
-    .eq("restaurant_id", context.restaurantId)
-    .eq("is_active", true);
+  const [{ data: allCategoryRows }, menusResult] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("restaurant_id", context.restaurantId)
+      .eq("is_active", true),
+    getPublicMenus(context.restaurantId, supabase),
+  ]);
+
+  // Phase L: only sections on a menu that's on right now. The waiter must
+  // not offer the dinner menu at lunch — the order would be refused.
+  const onNow = onNowFilter(menusResult);
+  const menus = menusResult ?? [];
+  const categoryRows = (allCategoryRows ?? []).filter(
+    (c) => !onNow || onNow.has(c.id),
+  );
 
   const wanted = args.category?.trim().toLowerCase();
   const matchedCategory = wanted
-    ? (categoryRows ?? []).find((c) => c.name.toLowerCase() === wanted)
+    ? categoryRows.find((c) => c.name.toLowerCase() === wanted)
     : undefined;
+
+  // A real section that simply isn't being served now gets an answer that
+  // says when it is, rather than "no such category".
+  const offNowCategory =
+    wanted && !matchedCategory
+      ? (allCategoryRows ?? []).find((c) => c.name.toLowerCase() === wanted)
+      : undefined;
+  if (offNowCategory) {
+    return {
+      ok: true,
+      data: {
+        items: [],
+        note: `"${offNowCategory.name}" isn't being served right now. It's on ${servedWhen(menusForCategory(menus, offNowCategory.id)) || "a menu that isn't on"}.`,
+      },
+    };
+  }
 
   // An unrecognised category name returns nothing rather than silently
   // ignoring the filter and answering about the whole menu — a waiter
@@ -99,7 +134,7 @@ async function searchMenu(
       ok: true,
       data: {
         items: [],
-        note: `This restaurant has no menu category called "${args.category}". Its categories are: ${(categoryRows ?? []).map((c) => c.name).join(", ")}.`,
+        note: `This restaurant has no menu category called "${args.category}". Its categories are: ${categoryRows.map((c) => c.name).join(", ")}.`,
       },
     };
   }
@@ -118,7 +153,20 @@ async function searchMenu(
     .order("display_order", { ascending: true })
     .limit(25);
 
-  if (matchedCategory) query = query.eq("category_id", matchedCategory.id);
+  if (matchedCategory) {
+    query = query.eq("category_id", matchedCategory.id);
+  } else if (onNow) {
+    if (onNow.size === 0) {
+      return {
+        ok: true,
+        data: {
+          items: [],
+          note: `Nothing is being served right now. Menus: ${menus.map((m) => `${m.name} (${hoursLabel(m.hours)})`).join(", ")}.`,
+        },
+      };
+    }
+    query = query.in("category_id", [...onNow]);
+  }
 
   const search = args.query?.trim();
   if (search) {
@@ -139,7 +187,7 @@ async function searchMenu(
 
   const { data } = await query;
 
-  const categoryName = new Map((categoryRows ?? []).map((c) => [c.id, c.name]));
+  const categoryName = new Map(categoryRows.map((c) => [c.id, c.name]));
 
   return {
     ok: true,
@@ -238,6 +286,19 @@ async function getMenuItem(
     return {
       ok: false,
       error: "That item isn't on the menu (or isn't currently available).",
+    };
+  }
+
+  // Phase L: a dish whose menu isn't on right now can't be ordered, so say
+  // when it is instead of describing it as if it could be.
+  const menusResult = await getPublicMenus(context.restaurantId, supabase);
+  const onNow = onNowFilter(menusResult);
+  const menus = menusResult ?? [];
+  if (onNow && !onNow.has(item.category_id)) {
+    const when = servedWhen(menusForCategory(menus, item.category_id));
+    return {
+      ok: false,
+      error: `${item.name} isn't being served right now${when ? ` — it's on ${when}` : ""}. Suggest something from what's being served now.`,
     };
   }
 
@@ -379,17 +440,33 @@ async function getRestaurantInfo(
   // differ completely between restaurants — "Chaat" and "Fasting Food"
   // mean nothing at a pizzeria — so this cannot be hardcoded anywhere.
   const supabase = await createClient();
-  const { data: categoryRows } = await supabase
-    .from("categories")
-    .select("name")
-    .eq("restaurant_id", context.restaurantId)
-    .eq("is_active", true)
-    .order("display_order", { ascending: true });
+  const [{ data: categoryRows }, menusResult] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("restaurant_id", context.restaurantId)
+      .eq("is_active", true)
+      .order("display_order", { ascending: true }),
+    getPublicMenus(context.restaurantId, supabase),
+  ]);
+  const onNow = onNowFilter(menusResult);
+  const menus = menusResult ?? [];
 
   return {
     ok: true,
     data: {
-      menuCategories: (categoryRows ?? []).map((c) => c.name),
+      // Only what's being served now (phase L), so search_menu's category
+      // filter is used with sections that can actually be ordered.
+      menuCategories: (categoryRows ?? [])
+        .filter((c) => !onNow || onNow.has(c.id))
+        .map((c) => c.name),
+      // Each menu with its hours and whether it's on, for "do you do
+      // breakfast?" and "when is dinner?".
+      menus: menus.map((m) => ({
+        name: m.name,
+        hours: hoursLabel(m.hours),
+        servingNow: m.onNow,
+      })),
       currency: await restaurantCurrency(supabase, context.restaurantId),
       name: restaurant.name,
       description: restaurant.description,
@@ -420,7 +497,7 @@ export const menuTools: ToolDefinition[] = [
   {
     name: "get_restaurant_info",
     description:
-      "Get this restaurant's name, description, address, phone number, and the list of menu categories it groups its food into (e.g. Snacks, Chaat, Thali Special). Call this before using search_menu's category filter — every restaurant's categories are different.",
+      'Get this restaurant\'s name, description, address, phone number, the menu categories being served right now (e.g. Snacks, Chaat, Thali Special), and its menus with their hours and whether each is serving now. Call this before using search_menu\'s category filter — every restaurant\'s categories are different — and for questions like "do you do breakfast?" or "when is dinner?".',
     schema: getRestaurantInfoSchema,
     execute: getRestaurantInfo as ToolDefinition["execute"],
   },

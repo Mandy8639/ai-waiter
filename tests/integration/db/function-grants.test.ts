@@ -63,6 +63,10 @@ const SIGNED_IN_ONLY = [
  *   diner reads it before (or without) scanning a table — so its approved
  *   translations are too. Read-only, approved and current rows only, for
  *   active restaurants only. See 20261003090000_menu_translations.sql.
+ * - get_public_menus: which of a restaurant's published menus are on now,
+ *   their hours and sections — the public menu page needs it before any
+ *   QR scan. Read-only; drafts and inactive restaurants are excluded. See
+ *   20261004090000_multiple_menus.sql.
  */
 const ANON_BY_DESIGN = [
   "get_staff_invitation_preview",
@@ -72,6 +76,7 @@ const ANON_BY_DESIGN = [
   "get_split_payment_checkout",
   "get_menu_translations",
   "get_menu_languages",
+  "get_public_menus",
 ];
 
 const ANON_EXECUTABLE_PENDING_REVIEW = [

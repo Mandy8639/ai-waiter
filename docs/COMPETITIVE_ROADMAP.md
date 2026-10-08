@@ -319,6 +319,19 @@ useful only once Phase E proves diners are arriving in other languages.
 
 ## Phase L — Multiple menus per restaurant
 
+**Built 2026-10-06** (`20261004090000_multiple_menus.sql`). Menus such as Lunch
+and Dinner each have hours in the restaurant's timezone, a draft or
+published state, and a set of sections that can be shared between menus.
+A dish can only be ordered while one of its menus is on, which the diner
+menu, the dish page, the cart, the AI waiter's tools and the database all
+enforce. Every restaurant starts with one always-on default menu holding
+everything, so nothing changes until an owner sets up a second menu.
+Verified live on the disposable project: a published Dinner menu holding the
+only section, with hours that weren't now, gave diners "Nothing is being
+served right now — Dinner: Mon–Fri 11:00–15:00" and a dish page saying when
+it's served; adding hours covering the current minute brought the dishes
+straight back. See docs/security.md#multiple-menus-phase-l.
+
 Menu selector, scheduling, drafts. Touches `menu_items`, `categories`, the
 diner menu, the AI's tools and the import flow. A schema-wide change, worth
 doing only when a restaurant actually needs a lunch menu and a dinner menu.
