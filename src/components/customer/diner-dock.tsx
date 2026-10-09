@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConciergeBell, ShoppingBag } from "lucide-react";
 import { useAiWaiter } from "./ai-waiter";
+import { ChefArt } from "./chef-art";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,7 +26,7 @@ export function DinerDock({
   cartCount: number;
 }) {
   const pathname = usePathname();
-  const { available, openWaiter } = useAiWaiter();
+  const { available, chef, openWaiter } = useAiWaiter();
 
   const onItemPage = pathname.includes(`/r/${restaurantSlug}/item/`);
   const onCartPage = pathname === `/r/${restaurantSlug}/cart`;
@@ -40,7 +41,9 @@ export function DinerDock({
           <button
             type="button"
             onClick={(event) => openWaiter(undefined, event.currentTarget)}
-            aria-label={showCart ? "Ask the waiter" : undefined}
+            aria-label={
+              showCart ? (chef ? "Ask the Chef" : "Ask the waiter") : undefined
+            }
             className={cn(
               "shadow-float pointer-events-auto flex h-12 items-center gap-2 rounded-full border px-4 transition-[transform,background-color] duration-150 active:scale-[0.98]",
               "bg-card text-foreground hover:bg-ai-soft focus-visible:ring-ring/50 focus-visible:ring-3 focus-visible:outline-none",
@@ -48,20 +51,43 @@ export function DinerDock({
                 "bg-foreground text-background hover:bg-foreground/90 border-transparent",
             )}
           >
-            <span
-              className={cn(
-                "flex size-7 items-center justify-center rounded-full",
-                showCart
-                  ? "bg-ai-soft text-ai"
-                  : "bg-background/15 text-background",
-              )}
-              aria-hidden="true"
-            >
-              <ConciergeBell className="size-4" />
-            </span>
+            {chef ? (
+              <span className="bg-card flex size-7 items-center justify-center overflow-hidden rounded-full">
+                <ChefArt pose="neutral" size={28} />
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-full",
+                  showCart
+                    ? "bg-ai-soft text-ai"
+                    : "bg-background/15 text-background",
+                )}
+                aria-hidden="true"
+              >
+                <ConciergeBell className="size-4" />
+              </span>
+            )}
             {/* Shortened when the cart shares the bar, so both fit a 320px phone on one line. */}
             <span className="type-label text-[0.9375rem] font-semibold whitespace-nowrap">
-              {showCart ? "Ask" : "Ask the waiter"}
+              {chef ? (
+                showCart ? (
+                  // PROTOTYPE: the full name from about 360px, where it fits
+                  // beside a shortened "Order"; "Chef" on the narrowest phones.
+                  <>
+                    <span className="min-[360px]:hidden">Chef</span>
+                    <span className="hidden min-[360px]:inline">
+                      Ask the Chef
+                    </span>
+                  </>
+                ) : (
+                  "Ask the Chef"
+                )
+              ) : showCart ? (
+                "Ask"
+              ) : (
+                "Ask the waiter"
+              )}
             </span>
           </button>
         )}
@@ -75,7 +101,14 @@ export function DinerDock({
             <span className="flex items-center gap-2">
               <ShoppingBag className="size-4" aria-hidden="true" />
               <span className="type-label text-[0.9375rem] font-semibold whitespace-nowrap">
-                View order
+                {chef ? (
+                  <>
+                    <span className="min-[360px]:hidden">View order</span>
+                    <span className="hidden min-[360px]:inline">Order</span>
+                  </>
+                ) : (
+                  "View order"
+                )}
               </span>
             </span>
             <span

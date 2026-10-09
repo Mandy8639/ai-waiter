@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertCircle, QrCode, ShoppingBag } from "lucide-react";
 import { AskWaiterButton } from "@/components/customer/ask-waiter-card";
+import { isChefEnabled } from "@/lib/chef/feature";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatPrice } from "@/lib/format/price";
@@ -86,7 +87,7 @@ export default async function CartPage({
       <EmptyState
         icon={<ShoppingBag />}
         title="Your order is empty"
-        description="Browse the menu, or ask the waiter for a suggestion — dishes you add will show up here."
+        description={`Browse the menu, or ask the ${isChefEnabled(restaurantSlug) ? "Chef" : "waiter"} for a suggestion — dishes you add will show up here.`}
       >
         <Link
           href={`/r/${restaurantSlug}/menu`}
@@ -94,7 +95,10 @@ export default async function CartPage({
         >
           Browse the menu
         </Link>
-        <AskWaiterButton prompt="What do you recommend?">
+        <AskWaiterButton
+          prompt="What do you recommend?"
+          chefLabel="Ask the Chef"
+        >
           Ask the waiter
         </AskWaiterButton>
       </EmptyState>

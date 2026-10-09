@@ -434,7 +434,10 @@ export default async function MenuItemDetailPage({
         </section>
       )}
 
-      <AskWaiterButton prompt={`Tell me about the ${item.name}.`}>
+      <AskWaiterButton
+        prompt={`Tell me about the ${item.name}.`}
+        chefLabel="Ask the Chef about this dish"
+      >
         Ask the waiter about this dish
       </AskWaiterButton>
 

@@ -13,6 +13,7 @@ import {
   buildRecommendationCards,
   type RecommendationCard,
 } from "./recommendation-cards";
+import { isSafetyQuestion } from "@/lib/chef/core";
 
 export type { RecommendationCard };
 
@@ -22,6 +23,12 @@ export interface SendChatMessageResult {
   orderId?: string;
   /** Dish cards for the menu items this reply names — see src/lib/ai/recommendations.ts. */
   recommendations?: RecommendationCard[];
+  /**
+   * True when the diner asked about allergens or a religious or medical
+   * diet. Presentation only: the Chef shows its neutral face for these
+   * answers (src/lib/chef/core.ts). It changes nothing the waiter says.
+   */
+  safety?: boolean;
 }
 
 /**
@@ -82,7 +89,12 @@ export async function sendChatMessage(
     result.mentionedItems ?? [],
   ).catch(() => []);
 
-  return { reply: result.reply, orderId: result.orderId, recommendations };
+  return {
+    reply: result.reply,
+    orderId: result.orderId,
+    recommendations,
+    safety: isSafetyQuestion(message),
+  };
 }
 
 export interface ChatHistoryEntry {
