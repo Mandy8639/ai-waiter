@@ -25,11 +25,14 @@ export function RecommendationCard({
   item,
   restaurantSlug,
   onNavigate,
+  onAdded,
 }: {
   item: RecommendationCardData;
   restaurantSlug: string;
   /** Called when a link leaves the chat, so the sheet can close. */
   onNavigate?: () => void;
+  /** Called once the dish is in the order (the chat's "nice pick" nod). */
+  onAdded?: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -52,6 +55,7 @@ export function RecommendationCard({
         return;
       }
       setAdded(true);
+      onAdded?.();
       // The cart count in the dock is server-rendered; refresh it.
       router.refresh();
     });

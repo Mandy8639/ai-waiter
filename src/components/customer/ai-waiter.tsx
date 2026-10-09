@@ -12,6 +12,8 @@ import { AiWaiterPanel, type PromptRequest } from "./ai-waiter-panel";
 interface AiWaiterContextValue {
   /** False when the restaurant hasn't enabled the waiter, or no model is configured. */
   available: boolean;
+  /** Whether the waiter appears as the Chef character here (CHEF_RESTAURANTS). */
+  chef: boolean;
   /**
    * Opens the waiter; with a prompt, asks it straight away. Pass the
    * element that was pressed as `opener` so focus returns to it on close.
@@ -21,6 +23,7 @@ interface AiWaiterContextValue {
 
 const AiWaiterContext = createContext<AiWaiterContextValue>({
   available: false,
+  chef: false,
   openWaiter: () => {},
 });
 
@@ -44,11 +47,13 @@ export function useAiWaiter(): AiWaiterContextValue {
  */
 export function AiWaiterProvider({
   available,
+  chef,
   restaurantSlug,
   restaurantName,
   children,
 }: {
   available: boolean;
+  chef: boolean;
   restaurantSlug: string;
   restaurantName: string;
   children: React.ReactNode;
@@ -81,10 +86,11 @@ export function AiWaiterProvider({
   );
 
   return (
-    <AiWaiterContext.Provider value={{ available, openWaiter }}>
+    <AiWaiterContext.Provider value={{ available, chef, openWaiter }}>
       {children}
       {available && (
         <AiWaiterPanel
+          chef={chef}
           restaurantSlug={restaurantSlug}
           restaurantName={restaurantName}
           open={open}

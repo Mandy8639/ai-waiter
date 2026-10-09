@@ -7,6 +7,7 @@ import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { getActiveCustomerSession } from "@/lib/customer/session";
 import { getCartItemCount } from "@/lib/cart/get-cart";
 import { isAiWaiterAvailable } from "@/lib/ai/actions";
+import { isChefEnabled } from "@/lib/chef/feature";
 
 export default async function CustomerRestaurantLayout({
   children,
@@ -35,6 +36,8 @@ export default async function CustomerRestaurantLayout({
   return (
     <AiWaiterProvider
       available={aiWaiterAvailable}
+      // The Chef is the waiter's face, so it only exists where the waiter does.
+      chef={aiWaiterAvailable && isChefEnabled(restaurantSlug)}
       restaurantSlug={restaurantSlug}
       restaurantName={restaurant.name}
     >

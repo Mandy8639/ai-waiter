@@ -483,7 +483,10 @@ export default async function MenuPage({
             </Link>
           )}
           {search && (
-            <AskWaiterButton prompt={`Do you have anything like ${search}?`}>
+            <AskWaiterButton
+              prompt={`Do you have anything like ${search}?`}
+              chefLabel="Ask the Chef"
+            >
               Ask the waiter
             </AskWaiterButton>
           )}

@@ -243,3 +243,57 @@
     }
   }
 }
+
+/*
+ * The Chef's motions (src/components/customer/chef-art.tsx). Mostly still:
+ * a wave and a nod play once; the thinking sway loops only while a reply
+ * is on its way. Defined only for people who haven't asked for reduced
+ * motion, on top of the global rule above — and kept that way by
+ * tests/unit/chef-motion-css.test.ts.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .chef-motion-wave {
+    transform-origin: 50% 100%;
+    animation: chef-wave 650ms var(--ease-out-soft) 1;
+  }
+  .chef-motion-think {
+    transform-origin: 50% 100%;
+    animation: chef-think 2.6s ease-in-out infinite;
+  }
+  .chef-motion-nod {
+    animation: chef-nod 480ms var(--ease-out-soft) 1;
+  }
+}
+
+@keyframes chef-wave {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  35% {
+    transform: rotate(-3deg);
+  }
+  70% {
+    transform: rotate(2deg);
+  }
+}
+
+@keyframes chef-think {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-1.5deg);
+  }
+}
+
+@keyframes chef-nod {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(3px);
+  }
+}

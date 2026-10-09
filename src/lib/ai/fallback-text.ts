@@ -80,3 +80,17 @@ export function fallbackText(
 ): string {
   return TEXT[key][language];
 }
+
+const ALL_TEXTS = new Set(
+  Object.values(TEXT).flatMap((byLanguage) => Object.values(byLanguage)),
+);
+
+/**
+ * Is this reply one of the fixed ones above, i.e. the waiter couldn't
+ * answer? Exact match only: the texts are hand-written and never vary.
+ * Used by the Chef to look apologetic (src/lib/chef/core.ts); it changes
+ * nothing about when a fixed reply is sent.
+ */
+export function isFallbackText(reply: string): boolean {
+  return ALL_TEXTS.has(reply.trim());
+}

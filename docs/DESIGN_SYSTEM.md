@@ -113,6 +113,34 @@ There are no other shadows.
 - `prefers-reduced-motion: reduce` collapses all animations and transitions to near-instant
   (global rule in `globals.css`), and every decorative animation also uses `motion-safe:`.
 
+## The Chef
+
+Where `CHEF_RESTAURANTS` lists a restaurant (or is `*`), the AI waiter appears as **the Chef**: a
+small illustrated character, titled "Chef · AI menu guide". It's the face of the guidance layer and
+nothing else. The restaurant stays the brand, the food stays the thing being sold, and every fact
+still comes from the menu data.
+
+- **Where it appears:**
+  - the "Not sure what to order?" card (Curious, about 56px) and the bottom dock (neutral face,
+    28px), both with "Ask the Chef";
+  - the chat header (neutral, 40px);
+  - one moment at a time inside the chat, chosen by `chefMoment()` in `src/lib/chef/core.ts`:
+    - welcome: Hello, with one wave;
+    - waiting: Thinking, with a slow sway while a reply is on its way;
+    - the newest dish cards: Found it, with one nod per dish added;
+    - an error, or a reply the waiter couldn't answer (one of its fixed fallbacks): Oops.
+- **Never on** the restaurant header or hero, dish cards, allergen notes, money flows,
+  "Call a waiter", low-rating feedback, or anything staff-facing. There's no face on every reply.
+- **Safety beats delight.** If the diner asked about allergens or any diet (vegetarian and vegan included)
+  (`isSafetyQuestion()`, decided on the server), or the question is unknown, the cards get the
+  neutral Chef and no nod.
+- **It never speaks for the results.** The line above the cards states only what's known
+  ("2 dishes from the menu"). The words are the AI's own reply.
+- **Always decorative** (`aria-hidden`, empty alt). Motions are defined only for people who haven't
+  asked for reduced motion (`tests/unit/chef-motion-css.test.ts`).
+- **Art is a placeholder:** one WebP per pose in `public/chef/` (7–8 KB each), as a plain `<img>`: `next/image` would add about 7 KB of JavaScript to every diner page. It will
+  be replaced by layered vector art.
+
 ## Components
 
 | Component                      | File                               | Notes                                                                      |
