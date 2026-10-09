@@ -4,7 +4,13 @@
 // with an OFFER to have someone come over — never an automatic call — and
 // a good one must not offer it at all.
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const submitOrderFeedback = vi.fn();
@@ -18,6 +24,10 @@ vi.mock("@/lib/feedback/actions", () => ({
 
 const { OrderFeedbackPanel } =
   await import("@/components/customer/order-feedback-panel");
+
+// The full suite runs files in parallel, so allow more than the default
+// second for a mocked action to settle.
+const WAIT = { timeout: 5000 };
 
 afterEach(() => {
   cleanup();
@@ -66,7 +76,7 @@ describe("OrderFeedbackPanel", () => {
     );
 
     expect(
-      await screen.findByText("Thanks for your feedback"),
+      await screen.findByText("Thanks for your feedback", undefined, WAIT),
     ).toBeInTheDocument();
     expect(submitOrderFeedback).toHaveBeenCalledWith(
       "nashta",
@@ -93,7 +103,7 @@ describe("OrderFeedbackPanel", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Send to the restaurant" }),
     );
-    await screen.findByText("Thanks for your feedback");
+    await screen.findByText("Thanks for your feedback", undefined, WAIT);
     expect(submitOrderFeedback.mock.calls[0][3].votes).toEqual({});
   });
 
@@ -106,14 +116,19 @@ describe("OrderFeedbackPanel", () => {
     );
 
     expect(
-      await screen.findByText("Sorry it wasn't right"),
+      await screen.findByText("Sorry it wasn't right", undefined, WAIT),
     ).toBeInTheDocument();
     expect(askStaffAboutFeedback).not.toHaveBeenCalled();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Yes, ask someone to come over" }),
-    );
+    // The apology can render a moment before the send's transition ends,
+    // while its buttons are still disabled; a click then does nothing.
+    // Found in CI (#91), where the slower machine clicked in that moment.
+    const yes = screen.getByRole("button", {
+      name: "Yes, ask someone to come over",
+    });
+    await waitFor(() => expect(yes).toBeEnabled(), WAIT);
+    fireEvent.click(yes);
     expect(
-      await screen.findByText("Someone's on their way"),
+      await screen.findByText("Someone's on their way", undefined, WAIT),
     ).toBeInTheDocument();
     expect(askStaffAboutFeedback).toHaveBeenCalledWith("o1");
   });
@@ -129,7 +144,11 @@ describe("OrderFeedbackPanel", () => {
       screen.getByRole("button", { name: "Send to the restaurant" }),
     );
     expect(
-      await screen.findByText(/already told us about this order/),
+      await screen.findByText(
+        /already told us about this order/,
+        undefined,
+        WAIT,
+      ),
     ).toBeInTheDocument();
   });
 

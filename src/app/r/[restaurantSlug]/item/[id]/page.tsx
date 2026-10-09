@@ -2,7 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Clock } from "lucide-react";
 import { AllergenNote } from "@/components/customer/allergen-note";
-import { assertedClaims, claimSentence } from "@/lib/menu/diet-filters";
+import {
+  assertedClaims,
+  claimSentence,
+  statedAllergens,
+} from "@/lib/menu/diet-filters";
 import { AskWaiterButton } from "@/components/customer/ask-waiter-card";
 import { DietBadges } from "@/components/customer/diet-badges";
 import { ItemDetailForm } from "@/components/customer/item-detail-form";
@@ -207,17 +211,17 @@ export default async function MenuItemDetailPage({
       })),
   }));
 
-  // The dish's own yes/no flags, folded into the same "Contains …" line as
-  // the confirmed allergens so the page never says "no allergens listed"
-  // while a flag says it contains dairy. Skipped when a confirmed allergen
-  // already says the same thing more precisely.
-  const allergenNames = (allergens ?? []).map((a) => a.name);
-  const lower = allergenNames.map((n) => n.toLowerCase());
-  const flagged = [
-    item.contains_dairy && !lower.includes("milk") && "Dairy",
-    item.contains_nuts && !lower.some((n) => n.includes("nut")) && "Nuts",
-    item.contains_gluten && !lower.includes("gluten") && "Gluten",
-  ].filter((v): v is string => Boolean(v));
+  // The confirmed allergens plus the dish's own ticked yes/no boxes, in one
+  // "Contains …" line, so the page never says "no allergens listed" while a
+  // box says it contains dairy. The AI waiter gets the same list.
+  const containsList = statedAllergens(
+    (allergens ?? []).map((a) => a.name),
+    {
+      containsNuts: item.contains_nuts,
+      containsDairy: item.contains_dairy,
+      containsGluten: item.contains_gluten,
+    },
+  );
   // Only the claims that were actually asserted; claimSentence returns null
   // for the conventional ones (vegetarian, vegan) that need no attribution.
   const claimSentences = assertedClaims({
@@ -229,8 +233,6 @@ export default async function MenuItemDetailPage({
   })
     .map((claim) => claimSentence(claim, restaurant.name))
     .filter((sentence): sentence is string => sentence !== null);
-
-  const containsList = [...allergenNames, ...flagged];
 
   return (
     <div className="flex flex-1 flex-col gap-6">

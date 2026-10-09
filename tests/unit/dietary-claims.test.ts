@@ -9,6 +9,7 @@ import {
   matchesDietFilter,
   parseDietFilters,
   type DietFlags,
+  statedAllergens,
 } from "@/lib/menu/diet-filters";
 
 /**
@@ -141,5 +142,40 @@ describe("filtering", () => {
     for (const { key } of DIETARY_CLAIMS) {
       expect(filterKeys.has(key)).toBe(true);
     }
+  });
+});
+
+describe("statedAllergens", () => {
+  const none = {
+    containsNuts: false,
+    containsDairy: false,
+    containsGluten: false,
+  };
+
+  it("adds nothing for unticked boxes — 'not stated', never 'doesn't contain'", () => {
+    // Found live: the AI waiter, handed containsDairy: false for a yoghurt
+    // dish, told a diner it "doesn't contain nuts, dairy, or gluten".
+    expect(statedAllergens([], none)).toEqual([]);
+    expect(statedAllergens(["Sesame"], none)).toEqual(["Sesame"]);
+  });
+
+  it("adds the boxes the restaurant ticked, after its confirmed allergens", () => {
+    expect(
+      statedAllergens(["Sesame"], {
+        containsNuts: true,
+        containsDairy: true,
+        containsGluten: true,
+      }),
+    ).toEqual(["Sesame", "Dairy", "Nuts", "Gluten"]);
+  });
+
+  it("skips a ticked box a confirmed allergen already says more precisely", () => {
+    expect(
+      statedAllergens(["Milk", "Peanuts", "Gluten"], {
+        containsNuts: true,
+        containsDairy: true,
+        containsGluten: true,
+      }),
+    ).toEqual(["Milk", "Peanuts", "Gluten"]);
   });
 });

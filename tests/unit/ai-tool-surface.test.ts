@@ -104,6 +104,21 @@ describe("AI tool surface (spec section 4)", () => {
     expect(source).toMatch(/portion size/);
   });
 
+  it("never hands the model the raw contains-nuts/dairy/gluten booleans", () => {
+    // Unticked is the default for every dish; sent as `false`, the model
+    // read it as "doesn't contain" (2026-10-09, a yoghurt dish called
+    // dairy-free). The flags may only reach it through statedAllergens(),
+    // which turns ticked boxes into allergen names and drops the rest.
+    const source = readToolSource("menu.ts");
+    for (const key of ["containsNuts", "containsDairy", "containsGluten"]) {
+      const uses = source.match(new RegExp(`\\b${key}:`, "g")) ?? [];
+      expect(uses, `${key} appears once, as an input`).toHaveLength(1);
+    }
+    expect(source).toMatch(
+      /declaredAllergens:\s*statedAllergens\(\s*\(allergens \?\? \[\]\)/,
+    );
+  });
+
   it("no tool's execute function accepts a restaurantId/tableId/customerSessionId argument by name in its schema (context is always derived server-side, never a tool argument)", () => {
     const schemaSource = stripComments(
       readFileSync(resolve(TOOLS_DIR, "schemas.ts"), "utf8"),
