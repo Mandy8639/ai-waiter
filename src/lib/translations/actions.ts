@@ -151,8 +151,12 @@ export async function deleteTranslation(
   return {};
 }
 
-/** How many fields one press drafts, so a large menu can't outrun the request. */
-const DRAFT_LIMIT = 60;
+/**
+ * How many fields one press drafts, so a large menu can't outrun the
+ * request: two batches at up to 45 s each (with retries) fit the page's
+ * maxDuration.
+ */
+const DRAFT_LIMIT = 40;
 const BATCH_SIZE = 20;
 
 /**

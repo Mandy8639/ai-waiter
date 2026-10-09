@@ -10,6 +10,10 @@ import {
   type MenuLanguage,
 } from "@/lib/translations/languages";
 
+// "Draft with AI" runs on this page and waits on a free model that can
+// take most of a minute per batch (src/lib/ai/free-draft-core.ts).
+export const maxDuration = 120;
+
 export const metadata = {
   title: "Menu translations — Tableside",
 };
