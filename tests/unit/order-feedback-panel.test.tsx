@@ -19,6 +19,10 @@ vi.mock("@/lib/feedback/actions", () => ({
 const { OrderFeedbackPanel } =
   await import("@/components/customer/order-feedback-panel");
 
+// The full suite runs files in parallel, so allow more than the default
+// second for a mocked action to settle.
+const WAIT = { timeout: 5000 };
+
 afterEach(() => {
   cleanup();
   submitOrderFeedback.mockReset();
@@ -66,7 +70,7 @@ describe("OrderFeedbackPanel", () => {
     );
 
     expect(
-      await screen.findByText("Thanks for your feedback"),
+      await screen.findByText("Thanks for your feedback", undefined, WAIT),
     ).toBeInTheDocument();
     expect(submitOrderFeedback).toHaveBeenCalledWith(
       "nashta",
@@ -93,7 +97,7 @@ describe("OrderFeedbackPanel", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Send to the restaurant" }),
     );
-    await screen.findByText("Thanks for your feedback");
+    await screen.findByText("Thanks for your feedback", undefined, WAIT);
     expect(submitOrderFeedback.mock.calls[0][3].votes).toEqual({});
   });
 
@@ -106,14 +110,14 @@ describe("OrderFeedbackPanel", () => {
     );
 
     expect(
-      await screen.findByText("Sorry it wasn't right"),
+      await screen.findByText("Sorry it wasn't right", undefined, WAIT),
     ).toBeInTheDocument();
     expect(askStaffAboutFeedback).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("button", { name: "Yes, ask someone to come over" }),
     );
     expect(
-      await screen.findByText("Someone's on their way"),
+      await screen.findByText("Someone's on their way", undefined, WAIT),
     ).toBeInTheDocument();
     expect(askStaffAboutFeedback).toHaveBeenCalledWith("o1");
   });
@@ -129,7 +133,11 @@ describe("OrderFeedbackPanel", () => {
       screen.getByRole("button", { name: "Send to the restaurant" }),
     );
     expect(
-      await screen.findByText(/already told us about this order/),
+      await screen.findByText(
+        /already told us about this order/,
+        undefined,
+        WAIT,
+      ),
     ).toBeInTheDocument();
   });
 

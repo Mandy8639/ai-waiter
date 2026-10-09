@@ -203,6 +203,36 @@ export function assertedClaims(item: DietFlags): DietaryClaimKey[] {
 }
 
 /**
+ * A dish's allergens as the restaurant has stated them: its confirmed
+ * allergens, plus whichever of the three yes/no boxes on the dish form it
+ * ticked ("contains dairy"), skipping a box a confirmed allergen already
+ * says more precisely.
+ *
+ * An UNTICKED box adds nothing. It is the default for every dish nobody
+ * assessed, so it means "not stated", never "doesn't contain" — the same
+ * rule assertedClaims applies to halal and kosher. Found live on
+ * 2026-10-09: the AI waiter was handed `containsDairy: false` for a dish
+ * made with yoghurt and told a diner it "doesn't contain nuts, dairy, or
+ * gluten". Only positives leave this function, so that can't recur.
+ */
+export function statedAllergens(
+  confirmed: readonly string[],
+  flags: {
+    containsNuts: boolean;
+    containsDairy: boolean;
+    containsGluten: boolean;
+  },
+): string[] {
+  const lower = confirmed.map((name) => name.toLowerCase());
+  const ticked = [
+    flags.containsDairy && !lower.includes("milk") && "Dairy",
+    flags.containsNuts && !lower.some((n) => n.includes("nut")) && "Nuts",
+    flags.containsGluten && !lower.includes("gluten") && "Gluten",
+  ].filter((v): v is string => Boolean(v));
+  return [...confirmed, ...ticked];
+}
+
+/**
  * How a claim is worded to a diner when it needs attributing.
  *
  * "Nashta states this dish is halal" rather than a bare "Halal", so the

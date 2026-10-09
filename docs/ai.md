@@ -549,6 +549,14 @@ data returned by `get_menu_item`. If that data doesn't cover what's asked, the s
 instructs the model to say so plainly and recommend checking with staff directly — never to guess,
 and never to offer anything resembling a medical guarantee.
 
+**The model is never handed a negative it could repeat.** `get_menu_item` returns
+`declaredAllergens` only: the confirmed allergens plus whichever "contains nuts / dairy / gluten"
+boxes the restaurant ticked (`statedAllergens()` in `src/lib/menu/diet-filters.ts`). It never
+returns those three columns raw. An unticked box is the default for every dish, so `false` means
+"not stated". Found live on 2026-10-09: handed `containsDairy: false` for a dish made with yoghurt,
+the model told a diner it "doesn't contain nuts, dairy, or gluten". `tests/unit/ai-tool-surface.test.ts`
+fails if the raw flags come back.
+
 ## Modifier resolution and required modifiers
 
 Natural-language modifier requests ("make it spicy," "add cheese," "make it large") that map to

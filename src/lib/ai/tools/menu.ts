@@ -2,7 +2,7 @@ import "server-only";
 import type { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
-import { assertedClaims } from "@/lib/menu/diet-filters";
+import { assertedClaims, statedAllergens } from "@/lib/menu/diet-filters";
 import { getPublicMenus } from "@/lib/menus/queries";
 import { getConfirmedNutrition } from "@/lib/nutrition/queries";
 import {
@@ -393,9 +393,6 @@ async function getMenuItem(
       }),
 
       spiceLevel: item.spice_level,
-      containsNuts: item.contains_nuts,
-      containsDairy: item.contains_dairy,
-      containsGluten: item.contains_gluten,
       preparationTimeMinutes: item.preparation_time,
       // The restaurant's own answer to "how many people does this feed?",
       // written as a sentence because that question has no numeric answer.
@@ -419,11 +416,23 @@ async function getMenuItem(
       // describing the dish from general knowledge, which would be a
       // recipe from the internet and not this kitchen's.
       ingredients: (ingredients ?? []).map((i) => i.name),
+      // Confirmed allergens plus the boxes the restaurant ticked ("contains
+      // dairy") — positives only. The three yes/no columns are never sent
+      // raw: an unticked box is the default for every dish, and the model
+      // once read `containsDairy: false` on a yoghurt dish as "doesn't
+      // contain dairy" (src/lib/menu/diet-filters.ts, statedAllergens).
       // Empty array here means "the restaurant hasn't listed any
       // allergens for this item" — the model must treat that as
       // "unknown/not specified," never as "confirmed allergen-free" (see
       // the system prompt and docs/security.md#allergen-safety).
-      declaredAllergens: (allergens ?? []).map((a) => a.name),
+      declaredAllergens: statedAllergens(
+        (allergens ?? []).map((a) => a.name),
+        {
+          containsNuts: item.contains_nuts,
+          containsDairy: item.contains_dairy,
+          containsGluten: item.contains_gluten,
+        },
+      ),
       modifierGroups: (groupRows ?? []).map((group) => ({
         id: group.id,
         name: group.name,
