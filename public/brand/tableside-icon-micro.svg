@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <title>Tableside</title>
+  <!-- 16 px version, drawn on the pixel grid: no edge gap, thicker pedestal and foot. Same tokens as the light icon. -->
+  <rect id="tile" width="16" height="16" rx="3.5" fill="#FEF2DF"/>
+  <g id="mark" fill="#842B02">
+    <ellipse id="tabletop" cx="8" cy="5.5" rx="6" ry="2"/>
+    <path id="pedestal-tail" d="M6.5 6.5 H9.75 L8 11.5 H6.5 Z"/>
+    <rect id="foot" x="5" y="11" width="6" height="1.5" rx="0.75"/>
+  </g>
+</svg>

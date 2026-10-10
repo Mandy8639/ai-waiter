@@ -15,6 +15,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Tableside",
   description: "An AI waiter for restaurants.",
+  // Added to an iPhone or iPad home screen, it opens full screen and is
+  // labelled "Tableside". The icon itself is app/apple-icon.png.
+  appleWebApp: {
+    title: "Tableside",
+    statusBarStyle: "default",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
