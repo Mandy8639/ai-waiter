@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tableside icon review</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --cream: #fdfaf6;
+        --soft: #fef2df;
+        --terracotta: #842b02;
+        --espresso: #1e130f;
+        --muted: #6f625a;
+        --dark: #130b08;
+        --dark-card: #1d1310;
+        --amber: #de8f57;
+        --line: #e8ddd2;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      body {
+        background: var(--cream);
+        color: var(--espresso);
+        font-family: Geist, system-ui, sans-serif;
+        padding: 40px;
+        width: 1400px;
+      }
+      h1 {
+        font-size: 28px;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 14px;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 15px;
+        margin-top: 6px;
+      }
+      section {
+        margin-top: 36px;
+      }
+      .row {
+        display: flex;
+        gap: 28px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+      }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+      .cap {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .chip {
+        width: 220px;
+        height: 220px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 20px;
+        border: 1px solid var(--line);
+      }
+      .checker {
+        background-image:
+          linear-gradient(45deg, #e7e2dc 25%, transparent 25%),
+          linear-gradient(-45deg, #e7e2dc 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #e7e2dc 75%),
+          linear-gradient(-45deg, transparent 75%, #e7e2dc 75%);
+        background-size: 20px 20px;
+        background-position:
+          0 0,
+          0 10px,
+          10px -10px,
+          -10px 0;
+        background-color: #fff;
+      }
+      .px {
+        image-rendering: pixelated;
+      }
+      .sizes {
+        display: flex;
+        gap: 26px;
+        align-items: flex-end;
+        padding: 18px 22px;
+        border-radius: 16px;
+      }
+      .phone {
+        width: 300px;
+        height: 300px;
+        border-radius: 36px;
+        padding: 26px 22px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px 14px;
+      }
+      .app {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+      }
+      .app span {
+        font-size: 10.5px;
+      }
+      .ph {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+      }
+      .browser {
+        width: 520px;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+      .tabs {
+        background: #e9e4de;
+        padding: 8px 8px 0;
+        display: flex;
+        gap: 6px;
+      }
+      .tab {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 9px 9px 0 0;
+        font-size: 13px;
+        color: #4b423d;
+      }
+      .tab.on {
+        background: #fff;
+        color: var(--espresso);
+      }
+      .url {
+        padding: 10px 14px;
+        font-size: 13px;
+        color: var(--muted);
+        border-top: 1px solid #eee;
+      }
+      .lockup {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 22px 26px;
+        border-radius: 16px;
+      }
+      .word {
+        font-size: 34px;
+        font-weight: 650;
+        letter-spacing: -0.03em;
+      }
+      table {
+        border-collapse: collapse;
+        font-size: 15px;
+      }
+      td,
+      th {
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .score {
+        font-weight: 650;
+        color: var(--terracotta);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Tableside app icon</h1>
+    <p class="sub">
+      A round café table seen from slightly above. Its pedestal curves like a
+      speech-bubble tail: table first, conversation second. Colours are the
+      app's own tokens.
+    </p>
+
+    <section>
+      <h2>Variants</h2>
+      <div class="row">
+        <div class="cell">
+          <img
+            src="../../public/brand/tableside-icon.svg"
+            width="220"
+            height="220"
+            alt="Light icon"
+          /><span class="cap">Primary, light — #842B02 on #FEF2DF</span>
+        </div>
+        <div class="cell">
+          <img
+            src="../../public/brand/tableside-icon-dark.svg"
+            width="220"
+            height="220"
+            alt="Dark icon"
+          /><span class="cap">Dark — #DE8F57 on #1D1310</span>
+        </div>
+        <div class="cell">
+          <div class="chip" style="background: #fff">
+            <img
+              src="../../public/brand/tableside-mark-black.svg"
+              width="170"
+              alt=""
+            />
+          </div>
+          <span class="cap">Monochrome black</span>
+        </div>
+        <div class="cell">
+          <div class="chip" style="background: #000; border-color: #000">
+            <img
+              src="../../public/brand/tableside-mark-white.svg"
+              width="170"
+              alt=""
+            />
+          </div>
+          <span class="cap">Monochrome white</span>
+        </div>
+        <div class="cell">
+          <div class="chip checker">
+            <img
+              src="../../public/brand/tableside-mark.svg"
+              width="170"
+              alt=""
+            />
+          </div>
+          <span class="cap">Transparent mark</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Small sizes — actual pixels, then 4× (16 px is the micro version)</h2>
+      <div class="row">
+        <div
+          class="sizes"
+          style="background: #fff; border: 1px solid var(--line)"
+        >
+          <div class="cell">
+            <img
+              src="../../public/brand/png/tableside-icon-16.png"
+              width="16"
+              height="16"
+              alt=""
+            /><span class="cap">16</span>
+          </div>
+          <div class="cell">
+            <img
+              src="../../public/brand/png/tableside-icon-24.png"
+              width="24"
+              height="24"
+              alt=""
+            /><span class="cap">24</span>
+          </div>
+          <div class="cell">
+            <img
+              src="../../public/brand/png/tableside-icon-32.png"
+              width="32"
+              height="32"
+              alt=""
+            /><span class="cap">32</span>
+          </div>
+          <div class="cell">
+            <img
+              src="../../public/brand/png/tableside-icon-48.png"
+              width="48"
+              height="48"
+              alt=""
+            /><span class="cap">48</span>
+          </div>
+          <div class="cell">
+            <img
+              src="../../public/brand/png/tableside-icon-64.png"
+              width="64"
+              height="64"
+              alt=""
+            /><span class="cap">64</span>
+          </div>
+        </div>
+        <div class="sizes" style="background: var(--dark)">
+          <div class="cell">
+            <img
+              src="../../public/brand/png/tableside-icon-dark-24.png"
+              width="24"
+              height="24"
+              alt=""
+            /><span class="cap" style="color: #bba">24</span>
+          </div>
+          <div class="cell">
+            <img
+              src="../../public/brand/png/tableside-icon-dark-32.png"
+              width="32"
+              height="32"
+              alt=""
+            /><span class="cap" style="color: #bba">32</span>
+          </div>
+          <div class="cell">
+            <img
+              src="../../public/brand/png/tableside-icon-dark-48.png"
+              width="48"
+              height="48"
+              alt=""
+            /><span class="cap" style="color: #bba">48</span>
+          </div>
+        </div>
+        <div
+          class="sizes"
+          style="background: #fff; border: 1px solid var(--line)"
+        >
+          <div class="cell">
+            <img
+              class="px"
+              src="../../public/brand/png/tableside-icon-16.png"
+              width="64"
+              height="64"
+              alt=""
+            /><span class="cap">16 ×4</span>
+          </div>
+          <div class="cell">
+            <img
+              class="px"
+              src="../../public/brand/png/tableside-icon-24.png"
+              width="96"
+              height="96"
+              alt=""
+            /><span class="cap">24 ×4</span>
+          </div>
+          <div class="cell">
+            <img
+              class="px"
+              src="../../public/brand/png/tableside-icon-32.png"
+              width="128"
+              height="128"
+              alt=""
+            /><span class="cap">32 ×4</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>In context</h2>
+      <div class="row" style="align-items: flex-start">
+        <div class="cell">
+          <div
+            class="phone"
+            style="background: linear-gradient(160deg, #5b6b78, #2c3540)"
+          >
+            <div class="app">
+              <div class="ph" style="background: #e9e6e1"></div>
+              <span style="color: #fff">Mail</span>
+            </div>
+            <div class="app">
+              <div class="ph" style="background: #d9e7d4"></div>
+              <span style="color: #fff">Maps</span>
+            </div>
+            <div class="app">
+              <img
+                src="../../public/brand/tableside-icon.svg"
+                width="52"
+                height="52"
+                alt=""
+              /><span style="color: #fff">Tableside</span>
+            </div>
+            <div class="app">
+              <div class="ph" style="background: #f1d9d1"></div>
+              <span style="color: #fff">Photos</span>
+            </div>
+            <div class="app">
+              <div class="ph" style="background: #dcd8ee"></div>
+              <span style="color: #fff">Notes</span>
+            </div>
+            <div class="app">
+              <div class="ph" style="background: #f3e8c9"></div>
+              <span style="color: #fff">Clock</span>
+            </div>
+            <div class="app">
+              <div class="ph" style="background: #cfe1ea"></div>
+              <span style="color: #fff">Weather</span>
+            </div>
+            <div class="app">
+              <div class="ph" style="background: #e4e4e4"></div>
+              <span style="color: #fff">Settings</span>
+            </div>
+          </div>
+          <span class="cap">Phone home screen, 52 pt</span>
+        </div>
+        <div class="cell">
+          <div
+            class="phone"
+            style="background: linear-gradient(160deg, #1b1714, #0b0908)"
+          >
+            <div class="app">
+              <div class="ph" style="background: #2b2723"></div>
+              <span style="color: #ccc">Mail</span>
+            </div>
+            <div class="app">
+              <img
+                src="../../public/brand/tableside-icon-dark.svg"
+                width="52"
+                height="52"
+                alt=""
+              /><span style="color: #ccc">Tableside</span>
+            </div>
+            <div class="app">
+              <div class="ph" style="background: #2f2a26"></div>
+              <span style="color: #ccc">Maps</span>
+            </div>
+            <div class="app">
+              <div class="ph" style="background: #26221f"></div>
+              <span style="color: #ccc">Photos</span>
+            </div>
+          </div>
+          <span class="cap">Dark home screen</span>
+        </div>
+        <div class="cell" style="gap: 22px">
+          <div class="browser">
+            <div class="tabs">
+              <div class="tab on">
+                <img
+                  src="../../public/brand/png/tableside-icon-16.png"
+                  width="16"
+                  height="16"
+                  alt=""
+                />Kitchen — Tableside
+              </div>
+              <div class="tab">
+                <span
+                  style="
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 4px;
+                    background: #cfc8c0;
+                    display: inline-block;
+                  "
+                ></span
+                >Inbox
+              </div>
+            </div>
+            <div class="url">tableside.menu/dashboard/kitchen</div>
+          </div>
+          <span class="cap">Browser tab / favicon, 16 px</span>
+          <div
+            class="lockup"
+            style="background: #fff; border: 1px solid var(--line)"
+          >
+            <img
+              src="../../public/brand/tableside-icon.svg"
+              width="56"
+              height="56"
+              alt=""
+            /><span class="word">Tableside</span>
+          </div>
+          <div class="lockup" style="background: var(--dark)">
+            <img
+              src="../../public/brand/tableside-icon-dark.svg"
+              width="56"
+              height="56"
+              alt=""
+            /><span class="word" style="color: #f6f1eb">Tableside</span>
+          </div>
+          <span class="cap">Beside the wordmark</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Self-score</h2>
+      <table>
+        <tr>
+          <th>Criterion</th>
+          <th>Score</th>
+          <th>Why</th>
+        </tr>
+        <tr>
+          <td>Silhouette</td>
+          <td class="score">5/5</td>
+          <td>
+            Solid black on white and white on black both read as a round table
+            on a pedestal: no colour, gradient or fine detail needed.
+          </td>
+        </tr>
+        <tr>
+          <td>Contrast</td>
+          <td class="score">5/5</td>
+          <td>
+            8.15:1 light (#842B02 on #FEF2DF) and 7.09:1 dark (#DE8F57 on
+            #1D1310) — both the app's own tokens.
+          </td>
+        </tr>
+        <tr>
+          <td>Spacing</td>
+          <td class="score">5/5</td>
+          <td>
+            Mark spans x 206–818, y 264–786: sides 20%, top 26%, bottom 23%.
+            Sits calm and optically centred.
+          </td>
+        </tr>
+        <tr>
+          <td>Small-size legibility</td>
+          <td class="score">4/5</td>
+          <td>
+            16 px (micro) and 24 px read as a table; the tail's flare shows from
+            24 px and is clear at 32. At 24 px the edge gap blurs to a light
+            line.
+          </td>
+        </tr>
+        <tr>
+          <td>Brand fit</td>
+          <td class="score">4/5</td>
+          <td>
+            Warm, hospitality-first, in Tableside's own terracotta and cream.
+            The conversation read is deliberately quiet — table first.
+          </td>
+        </tr>
+        <tr>
+          <td><b>Total</b></td>
+          <td class="score">23/25</td>
+          <td>Target 23+, with silhouette and small sizes at 4+.</td>
+        </tr>
+      </table>
+    </section>
+  </body>
+</html>

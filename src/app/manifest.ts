@@ -23,11 +23,29 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     background_color: "#faf8f5",
     theme_color: "#7a2e10",
+    // The Tableside icon (public/brand/, docs/brand/tableside-icon-review.png):
+    // a café table whose pedestal curves like a speech-bubble tail. The
+    // rounded tile for launchers that show icons as given; the full-bleed
+    // square for Android, which applies its own mask (the mark sits inside
+    // the mask's safe circle).
     icons: [
       {
-        src: "/favicon.ico",
-        sizes: "any",
-        type: "image/x-icon",
+        src: "/brand/png/tableside-icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/brand/png/tableside-icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/brand/png/tableside-icon-maskable-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
       },
     ],
   };
