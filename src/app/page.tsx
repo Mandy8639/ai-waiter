@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
 
 export const metadata = {
   title: "Tableside — an AI waiter for your restaurant",
@@ -208,6 +209,14 @@ export default function Home() {
         <p>
           Already using Tableside at a table? Scan the code on your table to see
           the menu.
+        </p>
+        <p className="mt-3">
+          <Link
+            href={PRIVACY_POLICY_PATH}
+            className="underline-offset-4 hover:underline"
+          >
+            Privacy policy
+          </Link>
         </p>
       </footer>
     </div>
