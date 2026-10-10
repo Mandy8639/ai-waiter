@@ -1,0 +1,12 @@
+# Build outputs
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+*.idsig
+
+# Signing keys never live in the repo (see android/README.md)
+*.keystore
+*.jks
