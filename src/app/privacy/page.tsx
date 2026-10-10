@@ -294,11 +294,22 @@ export default function PrivacyPolicyPage() {
             we honor these requests wherever you live.
           </li>
           <li>
-            <Term>Delete your account:</Term> email {email} from your
-            account&apos;s address. We&apos;ll delete the account and its
-            personal information, except records we must keep, such as payment
-            records. Owners can also remove a staff member from their team on
-            the Staff page.
+            <Term>Delete your account:</Term> sign in and open{" "}
+            <Link
+              href="/account"
+              className="text-foreground font-medium underline underline-offset-4"
+            >
+              Account
+            </Link>{" "}
+            (at the top of the dashboard, or in the app), then &ldquo;Delete
+            your account&rdquo;. It&apos;s deleted straight away, along with
+            your place in every restaurant team and your devices&apos; order
+            alerts. The restaurants keep their own records, such as orders and
+            payments, without your name on them. A restaurant&apos;s only owner
+            first makes someone else an owner, or asks us to close the
+            restaurant. You can also email {email} from your account&apos;s
+            address and we&apos;ll delete it for you. Owners can remove a staff
+            member from their team on the Staff page.
           </li>
           <li>
             <Term>Order alerts:</Term> turn them off with the &ldquo;Turn

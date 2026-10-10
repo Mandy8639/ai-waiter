@@ -5,6 +5,7 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AuthForm } from "@/components/auth/auth-form";
 import { isInviteToken } from "@/lib/staff/invitations-core";
 import { signIn } from "@/lib/auth/actions";
@@ -17,12 +18,14 @@ export const metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string }>;
+  searchParams: Promise<{ invite?: string; deleted?: string }>;
 }) {
   // Arrived from a staff invitation link, so sign-in should return them to
   // it rather than dropping them on the dashboard.
-  const { invite } = await searchParams;
+  const { invite, deleted } = await searchParams;
   const inviteToken = isInviteToken(invite) ? invite : undefined;
+  // Where deleting an account lands (src/lib/account/actions.ts).
+  const accountDeleted = deleted === "1";
 
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-16">
@@ -36,6 +39,13 @@ export default async function LoginPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
+          {accountDeleted && (
+            <Alert>
+              <AlertDescription>
+                Your account has been deleted.
+              </AlertDescription>
+            </Alert>
+          )}
           <AuthForm
             action={signIn}
             submitLabel="Sign in"

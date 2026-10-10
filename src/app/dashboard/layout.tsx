@@ -42,6 +42,7 @@ export default async function DashboardLayout({
             >
               Create your restaurant
             </Link>
+            <AccountLink />
           </CardContent>
         </Card>
       </div>
@@ -78,6 +79,7 @@ export default async function DashboardLayout({
                 </button>
               </form>
             ))}
+            <AccountLink />
           </CardContent>
         </Card>
       </div>
@@ -146,6 +148,12 @@ export default async function DashboardLayout({
                 {restaurant.role}
               </Badge>
             </div>
+            <Link
+              href="/account"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              Account
+            </Link>
             <LogoutButton />
           </div>
         </header>
@@ -155,5 +163,20 @@ export default async function DashboardLayout({
         </main>
       </div>
     </div>
+  );
+}
+
+/**
+ * For the screens that come before a dashboard exists (no restaurant yet,
+ * or several to choose from): the Account page, with account deletion, is
+ * still reachable from them.
+ */
+function AccountLink() {
+  return (
+    <p className="text-muted-foreground mt-4 text-center text-xs">
+      <Link href="/account" className="underline underline-offset-4">
+        Account settings
+      </Link>
+    </p>
   );
 }

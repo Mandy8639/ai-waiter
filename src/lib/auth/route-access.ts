@@ -7,7 +7,7 @@
  * not run.
  */
 
-export const PROTECTED_PREFIXES = ["/dashboard", "/onboarding"];
+export const PROTECTED_PREFIXES = ["/dashboard", "/onboarding", "/account"];
 export const AUTH_PAGES = ["/login", "/signup"];
 
 export interface RouteVisitor {

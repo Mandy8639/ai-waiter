@@ -1288,6 +1288,34 @@ Emails carry no tracking pixels or click tracking (tracking is off on the Resend
 every database value into HTML, and say why they arrived with a link to the setting that stops
 them.
 
+## Account deletion — (Play Store prerequisite)
+
+Google Play requires an app with sign-up to let people delete their account from inside it, and
+`/privacy` promises it. The Account page (`/account`, linked from the dashboard header and from the
+"create your restaurant" and "choose a restaurant" screens) calls `delete_my_account()`
+(`20261010090000_delete_my_account.sql`) through the ordinary RLS-respecting client. **No
+service-role key is involved:** the `security definer` function deletes exactly one row,
+`auth.users` where `id = auth.uid()`, and the foreign keys decide the rest.
+
+- **Cascades:** the person's `restaurant_users` memberships, their `push_subscriptions` (through
+  the membership), and owner-email dispatches addressed to them.
+- **Set null:** every "who did this" column on the restaurant's own records (`recorded_by`,
+  `created_by`, `confirmed_by`, `resolved_by`, `approved_by`, `done_by`, `accepted_by`, ...). The
+  record is the restaurant's and stays; the person's link to it doesn't.
+- **Kept as a bare id:** `order_status_history.actor_id` and `audit_log.actor_id` have no foreign
+  key by design. Once the `auth.users` row is gone, nothing maps that id to an email.
+- **The last owner is refused** with `SOLE_OWNER`, before the cascade would hit
+  `enforce_at_least_one_owner()` and fail with an unreadable error. The page lists the restaurants
+  (`get_my_sole_owned_restaurants()`) and says what to do: make someone else an owner, or email
+  privacy@tableside.menu to close the restaurant. Deleting a restaurant erases its orders and
+  payment history, so no button does it as a side effect of leaving.
+- **Diners can't use it:** an anonymous QR-scan identity is refused (`ANONYMOUS_SESSION`), and
+  `/account` treats it as signed out. Both functions are revoked from `anon` and `public`.
+
+The action checks the typed `DELETE` again on the server, calls the function, signs the browser
+out, and lands on `/login?deleted=1`. Tested against Postgres in
+`tests/integration/db/delete-my-account.test.ts` and in `tests/unit/account-deletion.test.tsx`.
+
 ## Health check endpoint — (implemented in Batch 8)
 
 `GET /api/health` (`src/app/api/health/route.ts`) reports high-level readiness — `status: "ok"`,
