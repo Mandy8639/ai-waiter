@@ -1,10 +1,13 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "menu.tableside.app",
       "sha256_cert_fingerprints": [
+        "08:CE:7F:FA:97:EE:7F:8E:B6:E0:52:CE:3B:16:57:03:78:E7:09:70:5F:63:9F:77:20:60:69:8C:B5:17:1C:67",
         "48:CD:A6:F6:82:83:30:14:9D:3B:F3:B8:67:10:5F:14:CA:64:DF:8D:41:E0:D0:02:B6:D3:F8:B6:FE:5C:9E:10"
       ]
     }
