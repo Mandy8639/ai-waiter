@@ -47,11 +47,15 @@ export interface PushTarget {
 export type SendOutcome =
   { ok: true } | { ok: false; gone: boolean; statusCode?: number };
 
-export interface DispatchDeps {
+/**
+ * Generic over the kind of device: web push subscriptions by default, and
+ * the iOS app's APNs tokens (src/lib/push/apns.ts) through the same rules.
+ */
+export interface DispatchDeps<T extends { id: string } = PushTarget> {
   /** True when this call claimed the event; false when it was already sent. */
   claim: () => Promise<boolean>;
-  targets: () => Promise<PushTarget[]>;
-  send: (target: PushTarget, payload: PushPayload) => Promise<SendOutcome>;
+  targets: () => Promise<T[]>;
+  send: (target: T, payload: PushPayload) => Promise<SendOutcome>;
   markDelivered: (ids: string[]) => Promise<void>;
   markFailed: (ids: string[]) => Promise<void>;
   remove: (ids: string[]) => Promise<void>;
@@ -64,8 +68,8 @@ export interface DispatchReport {
   removed: number;
 }
 
-export async function dispatchPush(
-  deps: DispatchDeps,
+export async function dispatchPush<T extends { id: string } = PushTarget>(
+  deps: DispatchDeps<T>,
   payload: PushPayload,
 ): Promise<DispatchReport> {
   const report: DispatchReport = { delivered: 0, failed: 0, removed: 0 };

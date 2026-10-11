@@ -7,7 +7,13 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/session";
 import { sendTestPush } from "./dispatch";
 import { pushConfigured } from "./config";
+import { apnsConfig, type NativeTarget } from "./apns";
 import type { PushTarget } from "./dispatch-core";
+
+/** Either kind of device can be reached: web push, or the iOS app's APNs. */
+function anyPushConfigured(): boolean {
+  return pushConfigured() || apnsConfig() !== null;
+}
 
 /**
  * What the kitchen page calls to turn this device's alerts on and off
@@ -107,7 +113,7 @@ export async function deletePushSubscription(
 export async function sendTestPushToMyDevices(
   restaurantId: string,
 ): Promise<PushActionResult & { delivered?: number; total?: number }> {
-  if (!pushConfigured()) {
+  if (!anyPushConfigured()) {
     return { ok: false, error: "Alerts aren't set up for Tableside yet." };
   }
   const auth = await authorizeRestaurantAction(restaurantId, [
@@ -135,13 +141,19 @@ export async function sendTestPushToMyDevices(
   if (error) return { ok: false, error: "Couldn't find your devices." };
 
   const targets = (data ?? []) as PushTarget[];
-  if (targets.length === 0) {
+  // The iOS app's phones, read the same way: native_push_tokens_select_own.
+  const { data: nativeData } = await db
+    .from("native_push_tokens")
+    .select("id, token, environment")
+    .eq("restaurant_id", restaurantId);
+  const nativeTargets = (nativeData ?? []) as NativeTarget[];
+  if (targets.length + nativeTargets.length === 0) {
     return {
       ok: false,
       error: "Alerts aren't on for any of your devices yet.",
     };
   }
-  const { delivered, total } = await sendTestPush(targets);
+  const { delivered, total } = await sendTestPush(targets, nativeTargets);
   return delivered > 0
     ? { ok: true, delivered, total }
     : {
@@ -150,4 +162,61 @@ export async function sendTestPushToMyDevices(
         total,
         error: "The test didn't reach any device.",
       };
+}
+
+const nativeTokenSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{64,200}$/, "Not an APNs device token.");
+
+/**
+ * The iOS app turning this phone's alerts on: the APNs device token it got
+ * from registering, for this restaurant. Any member, like web push; the
+ * database checks membership again (save_native_push_token).
+ */
+export async function saveNativePushToken(
+  restaurantId: string,
+  token: string,
+): Promise<PushActionResult> {
+  if (!apnsConfig()) {
+    return { ok: false, error: "Alerts aren't set up for Tableside yet." };
+  }
+  const auth = await authorizeRestaurantAction(restaurantId, [
+    "owner",
+    "manager",
+    "kitchen",
+    "staff",
+  ]);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const parsed = nativeTokenSchema.safeParse(token);
+  if (!parsed.success) {
+    return { ok: false, error: "This phone returned an unusable token." };
+  }
+  const rpc = auth.context.supabase.rpc.bind(
+    auth.context.supabase,
+  ) as unknown as UntypedRpc;
+  const { error } = await rpc("save_native_push_token", {
+    target_restaurant_id: restaurantId,
+    p_token: parsed.data.toLowerCase(),
+    p_platform: "ios",
+  });
+  if (error) {
+    return { ok: false, error: "Couldn't turn alerts on. Please try again." };
+  }
+  return { ok: true };
+}
+
+/** Turning this phone's alerts off: the caller's own rows only. */
+export async function deleteNativePushToken(
+  token: string,
+): Promise<PushActionResult> {
+  await requireUser();
+  const parsed = nativeTokenSchema.safeParse(token);
+  if (!parsed.success) return { ok: false, error: "Not a device token." };
+  const supabase = await createClient();
+  const rpc = supabase.rpc.bind(supabase) as unknown as UntypedRpc;
+  const { error } = await rpc("delete_native_push_token", {
+    p_token: parsed.data.toLowerCase(),
+  });
+  if (error) return { ok: false, error: "Couldn't turn alerts off." };
+  return { ok: true };
 }

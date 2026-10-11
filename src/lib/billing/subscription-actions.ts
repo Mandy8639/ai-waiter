@@ -5,6 +5,8 @@ import { headers } from "next/headers";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { getStripe, isStripeConfigured } from "@/lib/payments/stripe";
 import { reportError } from "@/lib/observability/report";
+import { canSellPlans } from "@/lib/app-shell/core";
+import { getAppShell } from "@/lib/app-shell/server";
 
 /**
  * Subscribing a restaurant to a paid plan.
@@ -36,6 +38,12 @@ export async function startSubscriptionCheckout(
     "manager",
   ]);
   if (!auth.ok) return { error: auth.error };
+
+  // The store apps never show this button (src/lib/app-shell/core.ts);
+  // refuse there too rather than open a Stripe checkout inside an app.
+  if (!canSellPlans(await getAppShell())) {
+    return { error: "Plans can't be changed in this app." };
+  }
 
   if (!isStripeConfigured()) {
     return { error: "Stripe isn't configured, so plans can't be changed yet." };
