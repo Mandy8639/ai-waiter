@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
+import { SUPPORT_PATH } from "@/lib/legal/support";
 
 export const metadata = {
   title: "Tableside — an AI waiter for your restaurant",
@@ -216,6 +217,13 @@ export default function Home() {
             className="underline-offset-4 hover:underline"
           >
             Privacy policy
+          </Link>
+          {" · "}
+          <Link
+            href={SUPPORT_PATH}
+            className="underline-offset-4 hover:underline"
+          >
+            Support
           </Link>
         </p>
       </footer>

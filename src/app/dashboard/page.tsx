@@ -275,7 +275,7 @@ export default async function DashboardOverviewPage() {
         </div>
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_20rem]">
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <section
           aria-labelledby="recent-heading"
           className="flex flex-col gap-3"

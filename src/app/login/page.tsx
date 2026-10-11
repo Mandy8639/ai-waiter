@@ -10,6 +10,7 @@ import { AuthForm } from "@/components/auth/auth-form";
 import { isInviteToken } from "@/lib/staff/invitations-core";
 import { signIn } from "@/lib/auth/actions";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
+import { SUPPORT_PATH } from "@/lib/legal/support";
 
 export const metadata = {
   title: "Sign in — Tableside",
@@ -68,6 +69,10 @@ export default async function LoginPage({
               className="underline underline-offset-4"
             >
               Privacy policy
+            </Link>
+            {" · "}
+            <Link href={SUPPORT_PATH} className="underline underline-offset-4">
+              Support
             </Link>
           </p>
         </CardContent>
