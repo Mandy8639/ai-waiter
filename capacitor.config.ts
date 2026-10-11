@@ -41,7 +41,9 @@ const config: CapacitorConfig = {
     // sites) opens in Safari. The server URL's own host is listed because
     // Capacitor otherwise only keeps URLs that start with the full
     // server.url, path and all, and a redirect such as sign-in leaves it.
-    allowNavigation: [...new Set(["tableside.menu", new URL(serverUrl).hostname])],
+    allowNavigation: [
+      ...new Set(["tableside.menu", new URL(serverUrl).hostname]),
+    ],
     errorPath: "offline.html",
   },
   ios: {
