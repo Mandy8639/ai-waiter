@@ -13,7 +13,7 @@ export const metadata = {
 
 /**
  * The privacy policy, linked from the landing page, the sign-in and sign-up
- * pages, and the Google Play listing (which requires one).
+ * pages, and the Google Play and App Store listings (both require one).
  *
  * Every statement here describes what the code actually does, so a change
  * to what Tableside collects or where it sends it means a change here too
@@ -63,7 +63,7 @@ export default function PrivacyPolicyPage() {
           Tableside collects, why, who it&apos;s shared with, and the choices
           you have. It covers the website, the menus diners open by scanning the
           QR code on their table, and the Tableside app for restaurant staff on
-          Google Play.
+          Google Play and the App Store.
         </p>
       </div>
 
@@ -110,8 +110,9 @@ export default function PrivacyPolicyPage() {
           <li>
             <Term>Order alerts:</Term> if you turn on notifications on a device,
             that device&apos;s push subscription (an address issued by your
-            browser&apos;s push service) and a description of the browser and
-            device, so we can alert you to new orders and table requests.
+            browser&apos;s push service, or in the iPhone and iPad app a device
+            token issued by Apple) and a description of the browser and device,
+            so we can alert you to new orders and table requests.
           </li>
           <li>
             <Term>Payments and billing:</Term> if your restaurant accepts cards
@@ -251,7 +252,8 @@ export default function PrivacyPolicyPage() {
             Supabase (database and sign-in), Vercel (hosting), Stripe
             (payments), Anthropic and OpenRouter (the AI waiter), Sentry (error
             reports), Resend (email), and your browser&apos;s push service, such
-            as Google, Apple or Mozilla (notifications).
+            as Google, Apple or Mozilla, or Apple&apos;s push notification
+            service in the iPhone and iPad app (notifications).
           </li>
           <li>
             <Term>When the law requires it</Term>, or to protect the rights,

@@ -53,6 +53,8 @@ describe("the privacy policy page", () => {
       "always confirm with the restaurant",
       // Honest about what isn't deleted automatically.
       "We don't delete them automatically",
+      // The iPhone app's alerts go through Apple (App Store privacy answers).
+      "a device token issued by Apple",
     ]) {
       expect(text, statement).toContain(statement);
     }
