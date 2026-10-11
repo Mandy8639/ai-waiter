@@ -12,7 +12,7 @@
   "navigationDividerColorDark": "#000000",
   "backgroundColor": "#FAF8F5",
   "enableNotifications": true,
-  "startUrl": "/dashboard/kitchen",
+  "startUrl": "/dashboard/kitchen?app=android",
   "iconUrl": "https://tableside.menu/brand/png/tableside-icon-512.png",
   "maskableIconUrl": "https://tableside.menu/brand/png/tableside-icon-maskable-512.png",
   "splashScreenFadeOutDuration": 300,
@@ -20,8 +20,8 @@
     "path": "/Users/manideep/Documents/tableside-signing/upload.keystore",
     "alias": "upload"
   },
-  "appVersionName": "1.0.0",
-  "appVersionCode": 1,
+  "appVersionName": "1.1.0",
+  "appVersionCode": 2,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://tableside.menu/manifest.webmanifest",
@@ -43,6 +43,6 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1.0.0",
+  "appVersion": "1.1.0",
   "monochromeIconUrl": "https://tableside.menu/brand/png/tableside-notification-192.png"
 }

@@ -1,5 +1,6 @@
 import { KitchenBoard } from "@/components/kitchen/kitchen-board";
 import { PushAlertsToggle } from "@/components/kitchen/push-alerts-toggle";
+import { apnsConfig } from "@/lib/push/apns";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import Link from "next/link";
 import {
@@ -33,7 +34,10 @@ export default async function KitchenPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         {/* Renders nothing when push isn't configured for this deployment. */}
-        <PushAlertsToggle restaurantId={restaurant.id} />
+        <PushAlertsToggle
+          restaurantId={restaurant.id}
+          nativeAlerts={apnsConfig() !== null}
+        />
         {canManageStations && (
           <Link
             href="/dashboard/kitchen/stations"

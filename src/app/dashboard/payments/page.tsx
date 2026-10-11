@@ -17,6 +17,8 @@ import {
 } from "@/lib/billing/subscription";
 import { startSubscriptionCheckout } from "@/lib/billing/subscription-actions";
 import { SubscribeButton } from "@/components/payments/subscribe-button";
+import { canSellPlans } from "@/lib/app-shell/core";
+import { getAppShell } from "@/lib/app-shell/server";
 
 export const metadata = {
   title: "Payments — Tableside",
@@ -50,6 +52,10 @@ export default async function PaymentsPage() {
   }
 
   const supabase = await createClient();
+  // Inside the store apps, plans aren't offered for purchase at all (Apple
+  // and Google billing rules, src/lib/app-shell/core.ts). The current plan
+  // still shows; changing it happens on the website.
+  const plansForSale = canSellPlans(await getAppShell());
 
   const [{ data: account }, { data: settings }] = await Promise.all([
     supabase
@@ -140,7 +146,7 @@ export default async function PaymentsPage() {
       {/* The other plans. This page is already owner/manager only, and
           startSubscriptionCheckout() enforces the same boundary regardless
           of what renders here. */}
-      {(allPlans ?? []).length > 0 && (
+      {plansForSale && (allPlans ?? []).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Change plan</CardTitle>

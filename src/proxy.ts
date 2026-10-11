@@ -2,6 +2,13 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { decideRouteAccess, PROTECTED_PREFIXES } from "@/lib/auth/route-access";
+import {
+  APP_SHELL_COOKIE,
+  APP_SHELL_QUERY,
+  appShellFrom,
+  appShellRedirect,
+  parseAppShell,
+} from "@/lib/app-shell/core";
 
 /**
  * Refreshes the Supabase auth session on every request (required for SSR —
@@ -17,6 +24,35 @@ import { decideRouteAccess, PROTECTED_PREFIXES } from "@/lib/auth/route-access";
  * never needs SUPABASE_SECRET_KEY to run.
  */
 export async function proxy(request: NextRequest) {
+  // App mode (src/lib/app-shell/core.ts): the store apps open their start
+  // URL with ?app=android|ios. Remembered in a cookie on every response
+  // from that request, so the pages after it know they're in an app too.
+  const announcedShell = parseAppShell(
+    request.nextUrl.searchParams.get(APP_SHELL_QUERY),
+  );
+  const shell = appShellFrom({
+    query: announcedShell,
+    cookie: request.cookies.get(APP_SHELL_COOKIE)?.value,
+    userAgent: request.headers.get("user-agent"),
+  });
+  const remember = (response: NextResponse) => {
+    if (announcedShell) {
+      response.cookies.set(APP_SHELL_COOKIE, announcedShell, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: "lax",
+        httpOnly: true,
+        secure: request.nextUrl.protocol === "https:",
+      });
+    }
+    return response;
+  };
+
+  const appRedirect = appShellRedirect(request.nextUrl.pathname, shell);
+  if (appRedirect) {
+    return remember(NextResponse.redirect(new URL(appRedirect, request.url)));
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -31,9 +67,9 @@ export async function proxy(request: NextRequest) {
         request.nextUrl.pathname.startsWith(prefix),
       )
     ) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return remember(NextResponse.redirect(new URL("/login", request.url)));
     }
-    return supabaseResponse;
+    return remember(supabaseResponse);
   }
 
   const supabase = createServerClient<Database>(
@@ -76,10 +112,10 @@ export async function proxy(request: NextRequest) {
     if (decision.redirectTo) {
       redirectUrl.searchParams.set("redirectTo", decision.redirectTo);
     }
-    return NextResponse.redirect(redirectUrl);
+    return remember(NextResponse.redirect(redirectUrl));
   }
 
-  return supabaseResponse;
+  return remember(supabaseResponse);
 }
 
 export const config = {

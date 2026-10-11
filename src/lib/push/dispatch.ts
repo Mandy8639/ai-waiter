@@ -14,6 +14,8 @@ import {
   type SendOutcome,
 } from "./dispatch-core";
 import { pushServerConfig } from "./config";
+import { apnsConfig, sendApns, type NativeTarget } from "./apns";
+import type { ApnsEnvironment } from "./apns-core";
 
 /**
  * Sends kitchen push notifications (phase F). The I/O half of
@@ -112,6 +114,12 @@ async function run(
     from: (table: string) => ReturnType<typeof admin.from>;
   };
 
+  // The claim (once per event) happens inside the web dispatch below, even
+  // when web push isn't configured, so it's shared by both kinds of device:
+  // the iOS app's tokens are only sent to when this call won the claim.
+  const vapid = configureVapid();
+  let claimed = false;
+
   const report = await dispatchPush(
     {
       claim: async () => {
@@ -123,9 +131,11 @@ async function run(
           )
           .select("id");
         if (error) throw error;
-        return Array.isArray(data) && data.length > 0;
+        claimed = Array.isArray(data) && data.length > 0;
+        return claimed;
       },
       targets: async () => {
+        if (!vapid) return [];
         const { data, error } = await db
           .from("push_subscriptions")
           .select("id, endpoint, p256dh, auth")
@@ -174,6 +184,73 @@ async function run(
     delivered: report.delivered,
     failed: report.failed,
     removed: report.removed,
+  });
+
+  const apns = apnsConfig();
+  if (!apns || !claimed) return;
+
+  // The iOS app's phones, through APNs, with the same bookkeeping rules.
+  // A token's gateway (sandbox for development builds, production for
+  // TestFlight and the App Store) is learned on first delivery.
+  const learned = new Map<string, ApnsEnvironment>();
+  const nativeReport = await dispatchPush<NativeTarget>(
+    {
+      claim: async () => true,
+      targets: async () => {
+        const { data, error } = await db
+          .from("native_push_tokens")
+          .select("id, token, environment")
+          .eq("restaurant_id", restaurantId);
+        if (error) throw error;
+        return (data ?? []) as unknown as NativeTarget[];
+      },
+      send: async (target, message) => {
+        const { outcome, environment } = await sendApns(target, message, apns);
+        if (environment && environment !== target.environment) {
+          learned.set(target.id, environment);
+        }
+        return outcome;
+      },
+      markDelivered: async (ids) => {
+        for (const id of ids) {
+          await db
+            .from("native_push_tokens")
+            .update({
+              last_success_at: new Date().toISOString(),
+              failure_count: 0,
+              ...(learned.has(id) ? { environment: learned.get(id) } : {}),
+            } as never)
+            .eq("id", id);
+        }
+      },
+      markFailed: async (ids) => {
+        const { data } = await db
+          .from("native_push_tokens")
+          .select("id, failure_count")
+          .in("id", ids);
+        for (const row of (data ?? []) as unknown as Array<{
+          id: string;
+          failure_count: number;
+        }>) {
+          await db
+            .from("native_push_tokens")
+            .update({ failure_count: row.failure_count + 1 } as never)
+            .eq("id", row.id);
+        }
+      },
+      remove: async (ids) => {
+        await db.from("native_push_tokens").delete().in("id", ids);
+      },
+    },
+    payload,
+  );
+  log("push_dispatch_ios", {
+    kind,
+    restaurant_id: restaurantId,
+    skipped: nativeReport.skipped ?? null,
+    delivered: nativeReport.delivered,
+    failed: nativeReport.failed,
+    removed: nativeReport.removed,
   });
 }
 
@@ -259,7 +336,8 @@ async function notifyTableRequest(requestId: string) {
 }
 
 function schedule(label: string, work: () => Promise<void>) {
-  if (!configureVapid()) return;
+  // Off only when neither kind of device can be reached.
+  if (!configureVapid() && !apnsConfig()) return;
   after(async () => {
     try {
       await work();
@@ -293,19 +371,29 @@ export function scheduleTableRequestPush(requestId: string): void {
  */
 export async function sendTestPush(
   targets: PushTarget[],
+  nativeTargets: NativeTarget[] = [],
 ): Promise<{ delivered: number; total: number }> {
-  if (!configureVapid() || targets.length === 0) {
-    return { delivered: 0, total: targets.length };
-  }
   const payload: PushPayload = {
     title: "Tableside alerts are on",
-    body: "New orders and table requests will show up here, even with the tab closed.",
+    body: "New orders and table requests will show up here, even with the app closed.",
     url: "/dashboard/kitchen",
     tag: "tableside-test",
   };
-  const outcomes = await Promise.all(targets.map((t) => sendOne(t, payload)));
+  const vapid = configureVapid();
+  const apns = apnsConfig();
+  const sends: Promise<{ ok: boolean }>[] = [
+    ...(vapid ? targets.map((t) => sendOne(t, payload)) : []),
+    ...(apns
+      ? nativeTargets.map((t) =>
+          sendApns(t, payload, apns)
+            .then((r) => r.outcome)
+            .catch(() => ({ ok: false })),
+        )
+      : []),
+  ];
+  const outcomes = await Promise.all(sends);
   return {
     delivered: outcomes.filter((o) => o.ok).length,
-    total: targets.length,
+    total: targets.length + nativeTargets.length,
   };
 }

@@ -11,6 +11,7 @@ import { ConciergeBell } from "lucide-react";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
 import { LogoutButton } from "@/components/dashboard/logout-button";
+import { NativeAppBridge } from "@/components/kitchen/native-app-bridge";
 import { RestaurantSwitcher } from "@/components/dashboard/restaurant-switcher";
 import { getDashboardContext } from "@/lib/restaurants/require-current-restaurant";
 import { countPendingReservationRequests } from "@/lib/notifications/pending-requests";
@@ -161,6 +162,7 @@ export default async function DashboardLayout({
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
           {children}
         </main>
+        <NativeAppBridge />
       </div>
     </div>
   );

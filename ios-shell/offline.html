@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Tableside</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #faf8f5;
+        color: #1d1310;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui,
+          sans-serif;
+        padding: 24px;
+        box-sizing: border-box;
+        text-align: center;
+      }
+      main {
+        max-width: 340px;
+      }
+      img {
+        width: 88px;
+        height: 88px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 20px 0 8px;
+      }
+      p {
+        color: #6b5d55;
+        line-height: 1.45;
+        margin: 0 0 24px;
+      }
+      button {
+        background: #842b02;
+        color: #fff;
+        border: 0;
+        border-radius: 12px;
+        font-size: 17px;
+        font-weight: 600;
+        padding: 14px 28px;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Shown by the Tableside iOS app when tableside.menu can't be reached
+      (capacitor.config.ts, server.errorPath), instead of a web view error.
+    -->
+    <main>
+      <img src="icon.svg" alt="" />
+      <h1>You're offline</h1>
+      <p>
+        Tableside needs an internet connection to show live orders. Check Wi-Fi
+        or mobile data, then try again.
+      </p>
+      <button
+        type="button"
+        onclick="
+          location.href = 'https://tableside.menu/dashboard/kitchen?app=ios'
+        "
+      >
+        Try again
+      </button>
+    </main>
+  </body>
+</html>

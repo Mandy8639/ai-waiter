@@ -1018,6 +1018,32 @@ Verified end to end on 2026-09-25 against the disposable project: a real Chrome 
 Tableside tab was closed, a diner placed an order, and the service worker displayed "New order #2 —
 Table 4 · 1 item".
 
+## Store apps: iOS push and app mode
+
+**iOS kitchen alerts** (`20261011090000_native_push_tokens.sql`, `src/lib/push/apns.ts`). The iOS
+app can't use the browser Push API, so it registers with APNs and saves a device token. Tokens are
+treated exactly like web push subscriptions (above), because each can put a notification on a staff
+member's phone:
+
+- `native_push_tokens` has RLS with one policy, select-own. Writes go only through
+  `save_native_push_token()` (members only, `PUSH_NOT_A_MEMBER` otherwise; diners are members of
+  nothing) and `delete_native_push_token()` (the caller's own rows). Both are revoked from `anon`.
+- A token belongs to a membership and cascades with it: removed from the team, or the account
+  deleted.
+- The service-role sender reads tokens inside the same `run()` as web push and shares its
+  once-per-event claim (`push_dispatches`): a phone is only sent to when that call won the claim.
+  Same delivery bookkeeping, and the same `isSafeNotificationUrl` check on the tap target, which the
+  app checks again before navigating (`native-app-bridge.tsx`).
+- The APNs signing key (`APNS_PRIVATE_KEY`, a `.p8`) is a server-only secret, like the VAPID private
+  key. With it unset, iOS alerts are off.
+
+**App mode** (`src/lib/app-shell/core.ts`). Inside the store apps, Tableside's own plans aren't
+offered for purchase (Apple 3.1.1, Google Play Payments): the Payments page hides "Change plan",
+`startSubscriptionCheckout()` refuses, and `/` (with prices) redirects to the dashboard. The apps
+announce themselves with `?app=android|ios`, which the proxy remembers in an httpOnly cookie, and
+the iOS app's user agent carries `TablesideApp/ios`. **This isn't a security boundary:** anyone can
+set the cookie, and doing so only hides purchase controls from themselves.
+
 ## Diner feedback — (phase N)
 
 `20261006090000_order_feedback.sql`. A diner can rate their visit from 1 to 5 stars, add an optional

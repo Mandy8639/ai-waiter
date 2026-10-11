@@ -4,10 +4,19 @@ import { useEffect, useState, useTransition } from "react";
 import { Bell, BellOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  deleteNativePushToken,
   deletePushSubscription,
+  saveNativePushToken,
   savePushSubscription,
   sendTestPushToMyDevices,
 } from "@/lib/push/actions";
+import {
+  forgetToken,
+  isNativeApp,
+  nativePermission,
+  registerForNativePush,
+  rememberedToken,
+} from "./native-push";
 
 /**
  * "Turn on alerts for this device" on the kitchen board (phase F).
@@ -54,14 +63,38 @@ async function currentSubscription(): Promise<PushSubscription | null> {
   return registration ? registration.pushManager.getSubscription() : null;
 }
 
-export function PushAlertsToggle({ restaurantId }: { restaurantId: string }) {
+export function PushAlertsToggle({
+  restaurantId,
+  nativeAlerts = false,
+}: {
+  restaurantId: string;
+  /** True when the server can send to the iOS app (APNs configured). */
+  nativeAlerts?: boolean;
+}) {
   const [state, setState] = useState<State>("checking");
+  // Inside the Tableside iOS app: Apple's own push instead of the
+  // browser's (./native-push.ts). Decided once, on the client.
+  const [native, setNative] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (isNativeApp()) {
+        const permission = await nativePermission().catch(() => "prompt");
+        if (!cancelled) {
+          setNative(true);
+          setState(
+            permission === "denied"
+              ? "blocked"
+              : permission === "granted" && rememberedToken()
+                ? "on"
+                : "off",
+          );
+        }
+        return;
+      }
       const supported =
         "serviceWorker" in navigator &&
         "PushManager" in window &&
@@ -83,10 +116,35 @@ export function PushAlertsToggle({ restaurantId }: { restaurantId: string }) {
 
   // No keys configured for this deployment: the feature is off, and a
   // button that can only fail is worse than no button.
-  if (!VAPID_PUBLIC_KEY || state === "checking") return null;
+  if (state === "checking") return null;
+  if (native ? !nativeAlerts : !VAPID_PUBLIC_KEY) return null;
 
   function turnOn() {
     setMessage(null);
+    if (native) {
+      startTransition(async () => {
+        try {
+          // iOS's permission prompt, from a click and nowhere else.
+          const token = await registerForNativePush();
+          const result = await saveNativePushToken(restaurantId, token);
+          if (!result.ok) {
+            setMessage(result.error ?? "Couldn't turn alerts on.");
+            return;
+          }
+          setState("on");
+          setMessage("Alerts are on for this device.");
+        } catch (error) {
+          if (error instanceof Error && error.message === "denied") {
+            setState("blocked");
+          } else {
+            setMessage(
+              "This device couldn't turn alerts on. Please try again.",
+            );
+          }
+        }
+      });
+      return;
+    }
     startTransition(async () => {
       // The permission prompt, from a click and nowhere else.
       const permission = await Notification.requestPermission();
@@ -125,6 +183,16 @@ export function PushAlertsToggle({ restaurantId }: { restaurantId: string }) {
 
   function turnOff() {
     setMessage(null);
+    if (native) {
+      startTransition(async () => {
+        const token = rememberedToken();
+        if (token) await deleteNativePushToken(token);
+        forgetToken();
+        setState("off");
+        setMessage("Alerts are off for this device.");
+      });
+      return;
+    }
     startTransition(async () => {
       const subscription = await currentSubscription();
       if (subscription) {
@@ -173,11 +241,17 @@ export function PushAlertsToggle({ restaurantId }: { restaurantId: string }) {
             {state === "ios-needs-install" &&
               "On iPhone or iPad: tap Share, then “Add to Home Screen”, and open Tableside from there to turn alerts on."}
             {state === "blocked" &&
-              "Notifications are blocked for this site. Allow them in the browser's site settings, then reload."}
+              (native
+                ? "Notifications are off for Tableside. Turn them on in Settings → Tableside → Notifications."
+                : "Notifications are blocked for this site. Allow them in the browser's site settings, then reload.")}
             {state === "off" &&
-              "New orders and table requests, even when this tab is closed."}
+              (native
+                ? "New orders and table requests, even when the app is closed."
+                : "New orders and table requests, even when this tab is closed.")}
             {state === "on" &&
-              "New orders and table requests, even when this tab is closed. Not seeing them? Check the device's own notification settings and Do Not Disturb."}
+              (native
+                ? "New orders and table requests, even when the app is closed. Not seeing them? Check Focus and Do Not Disturb."
+                : "New orders and table requests, even when this tab is closed. Not seeing them? Check the device's own notification settings and Do Not Disturb.")}
           </p>
           {message && (
             <p className="text-muted-foreground mt-1" role="status">
