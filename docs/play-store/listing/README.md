@@ -3,6 +3,15 @@
 Draft for Play Console → **Grow users → Store presence → Main store listing**, Tableside staff app
 (`menu.tableside.app`), written 2026-10-10. Every claim describes something the app does today.
 
+**Entered in Play Console on 2026-10-11:**
+
+- the default store listing (text, icon, feature graphic, 4 screenshots in order);
+- store settings (category Business, contact email, website);
+- countries (United States);
+- the 1.1.0 production release, saved as a draft.
+
+All of it waits in Publishing overview until App content is complete (see the end of this page).
+
 ## App name (max 30)
 
 ```
@@ -52,6 +61,7 @@ PAYMENTS
 
 Tableside needs a restaurant account. Sign up and set up your restaurant at tableside.menu, then sign in here with the same email.
 
+Support: https://tableside.menu/support
 Privacy policy: https://tableside.menu/privacy
 ```
 
@@ -71,7 +81,30 @@ on `#FEF2DF`).
 
 - **App category:** Business
 - **Tags:** pick from Play's list. Likely fits: Restaurant management, Point of sale, Business tools.
-- **Contact email (shown publicly):** an address you'll answer. `privacy@tableside.menu` works now;
-  a `support@tableside.menu` forward (free in Porkbun) reads better for general questions.
+- **Contact email (shown publicly):** `privacy@tableside.menu`, the address the support page uses
+  (`src/lib/legal/support.ts`). If you add a `support@tableside.menu` forward in Porkbun, switch both.
 - **Website:** https://tableside.menu
 - **Phone:** optional; leave blank.
+
+## Countries
+
+United States to start, the same as the App Store. Add more under **Production → Countries /
+regions** any time; the listing is English only.
+
+## Production release
+
+- **Bundle:** `android/app-release-bundle.aab`, version 1.1.0 (code 2). It starts in app mode
+  (`/dashboard/kitchen?app=android`), so no plan purchases appear in the app. Build it with the
+  steps in `android/README.md`; the file is gitignored.
+- **Release name:** `1.1.0`
+- **Release notes (en-US, max 500):**
+
+```
+<en-US>
+First release of the Tableside staff app: a live kitchen board, table requests and order alerts for restaurants that take orders with Tableside.
+</en-US>
+```
+
+- It can't be sent for review until App content is complete: Sign in details needs the reviewer
+  account, which unblocks Target audience, which unblocks the final Data safety save
+  (`docs/play-store/app-content-answers.md`). Until then, save the release as a draft.
