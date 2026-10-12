@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ANDROID_USER_AGENT_MARK,
   IOS_USER_AGENT_MARK,
   appShellFrom,
   appShellRedirect,
@@ -34,6 +35,12 @@ describe("appShellFrom", () => {
     expect(
       appShellFrom({ userAgent: `Mozilla/5.0 ... ${IOS_USER_AGENT_MARK}` }),
     ).toBe("ios");
+    // The native Android app announces itself the same way.
+    expect(
+      appShellFrom({
+        userAgent: `Mozilla/5.0 (Linux; Android 15) ... ${ANDROID_USER_AGENT_MARK}`,
+      }),
+    ).toBe("android");
   });
 
   it("ignores anything that isn't one of the two apps", () => {

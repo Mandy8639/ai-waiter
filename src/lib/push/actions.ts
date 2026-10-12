@@ -8,11 +8,12 @@ import { requireUser } from "@/lib/auth/session";
 import { sendTestPush } from "./dispatch";
 import { pushConfigured } from "./config";
 import { apnsConfig, type NativeTarget } from "./apns";
+import { fcmConfig } from "./fcm";
 import type { PushTarget } from "./dispatch-core";
 
 /** Either kind of device can be reached: web push, or the iOS app's APNs. */
 function anyPushConfigured(): boolean {
-  return pushConfigured() || apnsConfig() !== null;
+  return pushConfigured() || apnsConfig() !== null || fcmConfig() !== null;
 }
 
 /**
@@ -141,10 +142,10 @@ export async function sendTestPushToMyDevices(
   if (error) return { ok: false, error: "Couldn't find your devices." };
 
   const targets = (data ?? []) as PushTarget[];
-  // The iOS app's phones, read the same way: native_push_tokens_select_own.
+  // The store apps' phones, read the same way: native_push_tokens_select_own.
   const { data: nativeData } = await db
     .from("native_push_tokens")
-    .select("id, token, environment")
+    .select("id, token, environment, platform")
     .eq("restaurant_id", restaurantId);
   const nativeTargets = (nativeData ?? []) as NativeTarget[];
   if (targets.length + nativeTargets.length === 0) {
@@ -164,20 +165,29 @@ export async function sendTestPushToMyDevices(
       };
 }
 
-const nativeTokenSchema = z
-  .string()
-  .regex(/^[0-9a-fA-F]{64,200}$/, "Not an APNs device token.");
+export type NativePlatform = "ios" | "android";
+
+/** APNs device tokens are hex; FCM registration tokens are not, and are case-sensitive. */
+const nativeTokenSchemas = {
+  ios: z.string().regex(/^[0-9a-fA-F]{64,200}$/, "Not an APNs device token."),
+  android: z
+    .string()
+    .regex(/^[A-Za-z0-9_:-]{100,4096}$/, "Not an FCM registration token."),
+} as const;
 
 /**
- * The iOS app turning this phone's alerts on: the APNs device token it got
- * from registering, for this restaurant. Any member, like web push; the
- * database checks membership again (save_native_push_token).
+ * A store app turning this phone's alerts on: the token it got from
+ * registering (APNs on iPhone, FCM on Android), for this restaurant. Any
+ * member, like web push; the database checks membership again
+ * (save_native_push_token).
  */
 export async function saveNativePushToken(
   restaurantId: string,
   token: string,
+  platform: NativePlatform = "ios",
 ): Promise<PushActionResult> {
-  if (!apnsConfig()) {
+  const configured = platform === "android" ? fcmConfig() : apnsConfig();
+  if (!configured) {
     return { ok: false, error: "Alerts aren't set up for Tableside yet." };
   }
   const auth = await authorizeRestaurantAction(restaurantId, [
@@ -187,7 +197,9 @@ export async function saveNativePushToken(
     "staff",
   ]);
   if (!auth.ok) return { ok: false, error: auth.error };
-  const parsed = nativeTokenSchema.safeParse(token);
+  const schema = nativeTokenSchemas[platform];
+  if (!schema) return { ok: false, error: "Unknown kind of phone." };
+  const parsed = schema.safeParse(token);
   if (!parsed.success) {
     return { ok: false, error: "This phone returned an unusable token." };
   }
@@ -196,8 +208,8 @@ export async function saveNativePushToken(
   ) as unknown as UntypedRpc;
   const { error } = await rpc("save_native_push_token", {
     target_restaurant_id: restaurantId,
-    p_token: parsed.data.toLowerCase(),
-    p_platform: "ios",
+    p_token: platform === "ios" ? parsed.data.toLowerCase() : parsed.data,
+    p_platform: platform,
   });
   if (error) {
     return { ok: false, error: "Couldn't turn alerts on. Please try again." };
@@ -210,12 +222,16 @@ export async function deleteNativePushToken(
   token: string,
 ): Promise<PushActionResult> {
   await requireUser();
-  const parsed = nativeTokenSchema.safeParse(token);
-  if (!parsed.success) return { ok: false, error: "Not a device token." };
+  const parsed = [nativeTokenSchemas.ios, nativeTokenSchemas.android]
+    .map((schema) => schema.safeParse(token))
+    .find((result) => result.success);
+  if (!parsed?.success) return { ok: false, error: "Not a device token." };
   const supabase = await createClient();
   const rpc = supabase.rpc.bind(supabase) as unknown as UntypedRpc;
+  // The database matches both as given and lower-cased (APNs tokens are
+  // stored lower-case, FCM tokens as they are).
   const { error } = await rpc("delete_native_push_token", {
-    p_token: parsed.data.toLowerCase(),
+    p_token: parsed.data,
   });
   if (error) return { ok: false, error: "Couldn't turn alerts off." };
   return { ok: true };

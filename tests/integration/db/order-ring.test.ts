@@ -105,9 +105,39 @@ describe("order ring", () => {
   });
 
   it("reports nothing due when every waiting order has just rung", async () => {
-    // Drain anything earlier tests left due, then check the quiet state.
+    // Drain anything earlier tests left due (rings and stops), then check
+    // the quiet state.
     await claim();
+    await claimHandled();
     expect(await due()).toBe(false);
+  });
+
+  async function claimHandled() {
+    const { rows } = await db.asServiceRole((c) =>
+      c.query<{ order_id: string; restaurant_id: string }>(
+        "select * from public.claim_orders_handled(60);",
+      ),
+    );
+    return rows;
+  }
+
+  it("tells the phones to stop once an alerted order stops waiting, once", async () => {
+    const { orderId, restaurantId, staffUserId } = await alertedOrder(40);
+    // Still waiting: nothing to stop.
+    expect((await claimHandled()).map((r) => r.order_id)).not.toContain(
+      orderId,
+    );
+
+    await transitionOrderStatus(db, staffUserId, orderId, "confirmed");
+    expect(await due()).toBe(true); // the scheduler wakes for the stop
+    expect(await claimHandled()).toContainEqual({
+      order_id: orderId,
+      restaurant_id: restaurantId,
+    });
+    // Stamped: never sent twice.
+    expect((await claimHandled()).map((r) => r.order_id)).not.toContain(
+      orderId,
+    );
   });
 
   it("can be called only by the service role", async () => {
@@ -115,6 +145,7 @@ describe("order ring", () => {
     for (const sql of [
       "select * from public.claim_order_rings(30, 10);",
       "select public.order_rings_due(30, 10);",
+      "select * from public.claim_orders_handled(60);",
     ]) {
       await expect(
         db.asAnon((c) => c.query(sql)),

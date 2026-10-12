@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The icon tile, ai-soft (public/brand/tableside-icon-square.svg). -->
+    <color name="ic_launcher_background">#FEF2DF</color>
+    <!-- The dashboard's background, behind the launch mark. -->
+    <color name="splash_background">#FAF8F5</color>
+</resources>

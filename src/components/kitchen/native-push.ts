@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * Kitchen alerts inside the Tableside iOS app (ios/, Capacitor). The
- * browser Push API doesn't exist in an iOS app's web view, so the app
- * registers with Apple (APNs) natively and the server sends there
- * (src/lib/push/apns.ts). Used by PushAlertsToggle when it finds itself in
- * the app; in a browser nothing here runs, and the plugin code is only
- * loaded on demand so browsers never download it.
+ * Kitchen alerts inside the Tableside store apps (ios/ and android/,
+ * Capacitor). An app's web view has no browser Push API, so the app
+ * registers natively: with Apple (APNs, src/lib/push/apns.ts) on iPhone,
+ * with Firebase (FCM, src/lib/push/fcm.ts) on Android, where the app's
+ * own service makes orders ring until accepted. Used by PushAlertsToggle
+ * when it finds itself in an app; in a browser nothing here runs, and the
+ * plugin code is only loaded on demand so browsers never download it.
  */
 
 interface CapacitorGlobal {
@@ -15,15 +16,22 @@ interface CapacitorGlobal {
 }
 
 export function isNativeApp(): boolean {
-  if (typeof window === "undefined") return false;
+  return nativePlatform() !== null;
+}
+
+/** Which store app this page is running in, if any. */
+export function nativePlatform(): "ios" | "android" | null {
+  if (typeof window === "undefined") return null;
   const capacitor = (window as unknown as { Capacitor?: CapacitorGlobal })
     .Capacitor;
-  return capacitor?.isNativePlatform?.() === true;
+  if (capacitor?.isNativePlatform?.() !== true) return null;
+  const platform = capacitor.getPlatform?.();
+  return platform === "ios" || platform === "android" ? platform : null;
 }
 
 // The token this phone registered, remembered so "Turn off" can remove
 // exactly this phone's row and the toggle knows it's on.
-const TOKEN_KEY = "tableside_apns_token";
+const TOKEN_KEY = "tableside_native_push_token";
 
 export function rememberedToken(): string | null {
   try {
@@ -59,8 +67,8 @@ export async function nativePermission(): Promise<NativePermission> {
 }
 
 /**
- * Asks (from a button press, never on load), then registers with APNs and
- * resolves with the device token. Rejects with "denied" if the person said
+ * Asks (from a button press, never on load), then registers with APNs or
+ * FCM and resolves with the device token. Rejects with "denied" if the person said
  * no.
  */
 export async function registerForNativePush(): Promise<string> {
