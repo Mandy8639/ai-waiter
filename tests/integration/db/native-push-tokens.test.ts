@@ -137,6 +137,54 @@ describe("native push tokens", () => {
     expect(await rows(restaurantId)).toEqual([]);
   });
 
+  // An FCM registration token: mixed case, ':' '-' '_', about 160 long.
+  const fcmToken = (seed: string) => `${seed}Ab-_:`.repeat(30).slice(0, 163);
+
+  it("takes an Android phone's FCM token exactly as given (they're case-sensitive)", async () => {
+    const { userId, restaurantId } = await fullRestaurantFixture(db, "owner");
+    const t = fcmToken("Q");
+    await db.asUser(userId, (c) =>
+      c.query("select public.save_native_push_token($1, $2, 'android');", [
+        restaurantId,
+        t,
+      ]),
+    );
+    const { rows: saved } = await db.admin.query<{
+      token: string;
+      platform: string;
+    }>(
+      "select token, platform from public.native_push_tokens where restaurant_id = $1;",
+      [restaurantId],
+    );
+    expect(saved).toEqual([{ token: t, platform: "android" }]);
+
+    // And removes it the same way.
+    await db.asUser(userId, (c) =>
+      c.query("select public.delete_native_push_token($1);", [t]),
+    );
+    expect(await rows(restaurantId)).toEqual([]);
+  });
+
+  it("refuses a token that doesn't fit its platform, and unknown platforms", async () => {
+    const { userId, restaurantId } = await fullRestaurantFixture(db, "owner");
+    for (const [t, platform] of [
+      [fcmToken("Z"), "ios"], // an FCM token is not an APNs token
+      ["a".repeat(64), "android"], // too short for FCM
+      [token("a"), "windows"],
+    ]) {
+      await expect(
+        db.asUser(userId, (c) =>
+          c.query("select public.save_native_push_token($1, $2, $3);", [
+            restaurantId,
+            t,
+            platform,
+          ]),
+        ),
+        platform,
+      ).rejects.toThrow();
+    }
+  });
+
   it("goes when the member leaves the team, or deletes their account", async () => {
     const { restaurantId } = await fullRestaurantFixture(db, "owner");
     const cook = await db.createAuthUser();

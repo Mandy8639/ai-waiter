@@ -12,7 +12,7 @@ import {
 } from "@/lib/push/actions";
 import {
   forgetToken,
-  isNativeApp,
+  nativePlatform,
   nativePermission,
   registerForNativePush,
   rememberedToken,
@@ -65,26 +65,27 @@ async function currentSubscription(): Promise<PushSubscription | null> {
 
 export function PushAlertsToggle({
   restaurantId,
-  nativeAlerts = false,
+  nativeAlerts = { ios: false, android: false },
 }: {
   restaurantId: string;
-  /** True when the server can send to the iOS app (APNs configured). */
-  nativeAlerts?: boolean;
+  /** Which store apps the server can send to (APNs / FCM configured). */
+  nativeAlerts?: { ios: boolean; android: boolean };
 }) {
   const [state, setState] = useState<State>("checking");
-  // Inside the Tableside iOS app: Apple's own push instead of the
+  // Inside a Tableside store app: the platform's own push instead of the
   // browser's (./native-push.ts). Decided once, on the client.
-  const [native, setNative] = useState(false);
+  const [native, setNative] = useState<"ios" | "android" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (isNativeApp()) {
+      const platform = nativePlatform();
+      if (platform) {
         const permission = await nativePermission().catch(() => "prompt");
         if (!cancelled) {
-          setNative(true);
+          setNative(platform);
           setState(
             permission === "denied"
               ? "blocked"
@@ -117,7 +118,7 @@ export function PushAlertsToggle({
   // No keys configured for this deployment: the feature is off, and a
   // button that can only fail is worse than no button.
   if (state === "checking") return null;
-  if (native ? !nativeAlerts : !VAPID_PUBLIC_KEY) return null;
+  if (native ? !nativeAlerts[native] : !VAPID_PUBLIC_KEY) return null;
 
   function turnOn() {
     setMessage(null);
@@ -126,7 +127,7 @@ export function PushAlertsToggle({
         try {
           // iOS's permission prompt, from a click and nowhere else.
           const token = await registerForNativePush();
-          const result = await saveNativePushToken(restaurantId, token);
+          const result = await saveNativePushToken(restaurantId, token, native);
           if (!result.ok) {
             setMessage(result.error ?? "Couldn't turn alerts on.");
             return;
@@ -241,9 +242,11 @@ export function PushAlertsToggle({
             {state === "ios-needs-install" &&
               "On iPhone or iPad: tap Share, then “Add to Home Screen”, and open Tableside from there to turn alerts on."}
             {state === "blocked" &&
-              (native
-                ? "Notifications are off for Tableside. Turn them on in Settings → Tableside → Notifications."
-                : "Notifications are blocked for this site. Allow them in the browser's site settings, then reload.")}
+              (native === "android"
+                ? "Notifications are off for Tableside. Turn them on in Settings → Apps → Tableside → Notifications."
+                : native
+                  ? "Notifications are off for Tableside. Turn them on in Settings → Tableside → Notifications."
+                  : "Notifications are blocked for this site. Allow them in the browser's site settings, then reload.")}
             {state === "off" &&
               (native
                 ? "New orders and table requests, even when the app is closed."

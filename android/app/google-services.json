@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "318176407011",
+    "project_id": "tableside-2daba",
+    "storage_bucket": "tableside-2daba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:318176407011:android:d4e857eae33fbb4d86c4d6",
+        "android_client_info": {
+          "package_name": "menu.tableside.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCL2s2QRxpFgxYcIG_DPb0TRwOc0LNo-_0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

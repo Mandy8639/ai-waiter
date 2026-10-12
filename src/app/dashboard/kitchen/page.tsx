@@ -1,6 +1,7 @@
 import { KitchenBoard } from "@/components/kitchen/kitchen-board";
 import { PushAlertsToggle } from "@/components/kitchen/push-alerts-toggle";
 import { apnsConfig } from "@/lib/push/apns";
+import { fcmConfig } from "@/lib/push/fcm";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import Link from "next/link";
 import {
@@ -36,7 +37,10 @@ export default async function KitchenPage() {
         {/* Renders nothing when push isn't configured for this deployment. */}
         <PushAlertsToggle
           restaurantId={restaurant.id}
-          nativeAlerts={apnsConfig() !== null}
+          nativeAlerts={{
+            ios: apnsConfig() !== null,
+            android: fcmConfig() !== null,
+          }}
         />
         {canManageStations && (
           <Link

@@ -1073,13 +1073,40 @@ someone confirms or cancels it (`20261012090000_order_ring.sql`, `ringPendingOrd
   worker re-alerts on a reused tag (`renotify`) and vibrates longer for orders. On iPhone, orders
   play the bundled 29-second `order-ring.caf` and are `time-sensitive`, so they ring through Focus
   (the app has the Time Sensitive Notifications entitlement). Apple allows no endless ringing
-  without the Critical Alerts entitlement, which is meant for health and safety apps. Continuous
-  ringing on Android needs the native rebuild planned after launch: the TWA can't post an
-  insistent notification.
+  without the Critical Alerts entitlement, which is meant for health and safety apps. On Android
+  the native app (1.2.0+, `android/`) rings like a delivery tablet: see "Android: orders that
+  ring until accepted" below.
 - **Setup per project** (production only): set `ORDER_RING_SECRET` on Vercel, then add the same
   value and the URL to Supabase Vault:
   `select vault.create_secret('https://tableside.menu/api/cron/order-ring', 'order_ring_url');`
   `select vault.create_secret('<the same value>', 'order_ring_secret');`
+
+## Android: orders that ring until accepted
+
+The Android app is native (Capacitor, `android/`) from 1.2.0; 1.0.0 and 1.1.0 were a TWA. Its
+phones register **Firebase Cloud Messaging** tokens in `native_push_tokens` (platform `android`,
+`20261012120000_native_android_push.sql`) next to the iPhones' APNs tokens, through the same
+`save_native_push_token` (members only, own rows). FCM tokens are case-sensitive and stored as
+given; APNs tokens are still lower-cased.
+
+- **Data-only messages** (`src/lib/push/fcm-core.ts`), so the app builds the alert itself: a new
+  order rings on the "New orders" channel with a looping chime and `FLAG_INSISTENT` until it's
+  touched (`OrderAlerts.java`). Same lock-screen rule as every alert: no dish names, prices or
+  notes.
+- **Stop.** When an order leaves `pending`, its Android phones get a `stop` for the order's group
+  and go quiet. The kitchen board's Confirm and Cancel send it at once
+  (`transitionOrderStatus` → `scheduleOrderHandledPush`). Every other path is caught by the
+  30-second round: `claim_orders_handled()` (service role only) stamps each order once, and
+  `order_rings_due()` wakes the scheduler for it.
+- **The sender.** A Firebase service account (`FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`,
+  `FCM_PRIVATE_KEY`) signs an RS256 assertion for an hour's access token (cached for 50 minutes)
+  with the `firebase.messaging` scope only. A token is deleted only on FCM's `404`/`UNREGISTERED`;
+  a `400` could be our own fault and only counts against it.
+- **New importer of the sender:** `src/lib/orders/transition.ts`. It passes the id of an order
+  the database has just let this member transition, and the sender reads only that order's
+  restaurant and its Android tokens.
+- **Taps** open only `/dashboard…` paths (`MainActivity.openFromAlert`), the same rule as the server
+  and the web service worker.
 
 ## Diner feedback — (phase N)
 

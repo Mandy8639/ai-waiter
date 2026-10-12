@@ -296,6 +296,9 @@ describe("the boundary around the service-role sender", () => {
       "src/app/api/cron/order-ring/route.ts",
       "src/lib/ai/tools/service.ts",
       "src/lib/orders/submit-order.ts",
+      // Confirm/Cancel on the kitchen board: tells Android phones to stop
+      // ringing for an order the database just let this member update.
+      "src/lib/orders/transition.ts",
       "src/lib/push/actions.ts",
       "src/lib/table-requests/actions.ts",
     ]);

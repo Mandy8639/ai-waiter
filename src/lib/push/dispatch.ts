@@ -17,6 +17,15 @@ import {
 import { pushServerConfig } from "./config";
 import { apnsConfig, sendApns, type NativeTarget } from "./apns";
 import type { ApnsEnvironment } from "./apns-core";
+import { fcmConfig, sendFcm } from "./fcm";
+
+/** The native platforms that can be sent to right now. */
+function nativePlatforms(): Array<"ios" | "android"> {
+  return [
+    ...(apnsConfig() ? (["ios"] as const) : []),
+    ...(fcmConfig() ? (["android"] as const) : []),
+  ];
+}
 
 /**
  * Sends kitchen push notifications (phase F). The I/O half of
@@ -196,11 +205,14 @@ async function run(
   });
 
   const apns = apnsConfig();
-  if (!apns || !claimed) return;
+  const fcm = fcmConfig();
+  const platforms = nativePlatforms();
+  if (platforms.length === 0 || !claimed) return;
 
-  // The iOS app's phones, through APNs, with the same bookkeeping rules.
-  // A token's gateway (sandbox for development builds, production for
-  // TestFlight and the App Store) is learned on first delivery.
+  // The store apps' phones, with the same bookkeeping rules: iPhones
+  // through APNs, Android phones through FCM. An iPhone token's gateway
+  // (sandbox for development builds, production for TestFlight and the
+  // App Store) is learned on first delivery.
   const learned = new Map<string, ApnsEnvironment>();
   const nativeReport = await dispatchPush<NativeTarget>(
     {
@@ -208,12 +220,19 @@ async function run(
       targets: async () => {
         const { data, error } = await db
           .from("native_push_tokens")
-          .select("id, token, environment")
-          .eq("restaurant_id", restaurantId);
+          .select("id, token, environment, platform")
+          .eq("restaurant_id", restaurantId)
+          .in("platform", platforms);
         if (error) throw error;
         return (data ?? []) as unknown as NativeTarget[];
       },
       send: async (target, message) => {
+        if (target.platform === "android") {
+          return fcm
+            ? sendFcm(target.token, { kind: "alert", payload: message }, fcm)
+            : { ok: false, gone: false };
+        }
+        if (!apns) return { ok: false, gone: false };
         const { outcome, environment } = await sendApns(target, message, apns);
         if (environment && environment !== target.environment) {
           learned.set(target.id, environment);
@@ -253,7 +272,7 @@ async function run(
     },
     payload,
   );
-  log(options.repeat ? "push_ring_ios" : "push_dispatch_ios", {
+  log(options.repeat ? "push_ring_native" : "push_dispatch_native", {
     kind,
     restaurant_id: restaurantId,
     skipped: nativeReport.skipped ?? null,
@@ -322,12 +341,19 @@ async function notifyOrder(orderId: string) {
  */
 export async function ringPendingOrders(): Promise<{
   rung: number;
+  stopped: number;
   skipped?: "not_configured";
 }> {
-  if (!configureVapid() && !apnsConfig()) {
-    return { rung: 0, skipped: "not_configured" };
-  }
   const admin = createAdminClient();
+  // First the orders that stopped waiting by any path the kitchen board's
+  // Confirm/Cancel didn't already cover: their Android phones may still be
+  // ringing. Claimed (and stamped) even when FCM is off, so they don't
+  // keep the scheduler awake.
+  const stopped = await stopHandledOrders(admin);
+
+  if (!configureVapid() && nativePlatforms().length === 0) {
+    return { rung: 0, stopped, skipped: "not_configured" };
+  }
   const rpc = admin.rpc as unknown as (
     name: string,
     args: Record<string, unknown>,
@@ -362,7 +388,95 @@ export async function ringPendingOrders(): Promise<{
       });
     }
   }
-  return { rung };
+  return { rung, stopped };
+}
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+async function stopHandledOrders(admin: AdminClient): Promise<number> {
+  const rpc = admin.rpc as unknown as (
+    name: string,
+    args: Record<string, unknown>,
+  ) => Promise<{
+    data: Array<{ order_id: string; restaurant_id: string }> | null;
+    error: { message: string } | null;
+  }>;
+  const { data, error } = await rpc.call(admin, "claim_orders_handled", {
+    p_window_minutes: 60,
+  });
+  if (error) throw new Error(error.message);
+  let stopped = 0;
+  for (const claim of data ?? []) {
+    stopped += await sendStop(admin, claim.restaurant_id, claim.order_id);
+  }
+  return stopped;
+}
+
+/** Tells this restaurant's Android phones to stop ringing for the order. */
+async function sendStop(
+  admin: AdminClient,
+  restaurantId: string,
+  orderId: string,
+): Promise<number> {
+  const fcm = fcmConfig();
+  if (!fcm) return 0;
+  const db = admin as unknown as {
+    from: (table: string) => ReturnType<typeof admin.from>;
+  };
+  const { data } = await db
+    .from("native_push_tokens")
+    .select("token")
+    .eq("restaurant_id", restaurantId)
+    .eq("platform", "android");
+  const tokens = (data ?? []) as unknown as Array<{ token: string }>;
+  const outcomes = await Promise.all(
+    tokens.map((t) =>
+      sendFcm(t.token, { kind: "stop", group: `order-${orderId}` }, fcm),
+    ),
+  );
+  log("push_stop", {
+    restaurant_id: restaurantId,
+    delivered: outcomes.filter((o) => o.ok).length,
+    total: tokens.length,
+  });
+  return outcomes.filter((o) => o.ok).length;
+}
+
+/**
+ * Called by transitionOrderStatus() right after the database accepted a
+ * staff member's Confirm or Cancel, with that order's id: the Android
+ * phones ringing for it go quiet now instead of at the next round. The
+ * database already checked the caller may act on the order; this reads
+ * only its restaurant and that restaurant's Android tokens.
+ */
+export function scheduleOrderHandledPush(orderId: string): void {
+  if (!fcmConfig()) return;
+  after(async () => {
+    try {
+      const admin = createAdminClient();
+      const { data: order } = await admin
+        .from("orders")
+        .select("id, restaurant_id, status")
+        .eq("id", orderId)
+        .maybeSingle();
+      if (!order || order.status === "pending") return;
+      const db = admin as unknown as {
+        from: (table: string) => ReturnType<typeof admin.from>;
+      };
+      // Stamp it so the backstop round doesn't send the same stop again.
+      await db
+        .from("push_dispatches")
+        .update({ handled_notified_at: new Date().toISOString() } as never)
+        .eq("kind", "order")
+        .eq("source_id", order.id);
+      await sendStop(admin, order.restaurant_id, order.id);
+    } catch (error) {
+      log("push_error", {
+        kind: "order_handled",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 }
 
 async function notifyTableRequest(requestId: string) {
@@ -407,8 +521,8 @@ async function notifyTableRequest(requestId: string) {
 }
 
 function schedule(label: string, work: () => Promise<void>) {
-  // Off only when neither kind of device can be reached.
-  if (!configureVapid() && !apnsConfig()) return;
+  // Off only when no kind of device can be reached.
+  if (!configureVapid() && nativePlatforms().length === 0) return;
   after(async () => {
     try {
       await work();
@@ -452,15 +566,21 @@ export async function sendTestPush(
   };
   const vapid = configureVapid();
   const apns = apnsConfig();
+  const fcm = fcmConfig();
   const sends: Promise<{ ok: boolean }>[] = [
     ...(vapid ? targets.map((t) => sendOne(t, payload)) : []),
-    ...(apns
-      ? nativeTargets.map((t) =>
-          sendApns(t, payload, apns)
+    ...nativeTargets.map((t) => {
+      if (t.platform === "android") {
+        return fcm
+          ? sendFcm(t.token, { kind: "alert", payload }, fcm)
+          : Promise.resolve({ ok: false });
+      }
+      return apns
+        ? sendApns(t, payload, apns)
             .then((r) => r.outcome)
-            .catch(() => ({ ok: false })),
-        )
-      : []),
+            .catch(() => ({ ok: false }))
+        : Promise.resolve({ ok: false });
+    }),
   ];
   const outcomes = await Promise.all(sends);
   return {

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/session";
+import { scheduleOrderHandledPush } from "@/lib/push/dispatch";
 import { parseTransitionError } from "./errors";
 import type { OrderStatus } from "./status";
 
@@ -38,6 +39,12 @@ export async function transitionOrderStatus(
   });
 
   if (error) return { error: parseTransitionError(error.message) };
+
+  // Accepted or cancelled: the Android phones ringing for this order go
+  // quiet now (the order-ring round would catch it within 30 seconds).
+  if (targetStatus === "confirmed" || targetStatus === "cancelled") {
+    scheduleOrderHandledPush(orderId);
+  }
 
   revalidatePath("/dashboard/kitchen");
   return {};

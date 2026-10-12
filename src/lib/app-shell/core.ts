@@ -30,6 +30,8 @@ export type AppShell = "android" | "ios";
 export const APP_SHELL_COOKIE = "tableside_app";
 export const APP_SHELL_QUERY = "app";
 export const IOS_USER_AGENT_MARK = "TablesideApp/ios";
+/** The native Android app (Capacitor) adds this; the old TWA used ?app=android. */
+export const ANDROID_USER_AGENT_MARK = "TablesideApp/android";
 
 export function parseAppShell(
   value: string | null | undefined,
@@ -54,7 +56,11 @@ export function appShellFrom({
   return (
     parseAppShell(query) ??
     parseAppShell(cookie) ??
-    (userAgent?.includes(IOS_USER_AGENT_MARK) ? "ios" : null)
+    (userAgent?.includes(IOS_USER_AGENT_MARK)
+      ? "ios"
+      : userAgent?.includes(ANDROID_USER_AGENT_MARK)
+        ? "android"
+        : null)
   );
 }
 

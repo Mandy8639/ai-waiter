@@ -1,8 +1,9 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 /**
- * The Tableside iOS app (ios/): the staff dashboard at tableside.menu in a
- * native shell, plus what a website can't do on iPhone:
+ * The Tableside store apps (ios/ and android/): the staff dashboard at
+ * tableside.menu in a native shell, plus what a website can't do on a
+ * phone:
  *   - kitchen alerts through Apple's push service (src/lib/push/apns.ts,
  *     src/components/kitchen/native-push.ts), with notification taps
  *     opening the order;
@@ -11,21 +12,23 @@ import type { CapacitorConfig } from "@capacitor/cli";
  *   - its own icon, launch screen and app-mode behaviour: no plan
  *     purchases inside the app (src/lib/app-shell/core.ts).
  *
- * The start URL announces app mode (?app=ios) and every request carries
- * the user agent mark, so the site knows it's inside the app.
  *
- * Android uses a Trusted Web Activity instead (android/); see
- * android/README.md.
+ * Every request carries the app's user agent mark (TablesideApp/ios or
+ * TablesideApp/android), so the site knows it's inside an app and which
+ * one (src/lib/app-shell/core.ts).
+ *
+ * On Android, orders ring like a delivery tablet until accepted: the
+ * app's own messaging service (android/app/src/main/java/menu/tableside/
+ * app/OrderAlertService.java) and src/lib/push/fcm.ts.
  */
 // For trying a local build against the dev server (`npm run dev`), e.g.
-// CAP_SERVER_URL=http://127.0.0.1:3099/dashboard/kitchen?app=ios npx cap sync ios
+// CAP_SERVER_URL=http://127.0.0.1:3099/dashboard/kitchen npx cap sync ios
 // (127.0.0.1, not localhost: Capacitor uses "localhost" for its own bundled
 // pages and would open a localhost URL in Safari.)
 // The iOS Simulator reaches the Mac directly. Unset, the app
 // loads the live site.
 const serverUrl =
-  process.env.CAP_SERVER_URL ??
-  "https://tableside.menu/dashboard/kitchen?app=ios";
+  process.env.CAP_SERVER_URL ?? "https://tableside.menu/dashboard/kitchen";
 
 const config: CapacitorConfig = {
   appId: "menu.tableside.app",
@@ -45,6 +48,10 @@ const config: CapacitorConfig = {
       ...new Set(["tableside.menu", new URL(serverUrl).hostname]),
     ],
     errorPath: "offline.html",
+  },
+  android: {
+    appendUserAgent: "TablesideApp/android",
+    backgroundColor: "#faf8f5",
   },
   ios: {
     appendUserAgent: "TablesideApp/ios",

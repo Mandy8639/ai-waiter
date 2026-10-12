@@ -1,48 +1,67 @@
 # Tableside for Android (staff app)
 
-A Trusted Web Activity: the live site (`https://tableside.menu`, opening on
-`/dashboard/kitchen`) wrapped as a Play Store app, generated with Google's
-[Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap). There is no
-native code to maintain; changes to the website reach the app immediately.
+The staff dashboard at tableside.menu in a native Android shell, built with
+[Capacitor](https://capacitorjs.com) (`capacitor.config.ts` at the repo root), like the iOS app
+(`ios/`). Package `menu.tableside.app` on Google Play.
 
-`twa-manifest.json` is the source of truth. The rest of this folder is
-generated from it, so edit that file and regenerate rather than editing the
-Gradle files by hand.
+Versions 1.0.0 and 1.1.0 (codes 1 and 2) were a Trusted Web Activity built with Bubblewrap; it
+lives in git history. The native app replaced it in 1.2.0 so new orders can **ring until someone
+accepts them**, which a TWA can't do.
 
-## Rebuild
+## What it adds over the website
 
-Needs Bubblewrap (`npm i -g @bubblewrap/cli`), with its JDK 17 and Android
-SDK paths in `~/.bubblewrap/config.json`.
+- **Orders that ring like a delivery tablet.** The server sends data-only Firebase Cloud Messaging
+  messages (`src/lib/push/fcm.ts`). `OrderAlertService` receives them, and `OrderAlerts` shows a new
+  order on its own **"New orders"** channel:
+  - a looping chime on the alarm stream (`res/raw/order_ring.wav`);
+  - Android's `FLAG_INSISTENT`, so it keeps ringing until the alert is opened or dismissed;
+  - the server re-sends it every 30 seconds while the order waits, so a swiped-away alert rings
+    again;
+  - when anyone accepts, a "stop" message cancels it on every phone.
+- **Table requests** go on a separate, ordinary "Table requests and other alerts" channel.
+- **App mode:** every request carries `TablesideApp/android` in the user agent, so the site hides
+  plan purchases (Google Play Payments policy, `src/lib/app-shell/core.ts`).
+- **An offline screen** (`ios-shell/offline.html`, shared) instead of a web view error.
+
+## Build
+
+Needs JDK 21 and the Android SDK (platform 36). On this machine:
 
 ```bash
-cd android
-bubblewrap update            # regenerate after editing twa-manifest.json (bumps the version)
-bubblewrap build             # asks for the keystore password
+export JAVA_HOME="$HOME/.tableside/jdk-21.0.12.1+1/Contents/Home"
+export ANDROID_HOME="$HOME/.bubblewrap/android_sdk"
+npx cap sync android        # copies capacitor.config and the plugins into android/
+cd android && ./gradlew assembleDebug
 ```
 
-Outputs `app-release-bundle.aab` (upload this to Play) and
-`app-release-signed.apk` (for installing directly on a test phone). Both are
-git-ignored.
+`app/google-services.json` (from the Firebase project's Android app) must be present, or the app
+builds but can't register for alerts.
 
-Every Play upload needs a higher `appVersionCode`; `bubblewrap update` bumps
-it. Use `--skipVersionUpgrade` when only regenerating.
+### Release (Play upload)
 
-## Signing
+The upload key never lives in the repo (`~/Documents/tableside-signing/`). Gradle reads it from the
+environment:
 
-The upload key lives outside the repo in `~/Documents/tableside-signing/`
-(keystore + password file). It is never committed. With Play App Signing,
-Google holds the key that signs what users install; this upload key only
-proves uploads come from us, and Google can reset it if it is lost.
+```bash
+export TABLESIDE_KEYSTORE="$HOME/Documents/tableside-signing/upload.keystore"
+export TABLESIDE_KEY_ALIAS=upload
+export TABLESIDE_KEYSTORE_PASSWORD=…   # from PASSWORD.txt in that folder
+export TABLESIDE_KEY_PASSWORD=…
+cd android && ./gradlew bundleRelease
+# → app/build/outputs/bundle/release/app-release.aab
+```
 
-## Digital Asset Links
+Every upload needs a higher `versionCode` (`app/build.gradle`).
 
-`public/.well-known/assetlinks.json` tells Android that this app and
-tableside.menu belong together; without it the app shows a browser address
-bar. It must list:
+## The server side
 
-1. the upload key's SHA-256 (for test installs of the signed APK), and
-2. Play's **app signing key** SHA-256, from Play Console → Test and
-   release → App integrity, after the first upload.
+In the Firebase console: **Project settings → Service accounts → Generate new private key**, then
+set on Vercel (Production) from that JSON and redeploy:
 
-Check it with:
-https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://tableside.menu&relation=delegate_permission/common.handle_all_urls
+| Variable           | Value                                                          |
+| ------------------ | -------------------------------------------------------------- |
+| `FCM_PROJECT_ID`   | `project_id`                                                   |
+| `FCM_CLIENT_EMAIL` | `client_email`                                                 |
+| `FCM_PRIVATE_KEY`  | `private_key` (one line, with the `\n` line breaks as written) |
+
+Until they're set, the kitchen board hides "Turn on alerts" in the Android app.

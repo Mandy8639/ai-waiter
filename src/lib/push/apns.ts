@@ -21,6 +21,8 @@ export interface NativeTarget {
   id: string;
   token: string;
   environment: ApnsEnvironment | null;
+  /** 'ios' (APNs) or 'android' (FCM, src/lib/push/fcm.ts). */
+  platform?: "ios" | "android";
 }
 
 export function apnsConfig(): ApnsConfig | null {
