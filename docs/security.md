@@ -1044,6 +1044,43 @@ announce themselves with `?app=android|ios`, which the proxy remembers in an htt
 the iOS app's user agent carries `TablesideApp/ios`. **This isn't a security boundary:** anyone can
 set the cookie, and doing so only hides purchase controls from themselves.
 
+## Order ring: alerts until accepted
+
+A new order's single push is easy to miss on a phone in a pocket, so while an order is still
+`pending` the kitchen's devices are alerted again **every 30 seconds, for up to 10 minutes**, until
+someone confirms or cancels it (`20261012090000_order_ring.sql`, `ringPendingOrders` in
+`src/lib/push/dispatch.ts`).
+
+- **Who triggers it.** A Supabase `pg_cron` job runs every 30 seconds. It calls
+  `POST /api/cron/order-ring` through `pg_net` **only when `order_rings_due()` says an order is
+  waiting**, so an idle restaurant costs no requests. The URL and the shared secret come from
+  Supabase Vault (`order_ring_url`, `order_ring_secret`). Until both exist the job calls nothing,
+  so the migration is inert on any project that hasn't been set up.
+- **The lock.** The route refuses every call without `Authorization: Bearer $ORDER_RING_SECRET`
+  (constant-time compare, `src/lib/email/cron-auth.ts`), and refuses everything when the variable
+  is unset. It is a separate secret from `CRON_SECRET`, so neither job can trigger the other. It
+  takes no input at all: what rings is decided entirely in the database.
+- **Once per round.** `claim_order_rings()` selects and stamps due orders in one `UPDATE`, so two
+  overlapping calls never ring an order twice. Both functions are `security definer`, executable
+  by `service_role` only (revoked from `anon` and `authenticated`, tested in
+  `tests/integration/db/order-ring.test.ts`).
+- **The admin client.** The route is a new importer of the service-role sender. It sends the same
+  payloads as the first alert, under the same tag, to the same restaurant's devices; it reads
+  nothing a diner can influence beyond what the first alert already read.
+- **What it says.** "Order #12 is waiting · Table 4 · 2 items · tap to accept": still no dish
+  names, prices or notes on a lock screen.
+- **On the device.** The same tag replaces the earlier alert instead of stacking. The service
+  worker re-alerts on a reused tag (`renotify`) and vibrates longer for orders. On iPhone, orders
+  play the bundled 29-second `order-ring.caf` and are `time-sensitive`, so they ring through Focus
+  (the app has the Time Sensitive Notifications entitlement). Apple allows no endless ringing
+  without the Critical Alerts entitlement, which is meant for health and safety apps. Continuous
+  ringing on Android needs the native rebuild planned after launch: the TWA can't post an
+  insistent notification.
+- **Setup per project** (production only): set `ORDER_RING_SECRET` on Vercel, then add the same
+  value and the URL to Supabase Vault:
+  `select vault.create_secret('https://tableside.menu/api/cron/order-ring', 'order_ring_url');`
+  `select vault.create_secret('<the same value>', 'order_ring_secret');`
+
 ## Diner feedback — (phase N)
 
 `20261006090000_order_feedback.sql`. A diner can rate their visit from 1 to 5 stars, add an optional

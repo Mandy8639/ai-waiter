@@ -7,5 +7,10 @@
 	     TestFlight builds with the production environment. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Time Sensitive Notifications capability: a new order rings through
+	     Focus and Scheduled Summary (interruption-level "time-sensitive",
+	     src/lib/push/apns-core.ts). -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 </dict>
 </plist>

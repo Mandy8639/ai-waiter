@@ -57,6 +57,9 @@ self.addEventListener("push", (event) => {
     // A kitchen alert should stay until someone deals with it, rather than
     // vanishing after a few seconds while the cook's hands are full.
     requireInteraction: true,
+    // An order buzzes long and hard; it repeats every 30 seconds until
+    // someone accepts it (src/lib/push/ring.ts).
+    vibrate: payload.urgent === true ? [500, 250, 500, 250, 500] : undefined,
     // Android shows the badge in the status bar from its transparency alone,
     // so it's the white glyph; without one, Chrome shows a generic bell.
     icon: "/brand/png/tableside-icon-192.png",

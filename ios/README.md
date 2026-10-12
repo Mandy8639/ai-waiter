@@ -29,12 +29,21 @@ In Xcode, select the **App** target:
 
 1. **Signing & Capabilities:** choose your team. Bundle ID `menu.tableside.app`. The **Push
    Notifications** capability comes from `App/App.entitlements`; if Xcode asks, add it there.
+   The **Time Sensitive Notifications** capability also comes from `App/App.entitlements`, so new
+   orders ring through Focus; if Xcode asks, add it there too.
 2. Run on a simulator or a phone to try it. iOS Simulator on Apple silicon receives real APNs
    pushes (sandbox gateway).
 3. **Product → Archive**, then **Distribute App → App Store Connect → Upload**.
 
 Version: `MARKETING_VERSION` (1.0.0) and `CURRENT_PROJECT_VERSION` (build 1) in the target's build
 settings. Every upload needs a higher build number.
+
+## The order ring
+
+New-order alerts play `App/order-ring.caf`, a 29-second chime bundled in the app (Apple's limit
+for notification sounds is 30 seconds), and the server repeats the alert every 30 seconds until
+the order is accepted (docs/security.md, "Order ring"). To change the sound, replace the file with
+another CAF under 30 seconds and keep the name; `tests/unit/apns-core.test.ts` checks it's bundled.
 
 ## Push alerts: the server side
 
