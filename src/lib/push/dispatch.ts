@@ -350,7 +350,7 @@ export async function ringPendingOrders(): Promise<{
         "order",
         loaded.order.id,
         loaded.restaurantId,
-        orderRingPayload(loaded.order),
+        orderRingPayload(loaded.order, claim.ring_count),
         { repeat: true },
       );
       rung += 1;

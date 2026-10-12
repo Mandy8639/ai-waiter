@@ -147,6 +147,7 @@ describe("what the kitchen reads", () => {
       body: "Table 4 · 3 items",
       url: "/dashboard/kitchen",
       tag: "order-o1",
+      group: "order-o1",
       urgent: true,
     });
   });
@@ -209,19 +210,28 @@ describe("keep ringing until accepted", () => {
     ).toBeUndefined();
   });
 
-  it("says the order is still waiting, under the same tag so it replaces the first alert", () => {
-    const ring = orderRingPayload(order);
+  it("says the order is still waiting, in the first alert's group so it replaces it", () => {
+    const ring = orderRingPayload(order, 3);
     expect(ring.title).toBe("Order #12 is waiting");
     expect(ring.body).toBe("Table 4 · 2 items · tap to accept");
-    expect(ring.tag).toBe(orderPayload(order).tag);
+    expect(ring.group).toBe(orderPayload(order).group);
     expect(ring.url).toBe("/dashboard/kitchen");
     expect(ring.urgent).toBe(true);
+  });
+
+  it("gives every ring its own tag, so Android rings instead of swapping the text silently", () => {
+    const tags = [1, 2, 3].map((n) => orderRingPayload(order, n).tag);
+    expect(new Set([...tags, orderPayload(order).tag]).size).toBe(4);
+    expect(tags[0]).toBe("order-o9-ring-1");
   });
 
   it("re-alerts on the device for a reused tag, and buzzes harder for an order", () => {
     const worker = readFileSync(path.resolve("public/sw.js"), "utf8");
     expect(worker).toMatch(/renotify: typeof payload\.tag === "string"/);
     expect(worker).toMatch(/vibrate: payload\.urgent === true/);
+    // Earlier alerts of the same group are closed before the new one shows.
+    expect(worker).toMatch(/notification\.data\.group === group/);
+    expect(worker).toMatch(/notification\.close\(\)/);
   });
 });
 
