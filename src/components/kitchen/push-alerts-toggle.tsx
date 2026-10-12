@@ -13,6 +13,7 @@ import {
 import {
   forgetToken,
   nativePlatform,
+  pushPluginAvailable,
   nativePermission,
   registerForNativePush,
   rememberedToken,
@@ -83,8 +84,22 @@ export function PushAlertsToggle({
     (async () => {
       const platform = nativePlatform();
       if (platform) {
-        const permission = await nativePermission().catch(() => "prompt");
+        // Say why instead of hiding the card when the app's native side
+        // doesn't answer (codes come from ./native-push.ts).
+        let note: string | null = null;
+        let permission: "granted" | "denied" | "prompt" = "prompt";
+        if (!pushPluginAvailable()) {
+          note =
+            "This version of the app can't reach its alerts plugin (no-plugin).";
+        } else {
+          try {
+            permission = await nativePermission();
+          } catch (error) {
+            note = `The app didn't answer the permission check (${error instanceof Error ? error.message : "error"}). Tap to try anyway.`;
+          }
+        }
         if (!cancelled) {
+          if (note) setMessage(note);
           setNative(platform);
           setState(
             permission === "denied"
@@ -139,7 +154,7 @@ export function PushAlertsToggle({
             setState("blocked");
           } else {
             setMessage(
-              "This device couldn't turn alerts on. Please try again.",
+              `This device couldn't turn alerts on (${error instanceof Error ? error.message : "error"}). Please try again.`,
             );
           }
         }
