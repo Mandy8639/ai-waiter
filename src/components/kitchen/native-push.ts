@@ -13,6 +13,33 @@
 interface CapacitorGlobal {
   isNativePlatform?: () => boolean;
   getPlatform?: () => string;
+  isPluginAvailable?: (name: string) => boolean;
+}
+
+/**
+ * Whether the app's native push plugin answers this page at all. False
+ * means the page is in the app but the native bridge isn't connected to
+ * it, so a permission check would never come back.
+ */
+export function pushPluginAvailable(): boolean {
+  if (typeof window === "undefined") return false;
+  const capacitor = (window as unknown as { Capacitor?: CapacitorGlobal })
+    .Capacitor;
+  return capacitor?.isPluginAvailable?.("PushNotifications") === true;
+}
+
+/**
+ * A native call that never answers would leave the alerts card waiting
+ * forever (it renders nothing while checking), so every call gets a
+ * deadline and fails with a short code the card can show.
+ */
+function withDeadline<T>(promise: Promise<T>, ms: number, code: string) {
+  return Promise.race<T>([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(code)), ms),
+    ),
+  ]);
 }
 
 export function isNativeApp(): boolean {
@@ -57,8 +84,12 @@ async function plugin() {
 export type NativePermission = "granted" | "denied" | "prompt";
 
 export async function nativePermission(): Promise<NativePermission> {
-  const PushNotifications = await plugin();
-  const { receive } = await PushNotifications.checkPermissions();
+  const PushNotifications = await withDeadline(plugin(), 5_000, "load-timeout");
+  const { receive } = await withDeadline(
+    PushNotifications.checkPermissions(),
+    5_000,
+    "check-timeout",
+  );
   return receive === "granted"
     ? "granted"
     : receive === "denied"
@@ -72,8 +103,13 @@ export async function nativePermission(): Promise<NativePermission> {
  * no.
  */
 export async function registerForNativePush(): Promise<string> {
-  const PushNotifications = await plugin();
-  const { receive } = await PushNotifications.requestPermissions();
+  const PushNotifications = await withDeadline(plugin(), 5_000, "load-timeout");
+  // Long enough for someone to read and answer Android's permission dialog.
+  const { receive } = await withDeadline(
+    PushNotifications.requestPermissions(),
+    60_000,
+    "ask-timeout",
+  );
   if (receive !== "granted") throw new Error("denied");
 
   const token = await new Promise<string>((resolve, reject) => {
@@ -92,7 +128,7 @@ export async function registerForNativePush(): Promise<string> {
       done(() => reject(new Error(e.error))),
     );
     void PushNotifications.register();
-    setTimeout(() => done(() => reject(new Error("timeout"))), 15_000);
+    setTimeout(() => done(() => reject(new Error("register-timeout"))), 15_000);
   });
 
   try {
