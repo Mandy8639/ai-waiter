@@ -7,6 +7,7 @@ import {
   isGoneStatus,
   isSafeNotificationUrl,
   orderPayload,
+  orderRingPayload,
   tableRequestPayload,
   type DispatchDeps,
   type PushTarget,
@@ -146,6 +147,7 @@ describe("what the kitchen reads", () => {
       body: "Table 4 · 3 items",
       url: "/dashboard/kitchen",
       tag: "order-o1",
+      urgent: true,
     });
   });
 
@@ -185,6 +187,41 @@ describe("what the kitchen reads", () => {
         table: { number: "4", displayName: null },
       }).tag,
     ).toBe("request-r1");
+  });
+});
+
+describe("keep ringing until accepted", () => {
+  const order = {
+    id: "o9",
+    orderNumber: 12,
+    itemCount: 2,
+    table: { number: "4", displayName: null },
+  };
+
+  it("marks orders urgent, and nothing else", () => {
+    expect(orderPayload(order).urgent).toBe(true);
+    expect(
+      tableRequestPayload({
+        id: "r9",
+        kind: "waiter",
+        table: order.table,
+      }).urgent,
+    ).toBeUndefined();
+  });
+
+  it("says the order is still waiting, under the same tag so it replaces the first alert", () => {
+    const ring = orderRingPayload(order);
+    expect(ring.title).toBe("Order #12 is waiting");
+    expect(ring.body).toBe("Table 4 · 2 items · tap to accept");
+    expect(ring.tag).toBe(orderPayload(order).tag);
+    expect(ring.url).toBe("/dashboard/kitchen");
+    expect(ring.urgent).toBe(true);
+  });
+
+  it("re-alerts on the device for a reused tag, and buzzes harder for an order", () => {
+    const worker = readFileSync(path.resolve("public/sw.js"), "utf8");
+    expect(worker).toMatch(/renotify: typeof payload\.tag === "string"/);
+    expect(worker).toMatch(/vibrate: payload\.urgent === true/);
   });
 });
 
@@ -244,6 +281,9 @@ describe("the boundary around the service-role sender", () => {
       .map((file) => path.relative(process.cwd(), file))
       .sort();
     expect(importers).toEqual([
+      // The order-ring scheduler: takes no ids at all, and is locked by
+      // ORDER_RING_SECRET (tests/unit/order-ring-route.test.ts).
+      "src/app/api/cron/order-ring/route.ts",
       "src/lib/ai/tools/service.ts",
       "src/lib/orders/submit-order.ts",
       "src/lib/push/actions.ts",

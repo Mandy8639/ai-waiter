@@ -70,6 +70,12 @@ export function apnsProviderToken(
   return `${signingInput}.${base64url(signature)}`;
 }
 
+/**
+ * The order ring, bundled in the iOS app (ios/App/App/order-ring.caf):
+ * 29 seconds, under Apple's 30-second limit for notification sounds.
+ */
+export const ORDER_RING_SOUND = "order-ring.caf";
+
 export interface ApnsRequest {
   path: string;
   headers: Record<string, string>;
@@ -100,7 +106,10 @@ export function apnsRequest(
     body: JSON.stringify({
       aps: {
         alert: { title: payload.title, body: payload.body },
-        sound: "default",
+        sound: payload.urgent ? ORDER_RING_SOUND : "default",
+        // An order rings through Focus and Scheduled Summary
+        // (App.entitlements has the time-sensitive capability).
+        "interruption-level": payload.urgent ? "time-sensitive" : "active",
         "thread-id": "tableside-kitchen",
       },
       // Read by the app when the notification is tapped (ios/), to open

@@ -7,6 +7,7 @@ import {
   isGoneStatus,
   isSafeNotificationUrl,
   orderPayload,
+  orderRingPayload,
   tableRequestPayload,
   type PushEventKind,
   type PushPayload,
@@ -101,6 +102,10 @@ async function run(
   sourceId: string,
   restaurantId: string,
   payload: PushPayload,
+  // A repeat ring for an order still waiting (ringPendingOrders): its
+  // round was already claimed by claim_order_rings(), so the once-per-event
+  // claim is skipped.
+  options: { repeat?: boolean } = {},
 ) {
   if (!isSafeNotificationUrl(payload.url)) {
     log("push_refused_unsafe_url", { kind, restaurant_id: restaurantId });
@@ -123,6 +128,10 @@ async function run(
   const report = await dispatchPush(
     {
       claim: async () => {
+        if (options.repeat) {
+          claimed = true;
+          return true;
+        }
         const { data, error } = await db
           .from("push_dispatches")
           .upsert(
@@ -177,7 +186,7 @@ async function run(
     payload,
   );
 
-  log("push_dispatch", {
+  log(options.repeat ? "push_ring" : "push_dispatch", {
     kind,
     restaurant_id: restaurantId,
     skipped: report.skipped ?? null,
@@ -244,7 +253,7 @@ async function run(
     },
     payload,
   );
-  log("push_dispatch_ios", {
+  log(options.repeat ? "push_ring_ios" : "push_dispatch_ios", {
     kind,
     restaurant_id: restaurantId,
     skipped: nativeReport.skipped ?? null,
@@ -254,14 +263,14 @@ async function run(
   });
 }
 
-async function notifyOrder(orderId: string) {
+async function loadOrderForPush(orderId: string) {
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("orders")
     .select("id, restaurant_id, order_number, table_id")
     .eq("id", orderId)
     .maybeSingle();
-  if (!order) return;
+  if (!order) return null;
 
   const [{ data: table }, { data: items }] = await Promise.all([
     admin
@@ -277,11 +286,9 @@ async function notifyOrder(orderId: string) {
     0,
   );
 
-  await run(
-    "order",
-    order.id,
-    order.restaurant_id,
-    orderPayload({
+  return {
+    restaurantId: order.restaurant_id,
+    order: {
       id: order.id,
       orderNumber:
         order.order_number === null ? null : Number(order.order_number),
@@ -290,8 +297,72 @@ async function notifyOrder(orderId: string) {
         number: table?.table_number ?? null,
         displayName: table?.display_name ?? null,
       },
-    }),
+    },
+  };
+}
+
+async function notifyOrder(orderId: string) {
+  const loaded = await loadOrderForPush(orderId);
+  if (!loaded) return;
+  await run(
+    "order",
+    loaded.order.id,
+    loaded.restaurantId,
+    orderPayload(loaded.order),
   );
+}
+
+/**
+ * One round of "keep ringing until accepted", called by the scheduler
+ * every 30 seconds (src/app/api/cron/order-ring/route.ts) while some order
+ * is waiting. claim_order_rings() picks every order still 'pending' whose
+ * last alert is at least 30 seconds old (for up to 10 minutes) and stamps
+ * it, so overlapping rounds never ring an order twice. An order stops
+ * ringing the moment anyone confirms or cancels it.
+ */
+export async function ringPendingOrders(): Promise<{
+  rung: number;
+  skipped?: "not_configured";
+}> {
+  if (!configureVapid() && !apnsConfig()) {
+    return { rung: 0, skipped: "not_configured" };
+  }
+  const admin = createAdminClient();
+  const rpc = admin.rpc as unknown as (
+    name: string,
+    args: Record<string, unknown>,
+  ) => Promise<{
+    data: Array<{ order_id: string; ring_count: number }> | null;
+    error: { message: string } | null;
+  }>;
+  const { data, error } = await rpc.call(admin, "claim_order_rings", {
+    p_interval_seconds: 30,
+    p_window_minutes: 10,
+  });
+  if (error) throw new Error(error.message);
+
+  let rung = 0;
+  for (const claim of data ?? []) {
+    try {
+      const loaded = await loadOrderForPush(claim.order_id);
+      if (!loaded) continue;
+      await run(
+        "order",
+        loaded.order.id,
+        loaded.restaurantId,
+        orderRingPayload(loaded.order),
+        { repeat: true },
+      );
+      rung += 1;
+    } catch (failure) {
+      // One order's failure must not silence the others in this round.
+      log("push_ring_error", {
+        order_id: claim.order_id,
+        message: failure instanceof Error ? failure.message : String(failure),
+      });
+    }
+  }
+  return { rung };
 }
 
 async function notifyTableRequest(requestId: string) {

@@ -35,6 +35,12 @@ export interface PushPayload {
    * a re-sent order never stacks a second copy in the tray.
    */
   tag: string;
+  /**
+   * An order the kitchen must act on: rings with the app's order sound
+   * and breaks through Focus on iPhone (apns-core.ts), and buzzes harder
+   * on Android. Orders only; table requests and tests stay ordinary.
+   */
+  urgent?: boolean;
 }
 
 export interface PushTarget {
@@ -157,6 +163,27 @@ export function orderPayload(order: {
     body: `${tableLabel(order.table)} · ${items}`,
     url: "/dashboard/kitchen",
     tag: `order-${order.id}`,
+    urgent: true,
+  };
+}
+
+/**
+ * The repeat alert for an order still waiting to be accepted
+ * (20261012090000_order_ring.sql). Same tag, so it replaces the first
+ * alert instead of stacking, and rings again because the service worker
+ * renotifies on a reused tag and APNs plays the sound each time.
+ */
+export function orderRingPayload(
+  order: Parameters<typeof orderPayload>[0],
+): PushPayload {
+  const first = orderPayload(order);
+  return {
+    ...first,
+    title:
+      order.orderNumber !== null
+        ? `Order #${order.orderNumber} is waiting`
+        : "An order is waiting",
+    body: `${first.body} · tap to accept`,
   };
 }
 

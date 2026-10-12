@@ -1,4 +1,6 @@
 import { generateKeyPairSync, verify } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   APNS_HOSTS,
@@ -7,8 +9,9 @@ import {
   apnsProviderToken,
   apnsRequest,
   apnsVerdict,
+  ORDER_RING_SOUND,
 } from "@/lib/push/apns-core";
-import { orderPayload } from "@/lib/push/dispatch-core";
+import { orderPayload, tableRequestPayload } from "@/lib/push/dispatch-core";
 
 /**
  * Kitchen alerts to the Tableside iOS app through APNs: the provider token
@@ -104,10 +107,47 @@ describe("apnsRequest", () => {
       title: payload.title,
       body: payload.body,
     });
-    expect(body.aps.sound).toBe("default");
+    // An order rings with the bundled order sound and breaks through Focus.
+    expect(body.aps.sound).toBe(ORDER_RING_SOUND);
+    expect(body.aps["interruption-level"]).toBe("time-sensitive");
     // The tap target, a dashboard path, for NativeAppBridge.
     expect(body.url).toBe(payload.url);
     expect(body.url.startsWith("/dashboard")).toBe(true);
+  });
+
+  it("keeps table requests and test alerts ordinary: default sound, no Focus override", () => {
+    for (const ordinary of [
+      tableRequestPayload({
+        id: "0f0e0d0c-0b0a-4908-8706-050403020101",
+        kind: "bill",
+        table: { number: "5", displayName: null },
+      }),
+      {
+        title: "t",
+        body: "b",
+        url: "/dashboard/kitchen",
+        tag: "tableside-test",
+      },
+    ]) {
+      const body = JSON.parse(
+        apnsRequest(token, ordinary, { bundleId: "menu.tableside.app" }, 1000)
+          .body,
+      );
+      expect(body.aps.sound).toBe("default");
+      expect(body.aps["interruption-level"]).toBe("active");
+    }
+  });
+
+  it("names a sound under Apple's 30-second limit that the app actually bundles", () => {
+    expect(
+      existsSync(join(process.cwd(), "ios/App/App", ORDER_RING_SOUND)),
+    ).toBe(true);
+    const project = readFileSync(
+      join(process.cwd(), "ios/App/App.xcodeproj/project.pbxproj"),
+      "utf8",
+    );
+    // In the app target's resources, not just on disk.
+    expect(project).toContain(`${ORDER_RING_SOUND} in Resources`);
   });
 
   it("keeps the collapse ID inside APNs's 64-byte limit", () => {
