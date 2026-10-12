@@ -41,6 +41,14 @@ export interface PushPayload {
    * on Android. Orders only; table requests and tests stay ordinary.
    */
   urgent?: boolean;
+  /**
+   * Alerts about the same thing. A device shows only the newest one of a
+   * group: the service worker closes the others before showing it, and
+   * APNs collapses them. Unlike a reused tag, a NEW tag in the same group
+   * always rings on Android (the TWA replaces a same-tag notification
+   * silently), which is what the repeat alerts need.
+   */
+  group?: string;
 }
 
 export interface PushTarget {
@@ -163,22 +171,25 @@ export function orderPayload(order: {
     body: `${tableLabel(order.table)} · ${items}`,
     url: "/dashboard/kitchen",
     tag: `order-${order.id}`,
+    group: `order-${order.id}`,
     urgent: true,
   };
 }
 
 /**
  * The repeat alert for an order still waiting to be accepted
- * (20261012090000_order_ring.sql). Same tag, so it replaces the first
- * alert instead of stacking, and rings again because the service worker
- * renotifies on a reused tag and APNs plays the sound each time.
+ * (20261012090000_order_ring.sql). A new tag for every ring, so Android
+ * rings for it rather than silently swapping the text, in the same group
+ * as the first alert, so the device still shows just one alert per order.
  */
 export function orderRingPayload(
   order: Parameters<typeof orderPayload>[0],
+  ringCount: number,
 ): PushPayload {
   const first = orderPayload(order);
   return {
     ...first,
+    tag: `${first.tag}-ring-${ringCount}`,
     title:
       order.orderNumber !== null
         ? `Order #${order.orderNumber} is waiting`

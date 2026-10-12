@@ -100,7 +100,8 @@ describe("apnsRequest", () => {
       "apns-priority": "10",
       "apns-topic": "menu.tableside.app",
       "apns-expiration": "1600",
-      "apns-collapse-id": payload.tag,
+      // The group: an order's repeats replace its first alert on iPhone.
+      "apns-collapse-id": payload.group,
     });
     const body = JSON.parse(request.body);
     expect(body.aps.alert).toEqual({
@@ -153,7 +154,7 @@ describe("apnsRequest", () => {
   it("keeps the collapse ID inside APNs's 64-byte limit", () => {
     const request = apnsRequest(
       token,
-      { ...payload, tag: "x".repeat(100) },
+      { ...payload, tag: "x".repeat(100), group: "y".repeat(100) },
       { bundleId: "menu.tableside.app" },
       1000,
     );

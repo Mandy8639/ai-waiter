@@ -49,6 +49,7 @@ self.addEventListener("push", (event) => {
     typeof payload.title === "string" && payload.title
       ? payload.title
       : "Tableside";
+  const group = typeof payload.group === "string" ? payload.group : null;
   const options = {
     body: typeof payload.body === "string" ? payload.body : "",
     tag: typeof payload.tag === "string" ? payload.tag : undefined,
@@ -58,16 +59,30 @@ self.addEventListener("push", (event) => {
     // vanishing after a few seconds while the cook's hands are full.
     requireInteraction: true,
     // An order buzzes long and hard; it repeats every 30 seconds until
-    // someone accepts it (src/lib/push/ring.ts).
+    // someone accepts it (ringPendingOrders, src/lib/push/dispatch.ts).
     vibrate: payload.urgent === true ? [500, 250, 500, 250, 500] : undefined,
     // Android shows the badge in the status bar from its transparency alone,
     // so it's the white glyph; without one, Chrome shows a generic bell.
     icon: "/brand/png/tableside-icon-192.png",
     badge: "/brand/png/tableside-notification-192.png",
-    data: { url: safeUrl(payload.url) },
+    data: { url: safeUrl(payload.url), group },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  // An order's repeat alert comes under a NEW tag, so Android rings for it
+  // (a reused tag is replaced silently in the app). Close the earlier
+  // alerts for the same order first, so there's still only one on screen.
+  event.waitUntil(
+    (group
+      ? self.registration.getNotifications().then((shown) => {
+          for (const notification of shown) {
+            if (notification.data && notification.data.group === group) {
+              notification.close();
+            }
+          }
+        })
+      : Promise.resolve()
+    ).then(() => self.registration.showNotification(title, options)),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

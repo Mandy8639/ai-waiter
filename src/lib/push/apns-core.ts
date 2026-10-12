@@ -101,7 +101,9 @@ export function apnsRequest(
       // Ten minutes, like the web push TTL: an order alert an hour late is
       // noise, the board already shows it.
       "apns-expiration": String(nowSeconds + 600),
-      "apns-collapse-id": payload.tag.slice(0, 64),
+      // The group, when there is one: an order's repeats replace its first
+      // alert instead of stacking (iOS still plays the sound each time).
+      "apns-collapse-id": (payload.group ?? payload.tag).slice(0, 64),
     },
     body: JSON.stringify({
       aps: {
