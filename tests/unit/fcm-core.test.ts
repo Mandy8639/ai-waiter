@@ -7,6 +7,7 @@ import {
   fcmRequestBody,
   fcmSendUrl,
   fcmVerdict,
+  normalizePrivateKey,
 } from "@/lib/push/fcm-core";
 import { orderPayload, orderRingPayload } from "@/lib/push/dispatch-core";
 
@@ -45,6 +46,43 @@ describe("fcmConfigFrom", () => {
       FCM_PRIVATE_KEY: pem.replace(/\n/g, "\\n"),
     });
     expect(parsed).toEqual({ ...config, privateKey: pem.trim() });
+  });
+});
+
+describe("normalizePrivateKey: the ways a pasted key arrives", () => {
+  const oneLine = pem.trim().replace(/\n/g, "\\n");
+  const variants: Array<[string, string]> = [
+    ["one line with \\n, as in the JSON file", oneLine],
+    ["wrapped in the JSON file's quotes", `"${oneLine}"`],
+    ["double-escaped \\\\n", pem.trim().replace(/\n/g, "\\\\n")],
+    ["real line breaks", pem],
+    ["Windows line endings", pem.replace(/\n/g, "\r\n")],
+    ["with spaces around it", `  ${oneLine}  `],
+    [
+      "the whole service-account JSON",
+      JSON.stringify({ type: "service_account", private_key: pem }),
+    ],
+  ];
+
+  it.each(variants)("%s → a key that signs", (_label, raw) => {
+    const key = normalizePrivateKey(raw);
+    expect(key).toBe(pem.trim());
+    const jwt = fcmAssertion({ ...config, privateKey: key! }, 1_000);
+    const [header, claims, signature] = jwt.split(".");
+    expect(
+      verify(
+        "RSA-SHA256",
+        Buffer.from(`${header}.${claims}`),
+        publicKey,
+        Buffer.from(signature, "base64url"),
+      ),
+    ).toBe(true);
+  });
+
+  it("treats empty as missing", () => {
+    expect(normalizePrivateKey(undefined)).toBeNull();
+    expect(normalizePrivateKey("   ")).toBeNull();
+    expect(normalizePrivateKey('""')).toBeNull();
   });
 });
 
