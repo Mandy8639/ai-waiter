@@ -16,6 +16,18 @@ import type { SendOutcome } from "./dispatch-core";
  * fcm-core.ts; this is the network half.
  */
 
+function logFailure(fields: Record<string, unknown>) {
+  // One line per failed send, so "failed=1" in push_dispatch_native has a
+  // reason next to it. Never the token, the key or the access token.
+  console.info(
+    JSON.stringify({
+      event: "push_fcm_failed",
+      timestamp: new Date().toISOString(),
+      ...fields,
+    }),
+  );
+}
+
 export function fcmConfig(): FcmConfig | null {
   return fcmConfigFrom(process.env);
 }
@@ -38,7 +50,21 @@ async function accessToken(config: FcmConfig): Promise<string> {
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) {
-    throw new Error(`FCM token exchange failed (${response.status})`);
+    // Google's OAuth error code and description name the problem (a
+    // malformed key, a wrong email, a clock skew) without any secret in it.
+    let reason = "";
+    try {
+      const body = (await response.json()) as {
+        error?: string;
+        error_description?: string;
+      };
+      reason = [body.error, body.error_description].filter(Boolean).join(": ");
+    } catch {
+      // Not JSON: the status says enough.
+    }
+    throw new Error(
+      `token-exchange ${response.status}${reason ? ` ${reason}` : ""}`,
+    );
   }
   const json = (await response.json()) as { access_token?: string };
   if (!json.access_token) throw new Error("FCM token exchange: no token");
@@ -67,20 +93,34 @@ export async function sendFcm(
     });
     let errorStatus: string | undefined;
     if (!response.ok) {
+      let errorMessage: string | undefined;
       try {
         const json = (await response.json()) as {
-          error?: { status?: string };
+          error?: { status?: string; message?: string };
         };
         errorStatus = json.error?.status;
+        errorMessage = json.error?.message;
       } catch {
         // No JSON body: the status code alone decides.
       }
+      logFailure({
+        status: response.status,
+        error_status: errorStatus ?? null,
+        // FCM's messages describe the request, not the device's token.
+        message: errorMessage?.slice(0, 200) ?? null,
+      });
     }
     const verdict = fcmVerdict(response.status, errorStatus);
     return verdict.ok
       ? { ok: true }
       : { ok: false, gone: verdict.gone, statusCode: response.status };
-  } catch {
+  } catch (error) {
+    // The token exchange (fcmAssertion signs with FCM_PRIVATE_KEY, so a
+    // mangled key fails here) or the network.
+    logFailure({
+      status: null,
+      reason: error instanceof Error ? error.message.slice(0, 200) : "unknown",
+    });
     return { ok: false, gone: false };
   }
 }
