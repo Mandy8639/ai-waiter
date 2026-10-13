@@ -34,11 +34,39 @@ export function fcmConfigFrom(
 ): FcmConfig | null {
   const projectId = env.FCM_PROJECT_ID?.trim();
   const clientEmail = env.FCM_CLIENT_EMAIL?.trim();
-  // Vercel and .env files hold the key on one line, with "\n" for the
-  // line breaks; the PEM needs real ones back.
-  const privateKey = env.FCM_PRIVATE_KEY?.replace(/\\n/g, "\n").trim();
+  const privateKey = normalizePrivateKey(env.FCM_PRIVATE_KEY);
   if (!projectId || !clientEmail || !privateKey) return null;
   return { projectId, clientEmail, privateKey };
+}
+
+/**
+ * The service account's private key as it arrives from an environment
+ * variable, made back into a PEM. A pasted key is easy to mangle, and a
+ * mangled one fails every send with "DECODER routines::unsupported"
+ * (production, 2026-10-13), so the usual shapes are all accepted:
+ *   - on one line with "\n" for the line breaks (as in the JSON file),
+ *     or double-escaped "\\n", or with real line breaks or CRLF;
+ *   - wrapped in the quotes it had in the JSON file;
+ *   - the whole service-account JSON pasted in by mistake.
+ */
+export function normalizePrivateKey(raw: string | undefined): string | null {
+  let key = raw?.trim();
+  if (!key) return null;
+  if (key.startsWith("{")) {
+    try {
+      key = String(
+        (JSON.parse(key) as { private_key?: string }).private_key ?? "",
+      );
+    } catch {
+      // Not JSON after all: treat it as the key text.
+    }
+  }
+  key = key.trim().replace(/^["']+|["']+$/g, "");
+  key = key
+    .replace(/(\\)+n/g, "\n")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+  return key || null;
 }
 
 const OAUTH_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
