@@ -37,3 +37,16 @@ export async function generateTableQrDataUrl(url: string): Promise<string> {
     width: 384,
   });
 }
+
+/**
+ * The same QR code as an SVG: vector, so the printed sheet
+ * (/dashboard/tables/print) stays sharp at any size.
+ */
+export async function generateTableQrSvg(url: string): Promise<string> {
+  return QRCode.toString(url, {
+    type: "svg",
+    errorCorrectionLevel: "M",
+    margin: 1,
+    color: { dark: "#000000", light: "#ffffff" },
+  });
+}

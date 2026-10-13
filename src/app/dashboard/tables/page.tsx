@@ -34,14 +34,24 @@ export default async function TablesPage() {
             Your restaurant&apos;s physical tables.
           </p>
         </div>
-        {canManage && (
-          <Link
-            href="/dashboard/tables/new"
-            className={buttonVariants({ variant: "default" })}
-          >
-            New table
-          </Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {tables?.some((table) => table.is_active) && (
+            <Link
+              href="/dashboard/tables/print"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Print all QR codes
+            </Link>
+          )}
+          {canManage && (
+            <Link
+              href="/dashboard/tables/new"
+              className={buttonVariants({ variant: "default" })}
+            >
+              New table
+            </Link>
+          )}
+        </div>
       </div>
 
       {!tables || tables.length === 0 ? (
