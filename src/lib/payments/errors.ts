@@ -76,11 +76,14 @@ const PAYMENT_MESSAGES: Record<string, string> = {
   PAYMENT_FORBIDDEN: "You don't have access to this restaurant's payments.",
   PAYMENT_CASH_NOT_ACCEPTED:
     "Cash isn't switched on for this restaurant. Turn it on in Payments settings first.",
+  PAYMENT_CARD_TERMINAL_NOT_ACCEPTED:
+    "Card-machine payments aren't switched on for this restaurant. Turn them on in Payments settings first.",
+  PAYMENT_INVALID_METHOD: "Record either cash or a card-machine payment.",
   PAYMENT_NOT_FOUND: "We couldn't find that payment.",
   PAYMENT_NOT_CASH:
-    "Only a cash payment can be reversed. Refund a card payment instead.",
+    "Only a cash or card-machine payment can be reversed. Refund a card payment instead.",
   PAYMENT_NOT_REVERSIBLE:
-    "Only a settled cash payment can be reversed. This one isn't.",
+    "Only a settled payment can be reversed. This one isn't.",
   PAYMENT_REASON_REQUIRED: "Say why this is being reversed.",
 
   // Phase 3, step 3 — raised by start_refund()/attach_refund_stripe_id()/
@@ -93,7 +96,7 @@ const PAYMENT_MESSAGES: Record<string, string> = {
   REFUND_PAYMENT_NOT_SETTLED:
     "That payment never completed, so there's nothing to refund.",
   REFUND_NOT_CARD:
-    "Only a card payment can be refunded. Reverse a cash payment instead.",
+    "Only a card payment can be refunded. Reverse a cash or card-machine payment instead.",
   REFUND_EXCEEDS_PAYMENT: "That's more than is left to refund on this payment.",
   REFUND_NOTHING_LEFT: "This payment has already been fully refunded.",
   REFUND_REASON_REQUIRED: "Say why this is being refunded.",

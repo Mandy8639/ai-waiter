@@ -6,10 +6,12 @@ import { formatMoney } from "@/lib/orders/format";
 import { parsePaymentError } from "./errors";
 import { parseOrderIds, parseReversalReason } from "./cash";
 import { parseTip } from "./tip";
+import type { InPersonMethod } from "./method";
 import { reportError } from "@/lib/observability/report";
 
 /**
- * Recording cash, and un-recording it.
+ * Recording cash (and payments on the restaurant's own card machine), and
+ * un-recording them.
  *
  * Unlike a card payment there is no Stripe call here, and so no multi-step
  * dance to make crash-safe: cash has already changed hands at the table by
@@ -30,6 +32,27 @@ export interface CashState {
 }
 
 export async function recordCashPayment(
+  prevState: CashState,
+  formData: FormData,
+): Promise<CashState> {
+  return recordInPersonPayment("cash", prevState, formData);
+}
+
+/**
+ * A payment taken on the restaurant's own card machine at the register.
+ * To Tableside it is a record exactly like cash — nothing goes through
+ * Stripe — so it takes the same path with a different method, and its own
+ * setting (accept_card_terminal) is checked by the database.
+ */
+export async function recordCardTerminalPayment(
+  prevState: CashState,
+  formData: FormData,
+): Promise<CashState> {
+  return recordInPersonPayment("card_terminal", prevState, formData);
+}
+
+async function recordInPersonPayment(
+  method: InPersonMethod,
   _prevState: CashState,
   formData: FormData,
 ): Promise<CashState> {
@@ -41,15 +64,16 @@ export async function recordCashPayment(
 
   const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc("record_cash_payment", {
+  const { data, error } = await supabase.rpc("record_in_person_payment", {
     p_order_ids: orderIds.value,
+    p_method: method,
     p_tip_amount: tip.value,
   });
 
   if (error) {
     reportError(error, {
       scope: "payments.cash.record",
-      extra: { orderCount: orderIds.value.length },
+      extra: { orderCount: orderIds.value.length, method },
     });
     return { error: parsePaymentError(error.message) };
   }
@@ -59,10 +83,13 @@ export async function recordCashPayment(
   revalidatePath("/dashboard/checkout");
   revalidatePath("/dashboard/reports");
 
+  const what = method === "cash" ? "Cash" : "Card-machine payment";
   const count = orderIds.value.length;
   return {
     success:
-      count === 1 ? "Cash recorded." : `Cash recorded for ${count} orders.`,
+      count === 1
+        ? `${what} recorded.`
+        : `${what} recorded for ${count} orders.`,
   };
 }
 

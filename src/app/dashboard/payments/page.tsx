@@ -65,7 +65,9 @@ export default async function PaymentsPage() {
       .maybeSingle(),
     supabase
       .from("restaurant_settings")
-      .select("payment_timing, accept_card, accept_cash, tipping_enabled")
+      .select(
+        "payment_timing, accept_card, accept_cash, accept_card_terminal, tipping_enabled",
+      )
       .eq("restaurant_id", restaurant.id)
       .maybeSingle(),
   ]);
@@ -249,6 +251,7 @@ export default async function PaymentsPage() {
               paymentTiming: settings?.payment_timing ?? "at_end",
               acceptCard: settings?.accept_card ?? false,
               acceptCash: settings?.accept_cash ?? false,
+              acceptCardTerminal: settings?.accept_card_terminal ?? false,
               tippingEnabled: settings?.tipping_enabled ?? false,
             }}
           />

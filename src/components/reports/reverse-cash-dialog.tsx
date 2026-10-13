@@ -36,9 +36,12 @@ const initialState: CashState = {};
  * skimmed, so the correction is deliberately the part that leaves a trace.
  */
 export function ReverseCashDialog({
+  what = "cash",
   reverseAction,
   paymentLabel,
 }: {
+  /** "cash" or "the card-machine payment": what is being reversed. */
+  what?: string;
   reverseAction: Action;
   /** e.g. "#12" — which payment this is, so the right row is obvious. */
   paymentLabel: string;
@@ -58,11 +61,12 @@ export function ReverseCashDialog({
       <DialogContent>
         <form action={submit} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>Reverse cash for {paymentLabel}</DialogTitle>
+            <DialogTitle>
+              Reverse {what} for {paymentLabel}
+            </DialogTitle>
             <DialogDescription>
-              Marks this cash as never taken, and puts those orders back to
-              unpaid. The record stays, showing that it was reversed and by
-              whom.
+              Marks this as never taken, and puts those orders back to unpaid.
+              The record stays, showing that it was reversed and by whom.
             </DialogDescription>
           </DialogHeader>
 
