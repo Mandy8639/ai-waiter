@@ -79,6 +79,9 @@ export function PushAlertsToggle({
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const iosAlerts = nativeAlerts.ios;
+  const androidAlerts = nativeAlerts.android;
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -98,16 +101,25 @@ export function PushAlertsToggle({
             note = `The app didn't answer the permission check (${error instanceof Error ? error.message : "error"}). Tap to try anyway.`;
           }
         }
+        // A phone that already has alerts on (for any restaurant) is
+        // registered for THIS one too, so someone in several restaurants
+        // hears all of them, and the card only says "on" once the server
+        // has this phone for the restaurant on screen.
+        const token = rememberedToken();
+        let next: State = permission === "denied" ? "blocked" : "off";
+        const platformAlerts = platform === "ios" ? iosAlerts : androidAlerts;
+        if (permission === "granted" && token && platformAlerts) {
+          const saved = await saveNativePushToken(
+            restaurantId,
+            token,
+            platform,
+          ).catch(() => ({ ok: false as const, error: undefined }));
+          next = saved.ok ? "on" : "off";
+        }
         if (!cancelled) {
           if (note) setMessage(note);
           setNative(platform);
-          setState(
-            permission === "denied"
-              ? "blocked"
-              : permission === "granted" && rememberedToken()
-                ? "on"
-                : "off",
-          );
+          setState(next);
         }
         return;
       }
@@ -121,14 +133,24 @@ export function PushAlertsToggle({
       } else if (Notification.permission === "denied") {
         next = "blocked";
       } else {
-        next = (await currentSubscription()) ? "on" : "off";
+        // Same rule as the apps: an existing subscription is registered
+        // for the restaurant on screen before the card says "on".
+        const subscription = await currentSubscription();
+        next = "off";
+        if (subscription && VAPID_PUBLIC_KEY) {
+          const saved = await savePushSubscription(
+            restaurantId,
+            subscription.toJSON(),
+          ).catch(() => ({ ok: false as const }));
+          next = saved.ok ? "on" : "off";
+        }
       }
       if (!cancelled) setState(next);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [restaurantId, iosAlerts, androidAlerts]);
 
   // No keys configured for this deployment: the feature is off, and a
   // button that can only fail is worse than no button.
