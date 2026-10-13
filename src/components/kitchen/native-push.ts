@@ -76,15 +76,25 @@ export function forgetToken() {
   }
 }
 
+/**
+ * The plugin, WRAPPED. A Capacitor plugin object answers any method name,
+ * "then" included, so returning it bare from an async function makes
+ * JavaScript treat it as a promise and wait on it forever (the alerts
+ * card's "load-timeout"). Wrapped in a plain object, it's just a value.
+ */
 async function plugin() {
   const { PushNotifications } = await import("@capacitor/push-notifications");
-  return PushNotifications;
+  return { push: PushNotifications };
 }
 
 export type NativePermission = "granted" | "denied" | "prompt";
 
 export async function nativePermission(): Promise<NativePermission> {
-  const PushNotifications = await withDeadline(plugin(), 5_000, "load-timeout");
+  const { push: PushNotifications } = await withDeadline(
+    plugin(),
+    5_000,
+    "load-timeout",
+  );
   const { receive } = await withDeadline(
     PushNotifications.checkPermissions(),
     5_000,
@@ -103,7 +113,11 @@ export async function nativePermission(): Promise<NativePermission> {
  * no.
  */
 export async function registerForNativePush(): Promise<string> {
-  const PushNotifications = await withDeadline(plugin(), 5_000, "load-timeout");
+  const { push: PushNotifications } = await withDeadline(
+    plugin(),
+    5_000,
+    "load-timeout",
+  );
   // Long enough for someone to read and answer Android's permission dialog.
   const { receive } = await withDeadline(
     PushNotifications.requestPermissions(),
