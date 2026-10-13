@@ -8,6 +8,7 @@ import {
   fcmSendUrl,
   fcmVerdict,
   normalizePrivateKey,
+  privateKeyShape,
 } from "@/lib/push/fcm-core";
 import { orderPayload, orderRingPayload } from "@/lib/push/dispatch-core";
 
@@ -58,6 +59,13 @@ describe("normalizePrivateKey: the ways a pasted key arrives", () => {
     ["real line breaks", pem],
     ["Windows line endings", pem.replace(/\n/g, "\r\n")],
     ["with spaces around it", `  ${oneLine}  `],
+    // A one-line input box can turn the line breaks into spaces.
+    ["line breaks turned into spaces", pem.trim().replace(/\n/g, " ")],
+    ["no line breaks at all", pem.trim().replace(/\n/g, "")],
+    [
+      "quoted, with escaped quotes and a trailing comma from the JSON",
+      `\\"${oneLine}\\",`,
+    ],
     [
       "the whole service-account JSON",
       JSON.stringify({ type: "service_account", private_key: pem }),
@@ -77,6 +85,18 @@ describe("normalizePrivateKey: the ways a pasted key arrives", () => {
         Buffer.from(signature, "base64url"),
       ),
     ).toBe(true);
+  });
+
+  it("describes a key's shape without revealing it", () => {
+    const shape = privateKeyShape(oneLine);
+    expect(shape).toMatchObject({
+      has_begin: true,
+      has_end: true,
+      real_newlines: 0,
+      starts_json: false,
+    });
+    expect(shape.escaped_newlines).toBeGreaterThan(20);
+    expect(JSON.stringify(shape)).not.toMatch(/MII|BEGIN PRIVATE/);
   });
 
   it("treats empty as missing", () => {

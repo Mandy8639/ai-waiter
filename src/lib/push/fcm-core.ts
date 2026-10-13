@@ -61,12 +61,40 @@ export function normalizePrivateKey(raw: string | undefined): string | null {
       // Not JSON after all: treat it as the key text.
     }
   }
-  key = key.trim().replace(/^["']+|["']+$/g, "");
-  key = key
-    .replace(/(\\)+n/g, "\n")
-    .replace(/\r\n?/g, "\n")
-    .trim();
-  return key || null;
+  // Escaped line breaks ("\n", "\\n") become real ones first: "n" is
+  // also a base64 letter, so they must not reach the body as text.
+  key = key.replace(/(\\)+n/g, "\n");
+  // Rebuild the PEM from its parts, whatever happened to the whitespace:
+  // line breaks turned into spaces by a one-line input box, CRLF, quotes,
+  // stray backslashes. The body keeps only base64 characters, re-wrapped
+  // at 64 like any PEM.
+  const pem = key.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
+  if (!pem) {
+    const bare = key.replace(/^["']+|["']+$/g, "").trim();
+    return bare || null;
+  }
+  const body = pem[2].replace(/[^A-Za-z0-9+/=]/g, "");
+  if (!body) return null;
+  const lines = body.match(/.{1,64}/g) ?? [];
+  return `-----BEGIN ${pem[1]}-----\n${lines.join("\n")}\n-----END ${pem[1]}-----`;
+}
+
+/**
+ * The shape of a configured key, for the failure log: enough to tell
+ * which paste went wrong, nothing that reveals the key.
+ */
+export function privateKeyShape(raw: string | undefined) {
+  const value = raw ?? "";
+  return {
+    length: value.length,
+    has_begin: /-----BEGIN [A-Z ]+-----/.test(value),
+    has_end: /-----END [A-Z ]+-----/.test(value),
+    real_newlines: (value.match(/\n/g) ?? []).length,
+    escaped_newlines: (value.match(/\\n/g) ?? []).length,
+    backslashes: (value.match(/\\/g) ?? []).length,
+    quotes: (value.match(/["']/g) ?? []).length,
+    starts_json: value.trim().startsWith("{"),
+  };
 }
 
 const OAUTH_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
