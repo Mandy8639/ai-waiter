@@ -6,6 +6,7 @@ import {
   fcmRequestBody,
   fcmSendUrl,
   fcmVerdict,
+  privateKeyShape,
   type FcmConfig,
   type FcmMessage,
 } from "./fcm-core";
@@ -117,9 +118,15 @@ export async function sendFcm(
   } catch (error) {
     // The token exchange (fcmAssertion signs with FCM_PRIVATE_KEY, so a
     // mangled key fails here) or the network.
+    const reason =
+      error instanceof Error ? error.message.slice(0, 200) : "unknown";
     logFailure({
       status: null,
-      reason: error instanceof Error ? error.message.slice(0, 200) : "unknown",
+      reason,
+      // When the key can't be read, how it's shaped (never its contents).
+      ...(/DECODER|PEM|key/i.test(reason)
+        ? { key_shape: privateKeyShape(process.env.FCM_PRIVATE_KEY) }
+        : {}),
     });
     return { ok: false, gone: false };
   }
