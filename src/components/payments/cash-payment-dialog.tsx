@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatMoney } from "@/lib/orders/format";
+import type { InPersonMethod } from "@/lib/payments/method";
 import type { UnpaidOrder } from "@/lib/payments/unpaid-orders";
 
 interface CashState {
@@ -28,8 +29,31 @@ type Action = (state: CashState, formData: FormData) => Promise<CashState>;
 
 const initialState: CashState = {};
 
+const COPY: Record<
+  InPersonMethod,
+  { trigger: string; title: string; description: string; tip: string }
+> = {
+  cash: {
+    trigger: "Take cash",
+    title: "Cash for",
+    description:
+      "Records money already taken at the table. Nothing is charged to a card.",
+    tip: "Tip",
+  },
+  card_terminal: {
+    trigger: "Paid by card machine",
+    title: "Card machine for",
+    description:
+      "Records a payment already taken on your own card machine at the register. Nothing is charged here.",
+    tip: "Tip (as entered on the machine)",
+  },
+};
+
 /**
- * Recording cash taken at one table.
+ * Recording money taken in person for one table: cash, or the
+ * restaurant's own card machine at the register (`method`). Both are
+ * records rather than charges, so the dialog is the same and only its
+ * words change.
  *
  * Every outstanding order for the table starts selected, because settling
  * the whole table is what usually happens and the alternative — starting
@@ -43,12 +67,14 @@ const initialState: CashState = {};
  * should not be a number they can type.
  */
 export function CashPaymentDialog({
+  method = "cash",
   recordAction,
   tableLabel,
   orders,
   currency,
   tippingEnabled,
 }: {
+  method?: InPersonMethod;
   recordAction: Action;
   tableLabel: string;
   orders: UnpaidOrder[];
@@ -85,6 +111,8 @@ export function CashPaymentDialog({
   }
 
   const money = (value: number) => formatMoney(value, currency);
+  const copy = COPY[method];
+  const tipId = `tip-${method}`;
 
   return (
     <Dialog
@@ -101,19 +129,22 @@ export function CashPaymentDialog({
     >
       <DialogTrigger
         render={
-          <Button type="button" size="sm">
-            Take cash
+          <Button
+            type="button"
+            size="sm"
+            variant={method === "cash" ? "default" : "outline"}
+          >
+            {copy.trigger}
           </Button>
         }
       />
       <DialogContent>
         <form action={submit} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>Cash for {tableLabel}</DialogTitle>
-            <DialogDescription>
-              Records money already taken at the table. Nothing is charged to a
-              card.
-            </DialogDescription>
+            <DialogTitle>
+              {copy.title} {tableLabel}
+            </DialogTitle>
+            <DialogDescription>{copy.description}</DialogDescription>
           </DialogHeader>
 
           {state.error && (
@@ -155,9 +186,9 @@ export function CashPaymentDialog({
 
           {tippingEnabled && (
             <div className="flex flex-col gap-2">
-              <Label htmlFor="tip">Tip</Label>
+              <Label htmlFor={tipId}>{copy.tip}</Label>
               <Input
-                id="tip"
+                id={tipId}
                 name="tip"
                 inputMode="decimal"
                 placeholder="0.00"

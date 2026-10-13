@@ -6,6 +6,7 @@ import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/orders/format";
 import { getReceipt } from "@/lib/payments/receipt";
+import { paymentMethodLabel } from "@/lib/payments/method";
 import {
   isReceiptable,
   type ReceiptState,
@@ -197,8 +198,8 @@ export default async function ReceiptPage({
           <span>{receipt.refunded > 0 ? "You paid" : "Total"}</span>
           <span>{money(receipt.net)}</span>
         </div>
-        <p className="text-muted-foreground pt-1 text-xs capitalize">
-          Paid by {receipt.method}
+        <p className="text-muted-foreground pt-1 text-xs">
+          Paid by {paymentMethodLabel(receipt.method).toLowerCase()}
         </p>
       </div>
 

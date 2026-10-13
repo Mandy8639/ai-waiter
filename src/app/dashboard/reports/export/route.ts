@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { reportError } from "@/lib/observability/report";
 import { csvFilename, toCsv } from "@/lib/reports/csv";
 import { isRangePreset, rangeBounds } from "@/lib/reports/range";
+import { paymentMethodLabel } from "@/lib/payments/method";
 
 /**
  * Reports as CSV, for the bookkeeping that happens outside this app.
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
       r.created_at,
       r.paid_at,
       r.status,
-      r.method,
+      paymentMethodLabel(r.method),
       // Space-separated rather than comma: a comma would force the field
       // to be quoted for no benefit, and "#3 #4" reads fine in a cell.
       (r.order_numbers ?? []).map((n) => `#${n}`).join(" "),

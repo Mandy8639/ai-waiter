@@ -24,6 +24,7 @@ export function PaymentSettingsForm({
     paymentTiming: "at_order" | "at_end";
     acceptCard: boolean;
     acceptCash: boolean;
+    acceptCardTerminal: boolean;
     tippingEnabled: boolean;
   };
   chargesEnabled: boolean;
@@ -94,6 +95,19 @@ export function PaymentSettingsForm({
             disabled={isPending}
           />
           <Label htmlFor="acceptCash">Let staff record cash payments</Label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            key={`acceptCardTerminal:${defaultValues.acceptCardTerminal}`}
+            id="acceptCardTerminal"
+            name="acceptCardTerminal"
+            defaultChecked={defaultValues.acceptCardTerminal}
+            disabled={isPending}
+          />
+          <Label htmlFor="acceptCardTerminal">
+            Let staff record payments taken on your own card machine
+          </Label>
         </div>
 
         <div className="flex items-center gap-2">

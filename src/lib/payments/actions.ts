@@ -295,6 +295,7 @@ export async function updatePaymentSettings(
     paymentTiming: formData.get("paymentTiming"),
     acceptCard: toBoolean(formData.get("acceptCard")),
     acceptCash: toBoolean(formData.get("acceptCash")),
+    acceptCardTerminal: toBoolean(formData.get("acceptCardTerminal")),
     tippingEnabled: toBoolean(formData.get("tippingEnabled")),
   });
   if (!parsed.success) {
@@ -307,6 +308,7 @@ export async function updatePaymentSettings(
       payment_timing: parsed.data.paymentTiming,
       accept_card: parsed.data.acceptCard,
       accept_cash: parsed.data.acceptCash,
+      accept_card_terminal: parsed.data.acceptCardTerminal,
       tipping_enabled: parsed.data.tippingEnabled,
     })
     .eq("restaurant_id", restaurantId);

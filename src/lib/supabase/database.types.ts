@@ -104,6 +104,7 @@ export interface Database {
           payment_timing: "at_order" | "at_end";
           accept_card: boolean;
           accept_cash: boolean;
+          accept_card_terminal: boolean;
           tipping_enabled: boolean;
           created_at: string;
           updated_at: string;
@@ -119,6 +120,7 @@ export interface Database {
           payment_timing?: "at_order" | "at_end";
           accept_card?: boolean;
           accept_cash?: boolean;
+          accept_card_terminal?: boolean;
           tipping_enabled?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -1491,6 +1493,15 @@ export interface Database {
         };
         /** Minor units. 0 for an unknown payment or an unpriced plan. */
         Returns: number;
+      };
+      record_in_person_payment: {
+        Args: {
+          p_order_ids: string[];
+          p_method: "cash" | "card_terminal";
+          p_tip_amount?: number;
+        };
+        /** The new payment's id. The amount is summed from the orders, never supplied by the caller. */
+        Returns: string;
       };
       record_cash_payment: {
         Args: {

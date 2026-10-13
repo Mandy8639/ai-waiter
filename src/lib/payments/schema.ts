@@ -10,6 +10,8 @@ export const paymentSettingsSchema = z.object({
   paymentTiming: z.enum(["at_order", "at_end"]),
   acceptCard: z.boolean(),
   acceptCash: z.boolean(),
+  /** Payments taken on the restaurant's own card machine at the register. */
+  acceptCardTerminal: z.boolean(),
   tippingEnabled: z.boolean(),
 });
 

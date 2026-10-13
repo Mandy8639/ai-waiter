@@ -11,6 +11,7 @@ import { refundPayment } from "@/lib/payments/refund-actions";
 import { reverseCashPayment } from "@/lib/payments/cash-actions";
 import { formatReservationTime } from "@/lib/reservations/timezone";
 import { getDishFunnel, getReportData } from "@/lib/reports/queries";
+import { isInPersonMethod, paymentMethodLabel } from "@/lib/payments/method";
 import { formatRate, openToOrderRate } from "@/lib/reports/funnel";
 import {
   RANGE_LABELS,
@@ -182,7 +183,9 @@ export default async function ReportsPage({
               <Card key={m.method}>
                 <CardContent className="flex items-center justify-between p-4">
                   <div className="flex flex-col">
-                    <span className="font-medium capitalize">{m.method}</span>
+                    <span className="font-medium">
+                      {paymentMethodLabel(m.method)}
+                    </span>
                     <span className="text-muted-foreground text-xs">
                       {m.paymentCount}{" "}
                       {m.paymentCount === 1 ? "payment" : "payments"}
@@ -324,7 +327,7 @@ export default async function ReportsPage({
                         ? p.orderNumbers.map((n) => `#${n}`).join(", ")
                         : "—"}
                     </td>
-                    <td className="py-2 capitalize">{p.method}</td>
+                    <td className="py-2">{paymentMethodLabel(p.method)}</td>
                     <td className="py-2">
                       <Badge
                         variant={
@@ -364,25 +367,33 @@ export default async function ReportsPage({
                             currency={p.currency}
                           />
                         )}
-                      {/* Cash is reversed, not refunded: no money moves, the
-                          record simply says it was never taken. Only a
-                          settled cash payment qualifies — a reversed one is
-                          already done, and reverse_cash_payment() refuses
-                          both that and any card payment regardless. */}
-                      {p.status === "succeeded" && p.method === "cash" && (
-                        <ReverseCashDialog
-                          reverseAction={reverseCashPayment.bind(
-                            null,
-                            p.paymentId,
-                            { amount: p.totalAmount, currency: p.currency },
-                          )}
-                          paymentLabel={
-                            p.orderNumbers.length > 0
-                              ? p.orderNumbers.map((n) => `#${n}`).join(", ")
-                              : "this payment"
-                          }
-                        />
-                      )}
+                      {/* Cash and card-machine payments are reversed, not
+                          refunded: no money moves here, the record simply
+                          says it was never taken (a card-machine refund
+                          happens on the machine). Only a settled one
+                          qualifies — a reversed one is already done, and
+                          reverse_cash_payment() refuses both that and any
+                          Stripe card payment regardless. */}
+                      {p.status === "succeeded" &&
+                        isInPersonMethod(p.method) && (
+                          <ReverseCashDialog
+                            what={
+                              p.method === "cash"
+                                ? "cash"
+                                : "the card-machine payment"
+                            }
+                            reverseAction={reverseCashPayment.bind(
+                              null,
+                              p.paymentId,
+                              { amount: p.totalAmount, currency: p.currency },
+                            )}
+                            paymentLabel={
+                              p.orderNumbers.length > 0
+                                ? p.orderNumbers.map((n) => `#${n}`).join(", ")
+                                : "this payment"
+                            }
+                          />
+                        )}
                     </td>
                   </tr>
                 ))}

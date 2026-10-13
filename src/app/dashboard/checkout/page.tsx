@@ -5,7 +5,10 @@ import { CashPaymentDialog } from "@/components/payments/cash-payment-dialog";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/orders/format";
-import { recordCashPayment } from "@/lib/payments/cash-actions";
+import {
+  recordCardTerminalPayment,
+  recordCashPayment,
+} from "@/lib/payments/cash-actions";
 import { getUnpaidOrdersByTable } from "@/lib/payments/unpaid-orders";
 
 export const metadata = {
@@ -31,13 +34,14 @@ export default async function CheckoutPage() {
   const [{ data: settings }, tables] = await Promise.all([
     supabase
       .from("restaurant_settings")
-      .select("accept_cash, tipping_enabled")
+      .select("accept_cash, accept_card_terminal, tipping_enabled")
       .eq("restaurant_id", restaurant.id)
       .maybeSingle(),
     getUnpaidOrdersByTable(restaurant.id),
   ]);
 
   const acceptsCash = settings?.accept_cash ?? false;
+  const acceptsCardTerminal = settings?.accept_card_terminal ?? false;
   const tippingEnabled = settings?.tipping_enabled ?? false;
 
   const outstanding = tables.reduce((sum, t) => sum + t.total, 0);
@@ -63,12 +67,14 @@ export default async function CheckoutPage() {
       </div>
 
       {/* Said before any button is offered rather than after one fails:
-          record_cash_payment() refuses outright when cash is switched off,
-          and a staff member cannot fix that from here. */}
-      {!acceptsCash && (
+          record_in_person_payment() refuses outright when a method is
+          switched off, and a staff member cannot fix that from here. */}
+      {!acceptsCash && !acceptsCardTerminal && (
         <Card>
           <CardContent className="p-4 text-sm">
-            <span className="font-medium">Cash isn&apos;t switched on.</span>{" "}
+            <span className="font-medium">
+              Cash and card-machine payments aren&apos;t switched on.
+            </span>{" "}
             <span className="text-muted-foreground">
               An owner or manager can turn it on in{" "}
               <Link href="/dashboard/payments" className="underline">
@@ -126,14 +132,29 @@ export default async function CheckoutPage() {
                   ))}
                 </ul>
 
-                {acceptsCash && (
-                  <CashPaymentDialog
-                    recordAction={recordCashPayment}
-                    tableLabel={table.tableLabel}
-                    orders={table.orders}
-                    currency={table.currency}
-                    tippingEnabled={tippingEnabled}
-                  />
+                {(acceptsCash || acceptsCardTerminal) && (
+                  <div className="flex flex-wrap gap-2">
+                    {acceptsCash && (
+                      <CashPaymentDialog
+                        method="cash"
+                        recordAction={recordCashPayment}
+                        tableLabel={table.tableLabel}
+                        orders={table.orders}
+                        currency={table.currency}
+                        tippingEnabled={tippingEnabled}
+                      />
+                    )}
+                    {acceptsCardTerminal && (
+                      <CashPaymentDialog
+                        method="card_terminal"
+                        recordAction={recordCardTerminalPayment}
+                        tableLabel={table.tableLabel}
+                        orders={table.orders}
+                        currency={table.currency}
+                        tippingEnabled={tippingEnabled}
+                      />
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>

@@ -26,6 +26,7 @@ const SIGNED_IN_ONLY = [
   "count_recent_orders_for_session",
   "transition_order_status",
   "get_restaurant_staff",
+  "record_in_person_payment",
 ];
 
 /**
