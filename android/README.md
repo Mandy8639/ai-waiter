@@ -12,12 +12,14 @@ accepts them**, which a TWA can't do.
 
 - **Orders that ring like a delivery tablet.** The server sends data-only Firebase Cloud Messaging
   messages (`src/lib/push/fcm.ts`). `OrderAlertService` receives them, and `OrderAlerts` shows a new
-  order on its own **"New orders"** channel:
-  - a looping chime on the alarm stream (`res/raw/order_ring.wav`);
-  - Android's `FLAG_INSISTENT`, so it keeps ringing until the alert is opened or dismissed;
-  - the server re-sends it every 30 seconds while the order waits, so a swiped-away alert rings
-    again;
-  - when anyone accepts, a "stop" message cancels it on every phone.
+  order on its own **silent "New orders"** channel. **`OrderRingService` plays the ring itself**
+  (`res/raw/order_ring.wav`, looped on the alarm stream). Some phone makers (vivo/iQOO) replace an
+  app's channel sound with the system default, but not a sound the app plays. It's a short
+  foreground service (`shortService` on Android 14+, so no extra permission or Play declaration):
+  - it rings in 28-second bursts, and the server re-sends every 30 seconds while the order waits,
+    so it sounds near-continuously;
+  - touching or swiping the alert silences it;
+  - when anyone accepts, a "stop" message silences every phone.
 - **Table requests** go on a separate, ordinary "Table requests and other alerts" channel.
 - **App mode:** every request carries `TablesideApp/android` in the user agent, so the site hides
   plan purchases (Google Play Payments policy, `src/lib/app-shell/core.ts`).
