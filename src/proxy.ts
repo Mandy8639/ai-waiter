@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { decideRouteAccess, PROTECTED_PREFIXES } from "@/lib/auth/route-access";
+import { PATHNAME_HEADER } from "@/lib/dashboard/access-core";
 import {
   APP_SHELL_COOKIE,
   APP_SHELL_QUERY,
@@ -53,7 +54,17 @@ export async function proxy(request: NextRequest) {
     return remember(NextResponse.redirect(new URL(appRedirect, request.url)));
   }
 
-  let supabaseResponse = NextResponse.next({ request });
+  // The path being rendered, for the dashboard's per-role page rule
+  // (src/lib/dashboard/access-core.ts): a page can't otherwise know its
+  // own URL on the server. Always overwritten, so a client can't send it.
+  // Rebuilt on every call so cookies refreshed below are carried along.
+  const forward = () => {
+    const headers = new Headers(request.headers);
+    headers.set(PATHNAME_HEADER, request.nextUrl.pathname);
+    return NextResponse.next({ request: { headers } });
+  };
+
+  let supabaseResponse = forward();
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabasePublishableKey =
@@ -84,7 +95,7 @@ export async function proxy(request: NextRequest) {
           for (const { name, value } of cookiesToSet) {
             request.cookies.set(name, value);
           }
-          supabaseResponse = NextResponse.next({ request });
+          supabaseResponse = forward();
           for (const { name, value, options } of cookiesToSet) {
             supabaseResponse.cookies.set(name, value, options);
           }

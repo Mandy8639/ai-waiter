@@ -27,6 +27,8 @@ const SIGNED_IN_ONLY = [
   "transition_order_status",
   "get_restaurant_staff",
   "record_in_person_payment",
+  "set_menu_item_availability",
+  "set_modifier_option_availability",
 ];
 
 /**

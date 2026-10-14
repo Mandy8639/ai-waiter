@@ -31,6 +31,8 @@ import { OrderDetailDialog } from "./order-detail-dialog";
 import { SplitOrderDialog } from "./split-order-dialog";
 import { MergeOrderDialog } from "./merge-order-dialog";
 import { useNotificationSound } from "./use-notification-sound";
+import { useWakeLock } from "./use-wake-lock";
+import { UNDO_WINDOW_MS, offersUndo, undoMessage } from "./undo-core";
 
 /**
  * How often to chime again while an order sits unaccepted.
@@ -129,6 +131,17 @@ export function KitchenBoard({
   const [connected, setConnected] = useState(false);
   const { muted, toggleMuted, unlock, play } = useNotificationSound();
   const [stationChoice, setStationChoice] = useState<StationChoice>("all");
+  useWakeLock();
+  /** The status tap waiting out its undo window (undo-core.ts), if any. */
+  const [undo, setUndo] = useState<{
+    orderId: string;
+    target: OrderStatus;
+  } | null>(null);
+  const undoRef = useRef<{
+    orderId: string;
+    target: OrderStatus;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
 
   // Each tablet is one station, so the choice is remembered per device.
   // Read after mount, like the mute preference, to avoid a hydration
@@ -273,6 +286,67 @@ export function KitchenBoard({
   }, []);
 
   function handleTransition(orderId: string, target: OrderStatus) {
+    // Only one tap waits at a time: a second one sends the first now.
+    flushUndo();
+    if (!offersUndo(target)) {
+      sendTransition(orderId, target);
+      return;
+    }
+    setActionError(null);
+    setPendingIds((prev) => new Set(prev).add(orderId));
+    const timer = setTimeout(() => {
+      undoRef.current = null;
+      setUndo(null);
+      sendTransition(orderId, target);
+    }, UNDO_WINDOW_MS);
+    undoRef.current = { orderId, target, timer };
+    setUndo({ orderId, target });
+  }
+
+  function cancelUndo() {
+    const waiting = undoRef.current;
+    if (!waiting) return;
+    clearTimeout(waiting.timer);
+    undoRef.current = null;
+    setUndo(null);
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(waiting.orderId);
+      return next;
+    });
+  }
+
+  /** Sends the waiting tap now rather than losing it. */
+  function flushUndo() {
+    const waiting = undoRef.current;
+    if (!waiting) return;
+    clearTimeout(waiting.timer);
+    undoRef.current = null;
+    setUndo(null);
+    sendTransition(waiting.orderId, waiting.target);
+  }
+
+  // A tablet put to sleep, or the page left, mid-window: the cook meant
+  // the tap, so it is sent rather than dropped.
+  const flushRef = useRef(flushUndo);
+  useEffect(() => {
+    flushRef.current = flushUndo;
+  });
+  useEffect(() => {
+    const flush = () => flushRef.current();
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
+
+  function sendTransition(orderId: string, target: OrderStatus) {
     setActionError(null);
     setPendingIds((prev) => new Set(prev).add(orderId));
     startTransitionAction(async () => {
@@ -542,6 +616,26 @@ export function KitchenBoard({
           );
         })}
       </div>
+
+      {undo && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="bg-foreground text-background fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-md items-center justify-between gap-3 rounded-xl px-4 py-3 shadow-lg"
+        >
+          <span className="text-sm font-medium">
+            {undoMessage(orderNumberById.get(undo.orderId), undo.target)}
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-11 px-5 font-semibold"
+            onClick={cancelUndo}
+          >
+            Undo
+          </Button>
+        </div>
+      )}
 
       <OrderDetailDialog
         order={detailOrder}

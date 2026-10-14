@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, NAV_ITEMS } from "./nav-items";
+import { navItemFor } from "@/lib/dashboard/access-core";
 import { PendingRequestsBadge } from "./pending-requests-badge";
 import type { RestaurantRole } from "@/lib/restaurants/get-user-restaurants";
 
@@ -25,6 +26,7 @@ export function DashboardNav({
   const items = NAV_ITEMS.filter(
     (item) => !item.roles || item.roles.includes(role),
   );
+  const activeHref = navItemFor(pathname)?.href;
 
   return (
     <nav
@@ -40,10 +42,9 @@ export function DashboardNav({
               {group}
             </p>
             {groupItems.map((item) => {
-              const isActive =
-                item.href === "/dashboard"
-                  ? pathname === "/dashboard"
-                  : pathname.startsWith(item.href);
+              // The deepest matching item, so Sold out
+              // (/dashboard/kitchen/sold-out) doesn't also light up Kitchen.
+              const isActive = activeHref === item.href;
               const Icon = item.icon;
 
               return (

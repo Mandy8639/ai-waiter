@@ -9,6 +9,7 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { ConciergeBell } from "lucide-react";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
+import { KitchenTabs } from "@/components/dashboard/kitchen-tabs";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { NativeAppBridge } from "@/components/kitchen/native-app-bridge";
@@ -88,6 +89,41 @@ export default async function DashboardLayout({
   }
 
   const { restaurant } = state;
+
+  // The kitchen account is a screen on the pass: no sidebar, no money, no
+  // settings — the board at full width and its two tabs. Which pages it
+  // may open at all is decided in src/lib/dashboard/access-core.ts.
+  if (restaurant.role === "kitchen") {
+    return (
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="bg-background/90 supports-backdrop-filter:bg-background/75 sticky top-0 z-20 flex min-h-14 flex-wrap items-center justify-between gap-2 border-b px-3 py-2 backdrop-blur-md sm:px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="type-label hidden truncate font-semibold sm:block">
+              {restaurant.name}
+            </span>
+            <KitchenTabs />
+          </div>
+          <div className="flex items-center gap-2">
+            {state.all.length > 1 && (
+              <RestaurantSwitcher
+                restaurants={state.all}
+                currentId={restaurant.id}
+              />
+            )}
+            <Link
+              href="/account"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              Account
+            </Link>
+            <LogoutButton />
+          </div>
+        </header>
+        <main className="w-full flex-1 px-3 py-4 sm:px-4">{children}</main>
+        <NativeAppBridge />
+      </div>
+    );
+  }
 
   // Reservations are front-of-house only — a kitchen viewer has no RLS
   // visibility into the table at all, so counting for them would always
