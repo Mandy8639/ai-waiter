@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { estimateOrderPrep, type PrepEstimate } from "./prep-estimate";
 import type { OrderView } from "./queries";
+import { getKitchenStatus } from "@/lib/kitchen/busy-queries";
 
 /**
  * One place that answers "how long?", so the diner's screen and the AI
@@ -13,12 +14,15 @@ import type { OrderView } from "./queries";
  */
 export async function getOrderEta(order: OrderView): Promise<PrepEstimate> {
   const supabase = await createClient();
-  const { data: queue } = await supabase
-    .rpc("get_kitchen_queue_ahead", {
-      target_restaurant_id: order.restaurantId,
-      placed_before: order.createdAt,
-    })
-    .maybeSingle();
+  const [{ data: queue }, kitchen] = await Promise.all([
+    supabase
+      .rpc("get_kitchen_queue_ahead", {
+        target_restaurant_id: order.restaurantId,
+        placed_before: order.createdAt,
+      })
+      .maybeSingle(),
+    getKitchenStatus(order.restaurantId),
+  ]);
 
   return estimateOrderPrep({
     itemPrepMinutes: order.items.map((i) => i.prepMinutes),
@@ -26,5 +30,6 @@ export async function getOrderEta(order: OrderView): Promise<PrepEstimate> {
     placedAt: order.createdAt,
     queueMinutesAhead: queue?.prep_minutes_ahead ?? 0,
     ordersAhead: queue?.orders_ahead ?? 0,
+    busyExtraMinutes: kitchen.extraMinutes,
   });
 }

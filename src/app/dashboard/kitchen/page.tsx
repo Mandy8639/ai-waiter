@@ -1,4 +1,6 @@
+import { BusyModeControl } from "@/components/kitchen/busy-mode-control";
 import { KitchenBoard } from "@/components/kitchen/kitchen-board";
+import { getKitchenStatusRow } from "@/lib/kitchen/busy-queries";
 import { PushAlertsToggle } from "@/components/kitchen/push-alerts-toggle";
 import { apnsConfig } from "@/lib/push/apns";
 import { fcmConfig } from "@/lib/push/fcm";
@@ -24,15 +26,21 @@ export const metadata = {
  */
 export default async function KitchenPage() {
   const { restaurant } = await requireCurrentRestaurant();
-  const [orders, stations] = await Promise.all([
+  const [orders, stations, busy] = await Promise.all([
     getActiveOrdersForRestaurant(restaurant.id),
     getKitchenStations(restaurant.id),
+    getKitchenStatusRow(restaurant.id),
   ]);
   const canManageStations =
     restaurant.role === "owner" || restaurant.role === "manager";
 
   return (
     <div className="flex flex-col gap-4">
+      <BusyModeControl
+        restaurantId={restaurant.id}
+        initial={busy}
+        canChange={restaurant.role !== "staff"}
+      />
       <div className="flex flex-wrap items-center justify-between gap-2">
         {/* Renders nothing when push isn't configured for this deployment. */}
         <PushAlertsToggle

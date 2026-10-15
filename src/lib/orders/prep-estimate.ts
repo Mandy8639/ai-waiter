@@ -51,11 +51,18 @@ export function estimateOrderPrep(params: {
   queueMinutesAhead?: number;
   /** How many those were, for wording rather than arithmetic. */
   ordersAhead?: number;
+  /**
+   * Kitchen busy mode: how much longer the kitchen has said food is
+   * taking. Added to both ends of the range: it is the kitchen's own
+   * word that everything is running late, on top of the queue.
+   */
+  busyExtraMinutes?: number;
   now?: Date;
 }): PrepEstimate {
   const { itemPrepMinutes, status, placedAt } = params;
   const queueMinutesAhead = Math.max(0, params.queueMinutesAhead ?? 0);
   const ordersAhead = Math.max(0, params.ordersAhead ?? 0);
+  const busyExtra = Math.max(0, params.busyExtraMinutes ?? 0);
   const now = params.now ?? new Date();
 
   const finished =
@@ -96,7 +103,7 @@ export function estimateOrderPrep(params: {
   const remaining = totalMinutes - elapsedMinutes;
   // Clamped at zero rather than going negative: an order that has run over
   // is "any moment now", not "minus four minutes".
-  const soonest = Math.max(0, Math.round(remaining));
+  const soonest = Math.max(0, Math.round(remaining)) + Math.round(busyExtra);
 
   // A RANGE, because the truth is between two things we can each state
   // plainly, and a single number would have to invent the bit in between.

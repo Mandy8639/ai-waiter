@@ -177,3 +177,30 @@ describe("etaSentence", () => {
     ).toBeNull();
   });
 });
+
+describe("kitchen busy mode in the estimate", () => {
+  it("adds the kitchen's extra wait to both ends of the range", () => {
+    const e = estimateOrderPrep({
+      itemPrepMinutes: [15],
+      status: "preparing",
+      placedAt,
+      queueMinutesAhead: 10,
+      busyExtraMinutes: 20,
+      now: at(10),
+    });
+    // 5 left, +20 busy; the queue adds its 10 on top for the worst case.
+    expect(e.minutesRemaining).toBe(25);
+    expect(e.minutesRemainingAtWorst).toBe(35);
+  });
+
+  it("says nothing extra once the food is ready", () => {
+    const e = estimateOrderPrep({
+      itemPrepMinutes: [15],
+      status: "ready",
+      placedAt,
+      busyExtraMinutes: 20,
+      now: at(10),
+    });
+    expect(e.minutesRemaining).toBeNull();
+  });
+});

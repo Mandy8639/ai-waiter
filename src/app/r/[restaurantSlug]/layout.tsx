@@ -8,6 +8,8 @@ import { getActiveCustomerSession } from "@/lib/customer/session";
 import { getCartItemCount } from "@/lib/cart/get-cart";
 import { isAiWaiterAvailable } from "@/lib/ai/actions";
 import { isChefEnabled } from "@/lib/chef/feature";
+import { getKitchenStatus } from "@/lib/kitchen/busy-queries";
+import { dinerNotice } from "@/lib/kitchen/busy-core";
 
 export default async function CustomerRestaurantLayout({
   children,
@@ -22,6 +24,10 @@ export default async function CustomerRestaurantLayout({
   if (!restaurant) {
     notFound();
   }
+
+  // Kitchen busy mode: said on every page, before anyone builds an order
+  // the kitchen can't take.
+  const kitchenNotice = dinerNotice(await getKitchenStatus(restaurant.id));
 
   const session = await getActiveCustomerSession();
   const isThisRestaurant = session && session.restaurantId === restaurant.id;
@@ -95,6 +101,17 @@ export default async function CustomerRestaurantLayout({
             )}
           </div>
         </header>
+
+        {kitchenNotice && (
+          <div
+            role="status"
+            className="text-foreground border-b border-amber-500/40 bg-amber-500/10"
+          >
+            <p className="mx-auto w-full max-w-2xl px-4 py-2.5 text-sm font-medium sm:px-6">
+              {kitchenNotice}
+            </p>
+          </div>
+        )}
 
         {/* Bottom padding keeps the last dish clear of the floating dock. */}
         <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pt-5 pb-32 sm:px-6">

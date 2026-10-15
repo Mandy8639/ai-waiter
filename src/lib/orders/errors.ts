@@ -11,6 +11,9 @@ const PREFIXED_MESSAGES: Record<string, string> = {
   ORDER_RESTAURANT_UNAVAILABLE:
     "This restaurant isn't accepting orders right now. Please check with your server.",
   ORDER_CART_EMPTY: "Your cart is empty — add something before ordering.",
+  // Kitchen busy mode (20261015090000_kitchen_busy_mode.sql).
+  ORDER_PAUSED:
+    "The kitchen has paused new orders for a little while. Your order is saved, so please try again in a few minutes.",
 };
 
 /** Prefixes whose full raised message (already customer-safe — see the migration) is shown as-is, not replaced. */
