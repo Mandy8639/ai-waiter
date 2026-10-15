@@ -1494,6 +1494,14 @@ export interface Database {
         /** Minor units. 0 for an unknown payment or an unpriced plan. */
         Returns: number;
       };
+      set_menu_item_availability: {
+        Args: { p_menu_item_id: string; p_available: boolean };
+        Returns: undefined;
+      };
+      set_modifier_option_availability: {
+        Args: { p_option_id: string; p_available: boolean };
+        Returns: undefined;
+      };
       record_in_person_payment: {
         Args: {
           p_order_ids: string[];
