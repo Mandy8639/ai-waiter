@@ -105,6 +105,9 @@ export interface Database {
           accept_card: boolean;
           accept_cash: boolean;
           accept_card_terminal: boolean;
+          orders_paused_until: string | null;
+          busy_extra_minutes: number;
+          busy_until: string | null;
           tipping_enabled: boolean;
           created_at: string;
           updated_at: string;
@@ -121,6 +124,9 @@ export interface Database {
           accept_card?: boolean;
           accept_cash?: boolean;
           accept_card_terminal?: boolean;
+          orders_paused_until?: string | null;
+          busy_extra_minutes?: number;
+          busy_until?: string | null;
           tipping_enabled?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -1493,6 +1499,30 @@ export interface Database {
         };
         /** Minor units. 0 for an unknown payment or an unpriced plan. */
         Returns: number;
+      };
+      pause_new_orders: {
+        Args: { p_restaurant_id: string; p_minutes?: number | null };
+        /** When the pause ends ('infinity' when until resumed). */
+        Returns: string;
+      };
+      resume_new_orders: {
+        Args: { p_restaurant_id: string };
+        Returns: undefined;
+      };
+      set_kitchen_busy: {
+        Args: {
+          p_restaurant_id: string;
+          p_extra_minutes: number;
+          p_for_minutes?: number;
+        };
+        Returns: undefined;
+      };
+      get_kitchen_status: {
+        Args: { target_restaurant_id: string };
+        Returns: {
+          orders_paused_until: string | null;
+          busy_extra_minutes: number;
+        }[];
       };
       set_menu_item_availability: {
         Args: { p_menu_item_id: string; p_available: boolean };

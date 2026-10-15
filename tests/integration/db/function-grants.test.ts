@@ -29,6 +29,9 @@ const SIGNED_IN_ONLY = [
   "record_in_person_payment",
   "set_menu_item_availability",
   "set_modifier_option_availability",
+  "pause_new_orders",
+  "resume_new_orders",
+  "set_kitchen_busy",
 ];
 
 /**
@@ -70,8 +73,13 @@ const SIGNED_IN_ONLY = [
  *   their hours and sections — the public menu page needs it before any
  *   QR scan. Read-only; drafts and inactive restaurants are excluded. See
  *   20261004090000_multiple_menus.sql.
+ * - get_kitchen_status: whether new orders are paused and how much longer
+ *   food is taking, shown on every diner page before anyone orders —
+ *   including signed-out visitors browsing the menu. Two values, nothing
+ *   else; expired ones read as off. See 20261015090000_kitchen_busy_mode.sql.
  */
 const ANON_BY_DESIGN = [
+  "get_kitchen_status",
   "get_staff_invitation_preview",
   "get_tab_split",
   "start_split_payment",

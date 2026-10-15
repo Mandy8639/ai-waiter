@@ -15,6 +15,7 @@ import {
 } from "@/lib/customer/restaurant";
 import { getActiveCustomerSession } from "@/lib/customer/session";
 import { getCart } from "@/lib/cart/get-cart";
+import { getKitchenStatus } from "@/lib/kitchen/busy-queries";
 import { clearCart } from "@/lib/cart/actions";
 
 export async function generateMetadata({
@@ -59,14 +60,16 @@ export default async function CartPage({
     );
   }
 
-  const [cart, orderSettings] = await Promise.all([
+  const [cart, orderSettings, kitchen] = await Promise.all([
     getCart(restaurant.id, session.id),
     getPublicOrderSettings(restaurant.id),
+    getKitchenStatus(restaurant.id),
   ]);
 
   const canPlaceOrder =
     restaurant.isActive &&
     orderSettings.acceptingOrders &&
+    !kitchen.paused &&
     cart.lines.length > 0 &&
     !cart.hasUnavailableItems;
 
@@ -80,6 +83,12 @@ export default async function CartPage({
     restaurant.isActive &&
       !orderSettings.acceptingOrders &&
       "The kitchen isn't taking new orders right now. You can still review or clear your order.",
+    // Busy mode's pause. Its wording (with how long) is already in the
+    // banner at the top of the page; this says what it means for the cart.
+    restaurant.isActive &&
+      orderSettings.acceptingOrders &&
+      kitchen.paused &&
+      "New orders are paused for a little while. Your order is saved here, so you can place it as soon as the kitchen opens again.",
   ].filter((notice): notice is string => Boolean(notice));
 
   if (cart.lines.length === 0) {
