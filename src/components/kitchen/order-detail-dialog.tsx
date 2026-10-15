@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Printer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -26,9 +28,12 @@ const ACTOR_LABELS: Record<string, string> = {
 export function OrderDetailDialog({
   order,
   onOpenChange,
+  onPrint,
 }: {
   order: KitchenOrder | null;
   onOpenChange: (open: boolean) => void;
+  /** Prints this order's ticket again; absent where the device can't print. */
+  onPrint?: (order: KitchenOrder) => void;
 }) {
   // Keyed by order id (rather than a bare "reset then fetch" effect) so a
   // newly-opened order never briefly shows the PREVIOUS order's history —
@@ -78,6 +83,18 @@ export function OrderDetailDialog({
                   </div>
                 ))}
               </div>
+
+              {onPrint && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 self-start"
+                  onClick={() => onPrint(order)}
+                >
+                  <Printer className="size-4" aria-hidden="true" />
+                  Print ticket
+                </Button>
+              )}
 
               {order.customerNote && (
                 <div className="bg-muted rounded-md p-2">
