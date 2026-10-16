@@ -124,6 +124,7 @@ export function KitchenBoard({
   role,
   initialOrders,
   stations = NO_STATIONS,
+  toolbar,
 }: {
   restaurantId: string;
   /** For printed tickets. */
@@ -134,6 +135,8 @@ export function KitchenBoard({
   initialOrders: KitchenOrder[];
   /** Phase I. With none, the board is exactly the one-screen board it always was. */
   stations?: KitchenStation[];
+  /** The page's own controls (busy mode, alerts, stations), in the header's button row. */
+  toolbar?: React.ReactNode;
 }) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [detailOrder, setDetailOrder] = useState<KitchenOrder | null>(null);
@@ -521,6 +524,7 @@ export function KitchenBoard({
           </Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {toolbar}
           {canPrint && (
             <PrinterSettingsButton
               settings={printer}

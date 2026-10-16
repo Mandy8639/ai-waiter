@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 import { Hourglass, PauseCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -33,17 +40,40 @@ import {
  * that food is taking longer — and, while either is on, a banner saying
  * so with a one-tap way back. Re-read against the clock every 30 seconds,
  * so a pause that runs out clears itself on screen too.
+ *
+ * Three pieces sharing one state: the provider, the banners (full width,
+ * above the board) and the button (in the board's toolbar).
  */
-export function BusyModeControl({
+type BusyMode = ReturnType<typeof useBusyModeState>;
+const BusyContext = createContext<BusyMode | null>(null);
+
+function useBusy(): BusyMode {
+  const value = useContext(BusyContext);
+  if (!value) throw new Error("BusyModeProvider missing");
+  return value;
+}
+
+export function BusyModeProvider({
   restaurantId,
   initial,
   canChange,
+  children,
 }: {
   restaurantId: string;
   initial: KitchenStatusRow | null;
   /** Owner, manager or kitchen. Floor staff see the banners, not the switches. */
   canChange: boolean;
+  children: ReactNode;
 }) {
+  const value = useBusyModeState(restaurantId, initial, canChange);
+  return <BusyContext.Provider value={value}>{children}</BusyContext.Provider>;
+}
+
+function useBusyModeState(
+  restaurantId: string,
+  initial: KitchenStatusRow | null,
+  canChange: boolean,
+) {
   const [row, setRow] = useState(initial);
   const [now, setNow] = useState(() => new Date());
   const [open, setOpen] = useState(false);
@@ -111,6 +141,26 @@ export function BusyModeControl({
       }),
     );
 
+  return {
+    status,
+    left,
+    extra,
+    pending,
+    error,
+    canChange,
+    open,
+    setOpen,
+    pause,
+    resume,
+    behind,
+  };
+}
+
+/** What's on right now, each with its one-tap way back. */
+export function BusyModeBanners() {
+  const { status, left, extra, pending, error, canChange, resume, behind } =
+    useBusy();
+  if (!status.paused && extra === 0 && !error) return null;
   return (
     <div className="flex flex-col gap-2">
       {status.paused && (
@@ -169,16 +219,30 @@ export function BusyModeControl({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+    </div>
+  );
+}
 
+/** The "Busy?" button and its choices, for the board's toolbar. */
+export function BusyModeButton() {
+  const {
+    status,
+    extra,
+    pending,
+    canChange,
+    open,
+    setOpen,
+    pause,
+    resume,
+    behind,
+  } = useBusy();
+  return (
+    <>
       {canChange && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger
             render={
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11 self-start px-5 font-semibold"
-              >
+              <Button type="button" variant="outline" size="sm">
                 <Hourglass className="size-4" aria-hidden="true" />
                 Busy?
               </Button>
@@ -265,6 +329,6 @@ export function BusyModeControl({
           </DialogContent>
         </Dialog>
       )}
-    </div>
+    </>
   );
 }

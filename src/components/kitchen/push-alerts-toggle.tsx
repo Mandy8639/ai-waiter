@@ -4,6 +4,14 @@ import { useEffect, useState, useTransition } from "react";
 import { Bell, BellOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   deleteNativePushToken,
   deletePushSubscription,
   saveNativePushToken,
@@ -78,6 +86,7 @@ export function PushAlertsToggle({
   const [native, setNative] = useState<"ios" | "android" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
 
   const iosAlerts = nativeAlerts.ios;
   const androidAlerts = nativeAlerts.android;
@@ -256,77 +265,98 @@ export function PushAlertsToggle({
     });
   }
 
+  // A small button in the kitchen board's toolbar rather than a card of its
+  // own: once alerts are on there is nothing to read, and the card pushed
+  // the board down on a phone. Off is the one state that wants attention,
+  // so it is the filled button. The details and actions open in a dialog.
+  const chip =
+    state === "on"
+      ? { label: "Alerts on", on: true, filled: false }
+      : state === "off"
+        ? { label: "Turn on alerts", on: false, filled: true }
+        : state === "blocked"
+          ? { label: "Alerts blocked", on: false, filled: false }
+          : { label: "Get alerts", on: false, filled: false };
+
+  const description =
+    state === "unsupported"
+      ? "This browser can't show alerts. Chrome, Edge or Firefox can."
+      : state === "ios-needs-install"
+        ? "On iPhone or iPad: tap Share, then “Add to Home Screen”, and open Tableside from there to turn alerts on."
+        : state === "blocked"
+          ? native === "android"
+            ? "Notifications are off for Tableside. Turn them on in Settings → Apps → Tableside → Notifications."
+            : native
+              ? "Notifications are off for Tableside. Turn them on in Settings → Tableside → Notifications."
+              : "Notifications are blocked for this site. Allow them in the browser's site settings, then reload."
+          : state === "off"
+            ? native
+              ? "New orders and table requests, even when the app is closed."
+              : "New orders and table requests, even when this tab is closed."
+            : native
+              ? "New orders and table requests, even when the app is closed. Not seeing them? Check Focus and Do Not Disturb."
+              : "New orders and table requests, even when this tab is closed. Not seeing them? Check the device's own notification settings and Do Not Disturb.";
+
   return (
-    <div className="bg-card flex flex-col gap-2 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        {state === "on" ? (
-          <Bell className="text-primary mt-0.5 size-4 shrink-0" aria-hidden />
-        ) : (
-          <BellOff
-            className="text-muted-foreground mt-0.5 size-4 shrink-0"
-            aria-hidden
-          />
-        )}
-        <div className="text-sm">
-          <p className="font-medium">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button
+            type="button"
+            size="sm"
+            variant={chip.filled ? "default" : "outline"}
+          >
+            {chip.on ? (
+              <Bell className="size-4" aria-hidden />
+            ) : (
+              <BellOff className="size-4" aria-hidden />
+            )}
+            {chip.label}
+          </Button>
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
             {state === "on"
               ? "Alerts are on for this device"
               : "Get alerts on this device"}
+          </DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        {message && (
+          <p className="text-muted-foreground text-sm" role="status">
+            {message}
           </p>
-          <p className="text-muted-foreground">
-            {state === "unsupported" &&
-              "This browser can't show alerts. Chrome, Edge or Firefox can."}
-            {state === "ios-needs-install" &&
-              "On iPhone or iPad: tap Share, then “Add to Home Screen”, and open Tableside from there to turn alerts on."}
-            {state === "blocked" &&
-              (native === "android"
-                ? "Notifications are off for Tableside. Turn them on in Settings → Apps → Tableside → Notifications."
-                : native
-                  ? "Notifications are off for Tableside. Turn them on in Settings → Tableside → Notifications."
-                  : "Notifications are blocked for this site. Allow them in the browser's site settings, then reload.")}
-            {state === "off" &&
-              (native
-                ? "New orders and table requests, even when the app is closed."
-                : "New orders and table requests, even when this tab is closed.")}
-            {state === "on" &&
-              (native
-                ? "New orders and table requests, even when the app is closed. Not seeing them? Check Focus and Do Not Disturb."
-                : "New orders and table requests, even when this tab is closed. Not seeing them? Check the device's own notification settings and Do Not Disturb.")}
-          </p>
-          {message && (
-            <p className="text-muted-foreground mt-1" role="status">
-              {message}
-            </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {state === "off" && (
+            <Button onClick={turnOn} disabled={isPending} className="min-h-11">
+              {isPending ? "Turning on…" : "Turn on alerts"}
+            </Button>
+          )}
+          {state === "on" && (
+            <>
+              <Button
+                variant="outline"
+                onClick={sendTest}
+                disabled={isPending}
+                className="min-h-11"
+              >
+                Send a test
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={turnOff}
+                disabled={isPending}
+                className="min-h-11"
+              >
+                Turn off
+              </Button>
+            </>
           )}
         </div>
-      </div>
-      <div className="flex shrink-0 gap-2">
-        {state === "off" && (
-          <Button size="sm" onClick={turnOn} disabled={isPending}>
-            {isPending ? "Turning on…" : "Turn on alerts"}
-          </Button>
-        )}
-        {state === "on" && (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={sendTest}
-              disabled={isPending}
-            >
-              Send a test
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={turnOff}
-              disabled={isPending}
-            >
-              Turn off
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

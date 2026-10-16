@@ -1,4 +1,9 @@
-import { BusyModeControl } from "@/components/kitchen/busy-mode-control";
+import {
+  BusyModeBanners,
+  BusyModeButton,
+  BusyModeProvider,
+} from "@/components/kitchen/busy-mode-control";
+import { buttonVariants } from "@/components/ui/button";
 import { KitchenBoard } from "@/components/kitchen/kitchen-board";
 import { getKitchenStatusRow } from "@/lib/kitchen/busy-queries";
 import { PushAlertsToggle } from "@/components/kitchen/push-alerts-toggle";
@@ -35,38 +40,45 @@ export default async function KitchenPage() {
     restaurant.role === "owner" || restaurant.role === "manager";
 
   return (
-    <div className="flex flex-col gap-4">
-      <BusyModeControl
-        restaurantId={restaurant.id}
-        initial={busy}
-        canChange={restaurant.role !== "staff"}
-      />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {/* Renders nothing when push isn't configured for this deployment. */}
-        <PushAlertsToggle
+    <BusyModeProvider
+      restaurantId={restaurant.id}
+      initial={busy}
+      canChange={restaurant.role !== "staff"}
+    >
+      <div className="flex flex-col gap-4">
+        {/* Only what's on right now gets a full-width banner; every control
+            sits in one row of buttons beside the board's title. */}
+        <BusyModeBanners />
+        <KitchenBoard
           restaurantId={restaurant.id}
-          nativeAlerts={{
-            ios: apnsConfig() !== null,
-            android: fcmConfig() !== null,
-          }}
+          restaurantName={restaurant.name}
+          timeZone={restaurant.timezone}
+          role={restaurant.role}
+          initialOrders={orders}
+          stations={stations}
+          toolbar={
+            <>
+              <BusyModeButton />
+              {/* Renders nothing when push isn't configured for this deployment. */}
+              <PushAlertsToggle
+                restaurantId={restaurant.id}
+                nativeAlerts={{
+                  ios: apnsConfig() !== null,
+                  android: fcmConfig() !== null,
+                }}
+              />
+              {canManageStations && (
+                <Link
+                  href="/dashboard/kitchen/stations"
+                  className={buttonVariants({ variant: "ghost", size: "sm" })}
+                >
+                  Stations
+                </Link>
+              )}
+            </>
+          }
         />
-        {canManageStations && (
-          <Link
-            href="/dashboard/kitchen/stations"
-            className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
-          >
-            {stations.length > 0 ? "Edit stations" : "Set up stations"}
-          </Link>
-        )}
       </div>
-      <KitchenBoard
-        restaurantId={restaurant.id}
-        restaurantName={restaurant.name}
-        timeZone={restaurant.timezone}
-        role={restaurant.role}
-        initialOrders={orders}
-        stations={stations}
-      />
-    </div>
+    </BusyModeProvider>
   );
 }
