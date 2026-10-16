@@ -70,6 +70,11 @@ describe("normalizePrivateKey: the ways a pasted key arrives", () => {
       "the whole service-account JSON",
       JSON.stringify({ type: "service_account", private_key: pem }),
     ],
+    // Production, 2026-10-16: the whole key except its BEGIN/END lines.
+    [
+      "only the body, BEGIN and END lines left out",
+      pem.trim().split("\n").slice(1, -1).join("\\n"),
+    ],
   ];
 
   it.each(variants)("%s → a key that signs", (_label, raw) => {
@@ -97,6 +102,10 @@ describe("normalizePrivateKey: the ways a pasted key arrives", () => {
     });
     expect(shape.escaped_newlines).toBeGreaterThan(20);
     expect(JSON.stringify(shape)).not.toMatch(/MII|BEGIN PRIVATE/);
+  });
+
+  it("leaves something that isn't a key body alone, to fail on its own", () => {
+    expect(normalizePrivateKey("not-a-key")).toBe("not-a-key");
   });
 
   it("treats empty as missing", () => {
