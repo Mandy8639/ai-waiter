@@ -71,12 +71,25 @@ export function normalizePrivateKey(raw: string | undefined): string | null {
   const pem = key.match(/-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/);
   if (!pem) {
     const bare = key.replace(/^["']+|["']+$/g, "").trim();
+    // Only the key's body, its BEGIN/END lines left out of the paste
+    // (production, 2026-10-16: the whole key but those two lines). A
+    // Google service-account key is always PKCS#8, so the missing lines
+    // are known. Anything that isn't plainly a base64 body is returned
+    // as it was, to fail with its own error.
+    const body = bare.replace(/\s+/g, "");
+    if (body.length >= 200 && /^[A-Za-z0-9+/]+=*$/.test(body)) {
+      return wrapPem("PRIVATE KEY", body);
+    }
     return bare || null;
   }
   const body = pem[2].replace(/[^A-Za-z0-9+/=]/g, "");
   if (!body) return null;
+  return wrapPem(pem[1], body);
+}
+
+function wrapPem(label: string, body: string): string {
   const lines = body.match(/.{1,64}/g) ?? [];
-  return `-----BEGIN ${pem[1]}-----\n${lines.join("\n")}\n-----END ${pem[1]}-----`;
+  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
 }
 
 /**
