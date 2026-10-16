@@ -33,6 +33,8 @@ public class MainActivity extends BridgeActivity {
     private void openFromAlert(Intent intent) {
         if (intent == null || bridge == null) return;
         String path = intent.getStringExtra(OrderAlerts.EXTRA_URL);
+        // Touching an order alert silences its ring.
+        if (path != null) OrderRingService.silence(this);
         intent.removeExtra(OrderAlerts.EXTRA_URL);
         if (path == null || !path.matches("^/dashboard(/[A-Za-z0-9/_-]*)?$")) return;
         String server = bridge.getServerUrl();

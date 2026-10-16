@@ -1090,8 +1090,10 @@ phones register **Firebase Cloud Messaging** tokens in `native_push_tokens` (pla
 given; APNs tokens are still lower-cased.
 
 - **Data-only messages** (`src/lib/push/fcm-core.ts`), so the app builds the alert itself: a new
-  order rings on the "New orders" channel with a looping chime and `FLAG_INSISTENT` until it's
-  touched (`OrderAlerts.java`). Same lock-screen rule as every alert: no dish names, prices or
+  order shows on a silent "New orders" channel, and `OrderRingService` plays the ring, looped on the
+  alarm stream, until the alert is touched or swiped or the order is accepted. The app plays the
+  sound itself because vivo/iQOO replace an app's channel sound with the system default
+  (`OrderAlerts.java`, `OrderRingService.java`, 1.2.1+). Same lock-screen rule as every alert: no dish names, prices or
   notes.
 - **Stop.** When an order leaves `pending`, its Android phones get a `stop` for the order's group
   and go quiet. The kitchen board's Confirm and Cancel send it at once

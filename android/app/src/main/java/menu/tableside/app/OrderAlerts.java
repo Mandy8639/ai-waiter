@@ -4,11 +4,8 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
-import android.media.AudioAttributes;
-import android.net.Uri;
 import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -20,19 +17,23 @@ import java.util.Map;
  *
  * The server sends data-only FCM messages (src/lib/push/fcm-core.ts):
  *   kind=alert  show (or replace) the alert for a group. An order
- *               (urgent=1) goes on the "New orders" channel, whose sound
- *               is a looping chime on the alarm stream, and carries
- *               Android's FLAG_INSISTENT: the sound repeats until the
- *               alert is opened, dismissed or cancelled.
- *   kind=stop   cancel the group's alert, so every phone goes quiet the
- *               moment the order is accepted.
+ *               (urgent=1) goes on the silent "New orders" channel and
+ *               OrderRingService plays the ring itself, looped on the
+ *               alarm stream: some phone makers (vivo/iQOO) replace an
+ *               app's channel sound with the system default, but not a
+ *               sound the app plays. Touching or dismissing the alert
+ *               silences it.
+ *   kind=stop   cancel the group's alert and silence the ring, so every
+ *               phone goes quiet the moment the order is accepted.
  *
  * One notification per group (the order), so the server's repeats every
  * 30 seconds replace it, and re-ring it if someone swiped it away.
  */
 final class OrderAlerts {
 
-    static final String ORDERS_CHANNEL = "orders_v1";
+    static final String ORDERS_CHANNEL = "orders_v2";
+    /** 1.2.0's channel, whose sound vivo/iQOO overrode: removed on launch. */
+    private static final String OLD_ORDERS_CHANNEL = "orders_v1";
     static final String ALERTS_CHANNEL = "alerts_v1";
     static final String EXTRA_URL = "menu.tableside.app.URL";
 
@@ -44,19 +45,16 @@ final class OrderAlerts {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager == null) return;
 
+        manager.deleteNotificationChannel(OLD_ORDERS_CHANNEL);
+
         NotificationChannel orders = new NotificationChannel(
             ORDERS_CHANNEL,
             "New orders",
             NotificationManager.IMPORTANCE_HIGH
         );
-        orders.setDescription("Rings until someone accepts the order.");
-        orders.setSound(
-            ringUri(context),
-            new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-        );
+        orders.setDescription("Rings until someone accepts the order. The ring is played by the app, on the alarm volume.");
+        // Silent: OrderRingService plays the ring (see the class comment).
+        orders.setSound(null, null);
         orders.enableVibration(true);
         orders.setVibrationPattern(new long[] { 0, 600, 300, 600, 300, 600 });
         orders.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
@@ -71,12 +69,6 @@ final class OrderAlerts {
         manager.createNotificationChannel(alerts);
     }
 
-    static Uri ringUri(Context context) {
-        return Uri.parse(
-            ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + context.getPackageName() + "/" + R.raw.order_ring
-        );
-    }
-
     static int idFor(String group) {
         return group == null ? 0 : group.hashCode();
     }
@@ -85,6 +77,7 @@ final class OrderAlerts {
     static boolean handle(Context context, Map<String, String> data) {
         String kind = data.get("kind");
         if ("stop".equals(kind)) {
+            OrderRingService.silence(context);
             NotificationManagerCompat.from(context).cancel(idFor(data.get("group")));
             return true;
         }
@@ -125,19 +118,25 @@ final class OrderAlerts {
             // Stop on its own after the server's 10-minute ring window.
             .setTimeoutAfter(10 * 60 * 1000L);
 
-        if (urgent && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            // Before channels, the sound is set per notification.
-            builder.setSound(ringUri(context), android.media.AudioManager.STREAM_ALARM);
+        if (urgent) {
+            // Swiping the alert away silences the ring.
+            builder.setSilent(true).setDeleteIntent(
+                PendingIntent.getService(
+                    context,
+                    idFor(group),
+                    new Intent(context, OrderRingService.class).setAction(OrderRingService.ACTION_STOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                )
+            );
         }
 
         Notification notification = builder.build();
-        if (urgent) {
-            // Ring until opened, dismissed or cancelled by a "stop".
-            notification.flags |= Notification.FLAG_INSISTENT;
-        }
-
         NotificationManagerCompat manager = NotificationManagerCompat.from(context);
         if (!manager.areNotificationsEnabled()) return;
+        if (urgent) {
+            OrderRingService.ring(context, idFor(group), notification);
+            return;
+        }
         try {
             manager.notify(idFor(group), notification);
         } catch (SecurityException ignored) {

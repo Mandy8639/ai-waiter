@@ -37,6 +37,13 @@
         <service
             android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
             tools:node="remove" />
+        <!-- Plays the order ring itself (OrderRingService): a short
+             foreground service, which needs no extra permission or Play
+             declaration on Android 14+. -->
+        <service
+            android:name=".OrderRingService"
+            android:exported="false"
+            android:foregroundServiceType="shortService" />
 
         <!-- New orders go on our channel by default (OrderAlerts). -->
         <meta-data
@@ -63,4 +70,5 @@
     <!-- Kitchen alerts (asked for from "Turn on alerts", never on launch). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 </manifest>
