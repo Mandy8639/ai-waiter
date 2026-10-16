@@ -123,7 +123,15 @@ afterEach(() => {
 describe("KitchenBoard — Realtime + polling reconciliation", () => {
   it("TEST 1: a Realtime INSERT adds a new order — exactly one appears", async () => {
     mockFetchActiveOrders.mockResolvedValue([]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
     expect(orderCardIds()).toEqual([]);
@@ -137,7 +145,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
   it("TEST 2: a missed Realtime INSERT is still discovered by polling, with no page refresh", async () => {
     mockFetchActiveOrders.mockResolvedValue([]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
     expect(orderCardIds()).toEqual([]);
@@ -152,7 +168,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
   it("TEST 3: Realtime and polling both discover the same order — exactly ONE instance renders", async () => {
     mockFetchActiveOrders.mockResolvedValue([]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
 
@@ -170,7 +194,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
   it("TEST 4: a Realtime UPDATE changes an order's status and the KDS reflects it", async () => {
     mockFetchActiveOrders.mockResolvedValue([makeOrder({ status: "pending" })]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
     expect(
@@ -191,7 +223,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
   it("TEST 5: a missed Realtime UPDATE is still reconciled by polling", async () => {
     mockFetchActiveOrders.mockResolvedValue([makeOrder({ status: "pending" })]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
 
@@ -207,7 +247,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
   it("TEST 6: an order that becomes served/cancelled and drops out of the active query disappears from the board", async () => {
     mockFetchActiveOrders.mockResolvedValue([makeOrder({ status: "ready" })]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
     expect(orderCardIds()).toEqual(["1"]);
@@ -224,7 +272,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
   it("TEST 7: a temporary polling failure does not crash the board and leaves existing state intact", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     mockFetchActiveOrders.mockResolvedValue([makeOrder()]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
     expect(orderCardIds()).toEqual(["1"]);
@@ -247,7 +303,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
   it("TEST 8: Realtime disconnecting activates the fast (degraded) polling interval", async () => {
     mockFetchActiveOrders.mockResolvedValue([]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
 
@@ -266,7 +330,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
   it("TEST 9: Realtime reconnecting stops fast polling and resumes the normal interval", async () => {
     mockFetchActiveOrders.mockResolvedValue([]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
     act(() => realtimeState.statusCallback?.("CLOSED"));
@@ -291,7 +363,13 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
   it("TEST 10: unmounting cleans up the polling timer and the Realtime subscription", async () => {
     mockFetchActiveOrders.mockResolvedValue([]);
     const { unmount } = render(
-      <KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />,
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
     );
     subscribed();
     await flush();
@@ -309,7 +387,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
   it("TEST 11: polling does not fire while the tab is hidden", async () => {
     mockFetchActiveOrders.mockResolvedValue([]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
 
@@ -326,7 +412,15 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
   it("TEST 12: the tab becoming visible again triggers immediate reconciliation, not a wait for the next interval", async () => {
     mockFetchActiveOrders.mockResolvedValue([]);
-    render(<KitchenBoard restaurantId="r1" role="owner" initialOrders={[]} />);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
     subscribed();
     await flush();
 
@@ -358,6 +452,8 @@ describe("KitchenBoard — unaccepted orders keep asking", () => {
     render(
       <KitchenBoard
         restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
         role="owner"
         initialOrders={[
           makeOrder({ id: "a", status: "pending" }),
@@ -376,6 +472,8 @@ describe("KitchenBoard — unaccepted orders keep asking", () => {
     render(
       <KitchenBoard
         restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
         role="owner"
         initialOrders={[makeOrder({ id: "a", status: "preparing" })]}
       />,
@@ -391,6 +489,8 @@ describe("KitchenBoard — unaccepted orders keep asking", () => {
     render(
       <KitchenBoard
         restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
         role="owner"
         initialOrders={[makeOrder({ id: "a", status: "pending" })]}
       />,

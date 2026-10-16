@@ -33,6 +33,13 @@ import { MergeOrderDialog } from "./merge-order-dialog";
 import { useNotificationSound } from "./use-notification-sound";
 import { useWakeLock } from "./use-wake-lock";
 import { UNDO_WINDOW_MS, offersUndo, undoMessage } from "./undo-core";
+import { printTicket, usePrinterSettings } from "./ticket-printer";
+import { PrinterSettingsButton } from "./printer-settings";
+import {
+  TEST_TICKET,
+  kitchenTicketHtml,
+  ordersToAutoPrint,
+} from "@/lib/kitchen/ticket-core";
 
 /**
  * How often to chime again while an order sits unaccepted.
@@ -112,11 +119,17 @@ function stationStorageKey(restaurantId: string) {
 
 export function KitchenBoard({
   restaurantId,
+  restaurantName,
+  timeZone,
   role,
   initialOrders,
   stations = NO_STATIONS,
 }: {
   restaurantId: string;
+  /** For printed tickets. */
+  restaurantName: string;
+  /** The restaurant's zone, so a ticket's time matches the kitchen clock. */
+  timeZone: string;
   role: Role;
   initialOrders: KitchenOrder[];
   /** Phase I. With none, the board is exactly the one-screen board it always was. */
@@ -132,6 +145,26 @@ export function KitchenBoard({
   const { muted, toggleMuted, unlock, play } = useNotificationSound();
   const [stationChoice, setStationChoice] = useState<StationChoice>("all");
   useWakeLock();
+  const {
+    settings: printer,
+    update: updatePrinter,
+    available: canPrint,
+  } = usePrinterSettings(restaurantId);
+  // Read inside resync() without making it (and the Realtime channel built
+  // on it) depend on these.
+  const printRef = useRef({ printer, canPrint, restaurantName, timeZone });
+  useEffect(() => {
+    printRef.current = { printer, canPrint, restaurantName, timeZone };
+  });
+
+  function ticketFor(order: KitchenOrder, reprint: boolean) {
+    return kitchenTicketHtml(order, {
+      restaurantName,
+      timeZone,
+      paper: printer.paper,
+      reprint,
+    });
+  }
   /** The status tap waiting out its undo window (undo-core.ts), if any. */
   const [undo, setUndo] = useState<{
     orderId: string;
@@ -201,6 +234,21 @@ export function KitchenBoard({
       if (isStaleResync(seq, resyncSeqRef.current)) return;
       if (announceNew && hasNewPendingOrder(fresh, knownIdsRef.current)) {
         play();
+      }
+      // Auto-print, on the device that has it on. Not tied to announceNew:
+      // an order that arrived while the screen was asleep is still new to
+      // this printer when the board wakes and catches up.
+      const print = printRef.current;
+      if (print.canPrint && print.printer.autoPrint) {
+        for (const order of ordersToAutoPrint(fresh, knownIdsRef.current)) {
+          printTicket(
+            kitchenTicketHtml(order, {
+              restaurantName: print.restaurantName,
+              timeZone: print.timeZone,
+              paper: print.printer.paper,
+            }),
+          );
+        }
       }
       knownIdsRef.current = new Set(fresh.map((o) => o.id));
       setOrders(fresh);
@@ -472,9 +520,30 @@ export function KitchenBoard({
             {connected ? "Live" : "Reconnecting…"}
           </Badge>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={toggleMuted}>
-          {muted ? "Unmute alerts" : "Mute alerts"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {canPrint && (
+            <PrinterSettingsButton
+              settings={printer}
+              onChange={updatePrinter}
+              onTestPrint={() =>
+                printTicket(
+                  kitchenTicketHtml(
+                    { ...TEST_TICKET, createdAt: new Date().toISOString() },
+                    { restaurantName, timeZone, paper: printer.paper },
+                  ),
+                )
+              }
+            />
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={toggleMuted}
+          >
+            {muted ? "Unmute alerts" : "Mute alerts"}
+          </Button>
+        </div>
       </div>
 
       {/*
@@ -638,6 +707,9 @@ export function KitchenBoard({
       )}
 
       <OrderDetailDialog
+        onPrint={
+          canPrint ? (order) => printTicket(ticketFor(order, true)) : undefined
+        }
         order={detailOrder}
         onOpenChange={(open) => {
           if (!open) setDetailOrder(null);

@@ -61,6 +61,8 @@ export default async function KitchenPage() {
       </div>
       <KitchenBoard
         restaurantId={restaurant.id}
+        restaurantName={restaurant.name}
+        timeZone={restaurant.timezone}
         role={restaurant.role}
         initialOrders={orders}
         stations={stations}
