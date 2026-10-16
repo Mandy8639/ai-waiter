@@ -34,7 +34,7 @@ const { PushAlertsToggle } =
 beforeEach(() => saveNativePushToken.mockReset());
 afterEach(cleanup);
 
-describe("the alerts card in the Android app", () => {
+describe("the alerts button in the Android app", () => {
   it("registers this phone for the restaurant on screen before saying 'on'", async () => {
     saveNativePushToken.mockResolvedValue({ ok: true });
     render(
@@ -44,7 +44,7 @@ describe("the alerts card in the Android app", () => {
       />,
     );
     await waitFor(() =>
-      expect(screen.getByText("Alerts are on for this device")).toBeVisible(),
+      expect(screen.getByRole("button", { name: "Alerts on" })).toBeVisible(),
     );
     expect(saveNativePushToken).toHaveBeenCalledWith(
       "demo-cafe",
@@ -62,7 +62,9 @@ describe("the alerts card in the Android app", () => {
       />,
     );
     await waitFor(() =>
-      expect(screen.getByText("Get alerts on this device")).toBeVisible(),
+      expect(
+        screen.getByRole("button", { name: "Turn on alerts" }),
+      ).toBeVisible(),
     );
   });
 });
