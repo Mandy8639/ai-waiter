@@ -604,7 +604,9 @@ describe("payments phase 2 — order_payments", () => {
         "update public.restaurant_settings set accept_card = true where restaurant_id = $1;",
         [f.restaurantId],
       );
-      const rows = await db.asAnon(async (c) => {
+      // A diner (the anonymous-auth `authenticated` role), as on the order
+      // page; signed-out callers are refused since 20261017090000.
+      const rows = await db.asUser(f.customerUserId, async (c) => {
         const { rows } = await c.query<{ can_take_card: boolean }>(
           "select can_take_card from public.get_public_payment_settings($1);",
           [f.restaurantId],
