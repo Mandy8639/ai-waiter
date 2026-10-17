@@ -4,6 +4,10 @@ import type { Database } from "@/lib/supabase/database.types";
 import { decideRouteAccess, PROTECTED_PREFIXES } from "@/lib/auth/route-access";
 import { PATHNAME_HEADER } from "@/lib/dashboard/access-core";
 import {
+  hasVerifiedTwoFactor,
+  isTwoFactorPending,
+} from "@/lib/auth/two-factor-core";
+import {
   APP_SHELL_COOKIE,
   APP_SHELL_QUERY,
   appShellFrom,
@@ -110,12 +114,27 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Two-step verification: the factors come from the user getUser() just
+  // fetched, not the cookie's copy, so a setup finished on another device
+  // counts at once. The session's level is read only when it matters.
+  let twoFactorPending = false;
+  if (
+    user &&
+    user.is_anonymous !== true &&
+    hasVerifiedTwoFactor(user.factors)
+  ) {
+    const { data: aal } =
+      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    twoFactorPending = isTwoFactorPending(user.factors, aal?.currentLevel);
+  }
+
   const decision = decideRouteAccess(request.nextUrl.pathname, {
     signedIn: Boolean(user),
     // `is_anonymous` is optional in the SDK's type, so anything not
     // explicitly anonymous counts as a real account — the same
     // conservative reading the QR route handler uses.
     isAnonymous: user?.is_anonymous === true,
+    twoFactorPending,
   });
 
   if (decision.type === "redirect") {

@@ -6,6 +6,10 @@ import type { AuthError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isInviteToken } from "@/lib/staff/invitations-core";
 import { signInSchema, signUpSchema } from "@/lib/auth/auth-schemas";
+import {
+  hasVerifiedTwoFactor,
+  TWO_FACTOR_PATH,
+} from "@/lib/auth/two-factor-core";
 
 /**
  * Supabase Auth's own error messages ("Invalid login credentials", "User
@@ -66,10 +70,21 @@ export async function signIn(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
     return { error: friendlyAuthError(error) };
+  }
+
+  // Two-step verification on: the password was right, now the code. The
+  // invitation (if any) rides along so it isn't lost on the way.
+  if (hasVerifiedTwoFactor(data.user?.factors)) {
+    const token = formData.get("inviteToken");
+    redirect(
+      isInviteToken(token)
+        ? `${TWO_FACTOR_PATH}?invite=${token}`
+        : TWO_FACTOR_PATH,
+    );
   }
 
   redirect(destinationAfterAuth(formData, "/dashboard"));

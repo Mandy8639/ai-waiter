@@ -44,8 +44,12 @@ const MIGRATIONS_DIR = path.resolve(process.cwd(), "supabase/migrations");
 export interface TestDb {
   /** Raw connection. Runs as the default (table-owning) role, which bypasses RLS — for fixture setup only, never for asserting what a tenant user can see. */
   admin: PGlite;
-  /** Runs `fn` as `authenticated`, with auth.uid() resolving to `userId`. */
-  asUser: <T>(userId: string, fn: (client: PGlite) => Promise<T>) => Promise<T>;
+  /** Runs `fn` as `authenticated`, with auth.uid() resolving to `userId`. The token is password-only (aal1) unless `aal` says otherwise. */
+  asUser: <T>(
+    userId: string,
+    fn: (client: PGlite) => Promise<T>,
+    aal?: "aal1" | "aal2",
+  ) => Promise<T>;
   /** Runs `fn` as `anon` (unauthenticated) — auth.uid() is NULL. */
   asAnon: <T>(fn: (client: PGlite) => Promise<T>) => Promise<T>;
   /** Runs `fn` as `service_role` — what the Stripe webhook writes as. Bypasses RLS, as on a real project. */
@@ -54,6 +58,8 @@ export interface TestDb {
   createAuthUser: (email?: string) => Promise<string>;
   /** Inserts an anonymous (diner) identity — what scanning a table's QR code creates. */
   createAnonymousAuthUser: () => Promise<string>;
+  /** Gives the user a verified two-step verification (TOTP) factor. */
+  addVerifiedTwoFactor: (userId: string) => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -124,10 +130,15 @@ export async function createTestDb(): Promise<TestDb> {
     role: "authenticated" | "anon" | "service_role",
     userId: string | null,
     fn: (client: PGlite) => Promise<T>,
+    aal: "aal1" | "aal2" = "aal1",
   ): Promise<T> {
     await admin.exec(`set role ${role};`);
     await admin.query("select set_config('app.current_user_id', $1, false);", [
       userId ?? "",
+    ]);
+    // What auth.jwt() reads. Only the assurance level is modelled.
+    await admin.query("select set_config('request.jwt.claims', $1, false);", [
+      userId ? JSON.stringify({ aal }) : "",
     ]);
     try {
       return await fn(admin);
@@ -136,13 +147,16 @@ export async function createTestDb(): Promise<TestDb> {
         "select set_config('app.current_user_id', $1, false);",
         [""],
       );
+      await admin.query("select set_config('request.jwt.claims', $1, false);", [
+        "",
+      ]);
       await admin.exec("reset role;");
     }
   }
 
   return {
     admin,
-    asUser: (userId, fn) => withRole("authenticated", userId, fn),
+    asUser: (userId, fn, aal) => withRole("authenticated", userId, fn, aal),
     asAnon: (fn) => withRole("anon", null, fn),
     asServiceRole: (fn) => withRole("service_role", null, fn),
     createAuthUser: async (email) => {
@@ -159,6 +173,12 @@ export async function createTestDb(): Promise<TestDb> {
         "insert into auth.users (email, is_anonymous) values (null, true) returning id;",
       );
       return rows[0].id;
+    },
+    addVerifiedTwoFactor: async (userId) => {
+      await admin.query(
+        "insert into auth.mfa_factors (user_id, status) values ($1, 'verified');",
+        [userId],
+      );
     },
     close: () => admin.close(),
   };
