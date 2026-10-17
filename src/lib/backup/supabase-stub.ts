@@ -46,6 +46,26 @@ export const SUPABASE_PLATFORM_STUB_SQL = `
     select nullif(current_setting('app.current_user_id', true), '')::uuid
   $$;
 
+  -- The caller's token claims. Real Supabase reads them from
+  -- request.jwt.claims too; the test harness sets {"aal": ...} there. Read
+  -- for the two-step verification level (20261018090000_two_factor_login).
+  create function auth.jwt() returns jsonb
+  language sql stable as $$
+    select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
+  $$;
+
+  -- Two-step verification factors. GoTrue declares factor_type and status
+  -- as enums; text compares the same way against the literals the
+  -- migrations use ('verified').
+  create table auth.mfa_factors (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users (id) on delete cascade,
+    friendly_name text,
+    factor_type text not null default 'totp',
+    status text not null default 'unverified',
+    created_at timestamptz not null default now()
+  );
+
   -- Stubbed for the same reason auth is: the migrations reference it
   -- (menu-import uploads live in a bucket with its own RLS), and PGlite
   -- has no Supabase platform layer.

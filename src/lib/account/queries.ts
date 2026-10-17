@@ -12,6 +12,8 @@ export interface AccountOverview {
   email: string;
   /** Restaurants where this person is the only owner: deletion waits on these. */
   soleOwned: { id: string; name: string }[];
+  /** The authenticator-app factor, when two-step verification is on. */
+  twoFactorFactorId: string | null;
 }
 
 /** For the Account page. Null when nobody (or only a diner) is signed in. */
@@ -30,5 +32,9 @@ export async function getAccountOverview(): Promise<AccountOverview | null> {
   return {
     email: user.email ?? "",
     soleOwned: (data as { id: string; name: string }[] | null) ?? [],
+    twoFactorFactorId:
+      user.factors?.find(
+        (f) => f.factor_type === "totp" && f.status === "verified",
+      )?.id ?? null,
   };
 }

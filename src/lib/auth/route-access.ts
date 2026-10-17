@@ -7,6 +7,8 @@
  * not run.
  */
 
+import { TWO_FACTOR_PATH } from "@/lib/auth/two-factor-core";
+
 export const PROTECTED_PREFIXES = ["/dashboard", "/onboarding", "/account"];
 export const AUTH_PAGES = ["/login", "/signup"];
 
@@ -18,6 +20,11 @@ export interface RouteVisitor {
    * table's QR code. Treated as "not really signed in" for routing.
    */
   isAnonymous: boolean;
+  /**
+   * The account has two-step verification on and this session hasn't
+   * entered a code yet (see src/lib/auth/two-factor-core.ts).
+   */
+  twoFactorPending?: boolean;
 }
 
 export type RouteDecision =
@@ -62,12 +69,30 @@ export function decideRouteAccess(
   // owner-facing routes treat it exactly as signed-out.
   const isOperator = visitor.signedIn && !visitor.isAnonymous;
 
+  const twoFactorPending = isOperator && visitor.twoFactorPending === true;
+
+  // The code step: only for an operator who still owes it.
+  if (pathname === TWO_FACTOR_PATH) {
+    if (!isOperator) return { type: "redirect", to: "/login" };
+    if (!twoFactorPending) return { type: "redirect", to: "/dashboard" };
+    return { type: "continue" };
+  }
+
   if (isProtected && !isOperator) {
     return { type: "redirect", to: "/login", redirectTo: pathname };
   }
 
+  // A password alone isn't enough once two-step verification is on. The
+  // database refuses such a session too (20261018090000_two_factor_login).
+  if (isProtected && twoFactorPending) {
+    return { type: "redirect", to: TWO_FACTOR_PATH };
+  }
+
   if (AUTH_PAGES.includes(pathname) && isOperator) {
-    return { type: "redirect", to: "/dashboard" };
+    return {
+      type: "redirect",
+      to: twoFactorPending ? TWO_FACTOR_PATH : "/dashboard",
+    };
   }
 
   return { type: "continue" };

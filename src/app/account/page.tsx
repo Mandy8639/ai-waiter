@@ -7,6 +7,7 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { DeleteAccountForm } from "@/components/account/delete-account-form";
+import { TwoFactorSettings } from "@/components/account/two-factor-settings";
 import { deleteMyAccount } from "@/lib/account/actions";
 import { getAccountOverview } from "@/lib/account/queries";
 import {
@@ -51,6 +52,22 @@ export default async function AccountPage() {
           <span className="text-foreground font-medium">{account.email}</span>
         </p>
       </div>
+
+      <Card id="two-step">
+        <CardHeader>
+          <h2 className="font-heading text-base leading-snug font-medium">
+            Two-step verification
+          </h2>
+          <CardDescription>
+            Ask for a 6-digit code from an app on your phone as well as your
+            password when you sign in. Someone who learns your password still
+            can&apos;t get into your restaurant.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TwoFactorSettings enabledFactorId={account.twoFactorFactorId} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
