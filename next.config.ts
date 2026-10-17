@@ -26,7 +26,8 @@ const securityHeaders = [
     // The microphone stays on for the AI waiter's voice dictation
     // (src/lib/voice/dictation.ts); the camera for menu photo capture.
     key: "Permissions-Policy",
-    value: "microphone=(self), camera=(self), geolocation=(), browsing-topics=()",
+    value:
+      "microphone=(self), camera=(self), geolocation=(), browsing-topics=()",
   },
 ];
 
