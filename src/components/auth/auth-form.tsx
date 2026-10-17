@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/auth/password-input";
 import type { AuthFormState } from "@/lib/auth/actions";
+import { PASSWORD_MISMATCH_MESSAGE } from "@/lib/auth/auth-schemas";
 
 interface AuthFormProps {
   action: (
@@ -16,6 +18,8 @@ interface AuthFormProps {
   pendingLabel: string;
   passwordAutoComplete: "current-password" | "new-password";
   passwordHint?: string;
+  /** Sign-up: a second password field that must match the first. */
+  confirmPassword?: boolean;
   /**
    * Set when the visitor arrived from a staff invitation link. Carried
    * through the form so signing in or up returns them to /join/<token>
@@ -32,12 +36,34 @@ export function AuthForm({
   pendingLabel,
   passwordAutoComplete,
   passwordHint,
+  confirmPassword = false,
   inviteToken,
 }: AuthFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialState);
+  const [mismatch, setMismatch] = useState(false);
+  const confirmError = mismatch
+    ? PASSWORD_MISMATCH_MESSAGE
+    : state.fieldErrors?.confirmPassword?.[0];
+
+  // Caught here before submitting: a submitted form is cleared, so a
+  // mismatch found only by the server would mean typing both again.
+  const checkMatch = (event: React.FormEvent<HTMLFormElement>) => {
+    if (!confirmPassword) return;
+    const form = new FormData(event.currentTarget);
+    const confirmValue = form.get("confirmPassword");
+    if (confirmValue && form.get("password") !== confirmValue) {
+      event.preventDefault();
+      setMismatch(true);
+    }
+  };
 
   return (
-    <form action={formAction} className="flex flex-col gap-5" noValidate>
+    <form
+      action={formAction}
+      onSubmit={checkMatch}
+      className="flex flex-col gap-5"
+      noValidate
+    >
       {inviteToken && (
         <input type="hidden" name="inviteToken" value={inviteToken} />
       )}
@@ -75,13 +101,14 @@ export function AuthForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="password">Password</Label>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
+          fieldLabel="Password"
           autoComplete={passwordAutoComplete}
           required
           disabled={isPending}
+          onChange={() => setMismatch(false)}
           aria-invalid={!!state.fieldErrors?.password}
           aria-describedby={
             state.fieldErrors?.password ? "password-error" : undefined
@@ -96,6 +123,34 @@ export function AuthForm({
           </p>
         )}
       </div>
+
+      {confirmPassword && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="confirmPassword">Confirm password</Label>
+          <PasswordInput
+            id="confirmPassword"
+            name="confirmPassword"
+            fieldLabel="Confirm password"
+            autoComplete="new-password"
+            required
+            disabled={isPending}
+            onChange={() => setMismatch(false)}
+            aria-invalid={!!confirmError}
+            aria-describedby={
+              confirmError ? "confirm-password-error" : undefined
+            }
+          />
+          {confirmError && (
+            <p
+              id="confirm-password-error"
+              role="alert"
+              className="text-destructive text-sm"
+            >
+              {confirmError}
+            </p>
+          )}
+        </div>
+      )}
 
       <Button type="submit" disabled={isPending} className="mt-2">
         {isPending ? pendingLabel : submitLabel}

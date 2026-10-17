@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { AuthError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isInviteToken } from "@/lib/staff/invitations-core";
+import { signInSchema, signUpSchema } from "@/lib/auth/auth-schemas";
 
 /**
  * Supabase Auth's own error messages ("Invalid login credentials", "User
@@ -28,26 +29,6 @@ function friendlyAuthError(error: AuthError): string {
   return "Something went wrong. Please try again.";
 }
 
-const emailSchema = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .min(1, "Email is required.")
-  .email("Enter a valid email address.");
-const signInPasswordSchema = z.string().min(1, "Password is required.");
-const signUpPasswordSchema = z
-  .string()
-  .min(8, "Password must be at least 8 characters.");
-
-const signInSchema = z.object({
-  email: emailSchema,
-  password: signInPasswordSchema,
-});
-const signUpSchema = z.object({
-  email: emailSchema,
-  password: signUpPasswordSchema,
-});
-
 /**
  * Where to send someone after they authenticate.
  *
@@ -66,7 +47,9 @@ function destinationAfterAuth(formData: FormData, fallback: string): string {
 export interface AuthFormState {
   error?: string;
   message?: string;
-  fieldErrors?: Partial<Record<"email" | "password", string[]>>;
+  fieldErrors?: Partial<
+    Record<"email" | "password" | "confirmPassword", string[]>
+  >;
 }
 
 export async function signIn(
@@ -99,6 +82,7 @@ export async function signUp(
   const parsed = signUpSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
   });
 
   if (!parsed.success) {
@@ -106,7 +90,10 @@ export async function signUp(
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp(parsed.data);
+  const { data, error } = await supabase.auth.signUp({
+    email: parsed.data.email,
+    password: parsed.data.password,
+  });
 
   if (error) {
     return { error: friendlyAuthError(error) };

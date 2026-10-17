@@ -46,7 +46,7 @@ test.describe("customer QR-to-cart flow", () => {
     await createConfirmedTestUser(email, password);
     await page.goto("/login");
     await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
+    await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in" }).click();
     // signIn() (unlike signUp()) redirects to /dashboard, not straight to
     // /onboarding — a fresh user with zero restaurants lands on

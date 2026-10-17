@@ -53,7 +53,7 @@ test.describe("kitchen display: order lifecycle", () => {
     await createConfirmedTestUser(email, password);
     await page.goto("/login");
     await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
+    await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in" }).click();
     // signIn() (unlike signUp()) redirects to /dashboard, not straight to
     // /onboarding — a fresh user with zero restaurants lands on
@@ -220,7 +220,7 @@ test.describe("kitchen display: order lifecycle", () => {
       await createConfirmedTestUser(email, password);
       await p.goto("/login");
       await p.getByLabel("Email").fill(email);
-      await p.getByLabel("Password").fill(password);
+      await p.getByLabel("Password", { exact: true }).fill(password);
       await p.getByRole("button", { name: "Sign in" }).click();
       // signIn() redirects to /dashboard; click through the layout's
       // "Create your restaurant" prompt (see dashboard/layout.tsx).
