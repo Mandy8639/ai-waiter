@@ -32,20 +32,55 @@ const SIGNED_IN_ONLY = [
   "pause_new_orders",
   "resume_new_orders",
   "set_kitchen_busy",
+  // Reviewed 2026-10-17 and revoked from anon by
+  // 20261017090000_revoke_anon_from_signed_in_functions.sql. Each checks
+  // its caller inside or is a small helper; no signed-out page calls them.
+  "add_restaurant_staff_by_email",
+  "assert_can_view_reports",
+  "attach_payment_checkout_session",
+  "attach_refund_stripe_id",
+  "cancel_pending_refund",
+  "cart_belongs_to_caller",
+  "commit_menu_import",
+  "confirm_menu_item_allergens",
+  "confirm_reservation_request",
+  "confirmed_allergen_ids",
+  "count_recent_reservation_requests",
+  "create_reservation",
+  "create_restaurant",
+  "current_restaurant_role",
+  "get_best_selling_items",
+  "get_kitchen_queue_ahead",
+  "get_payment_history",
+  "get_public_payment_settings",
+  "get_takings_by_method",
+  "get_takings_summary",
+  "is_restaurant_manager_or_owner",
+  "is_restaurant_member",
+  "is_valid_order_status_transition",
+  "is_valid_reservation_status_transition",
+  "link_restaurant_payment_account",
+  "merge_orders_into_ticket",
+  "order_belongs_to_caller",
+  "order_status_rank",
+  "payment_refunded_total",
+  "platform_fee_for_payment",
+  "platform_fee_minor_units",
+  "recompute_order_status_from_groups",
+  "record_cash_payment",
+  "request_reservation",
+  "reverse_cash_payment",
+  "role_can_transition_order",
+  "split_order_into_tickets",
+  "start_order_payment",
+  "start_refund",
+  "submit_order",
+  "sync_restaurant_payment_account_status",
+  "transition_reservation_status",
+  "transition_ticket_group_status",
+  "update_reservation_details",
 ];
 
-/**
- * Functions still executable by anon, as found on 2026-09-19 after the
- * hotfix. NOT an endorsement: each is pending a per-function review (some,
- * like get_table_by_token for the QR scan, may genuinely need anon; most
- * check their caller inside and refuse anon anyway).
- *
- * The point of listing them is the test below: any function that becomes
- * anon-callable and is NOT on this list fails the suite, so a new migration
- * can no longer expose a function to signed-out callers by forgetting a
- * revoke. Shrink this list as the review proceeds; never grow it without
- * deciding that anon really should call the function.
- */
 /**
  * Functions anon is MEANT to call, each with a decision behind it. Distinct
  * from the pending-review list below, which is a backlog: this list is the
@@ -77,6 +112,20 @@ const SIGNED_IN_ONLY = [
  *   food is taking, shown on every diner page before anyone orders —
  *   including signed-out visitors browsing the menu. Two values, nothing
  *   else; expired ones read as off. See 20261015090000_kitchen_busy_mode.sql.
+ * - get_table_by_token, count_recent_sessions_for_table: the QR scan route
+ *   (src/app/r/[restaurantSlug]/table/[token]/route.ts) runs both before
+ *   the anonymous sign-in. The table's token is the authorization; the
+ *   count is the per-table session rate limit and returns a number only.
+ * - get_public_order_settings: whether the restaurant takes orders and
+ *   allows notes or AI suggestions, shown on the public menu and dish pages
+ *   before any scan. Four booleans.
+ * - is_menu_item_publicly_visible, is_restaurant_publicly_active: called
+ *   by the {anon, authenticated} SELECT policies on the menu tables, so the
+ *   public menu cannot load without them. Each returns one boolean about
+ *   whether something is published.
+ *
+ * Every other public function is refused to anon (reviewed 2026-10-17).
+ * Never add to this list without the same kind of reason.
  */
 const ANON_BY_DESIGN = [
   "get_kitchen_status",
@@ -88,58 +137,11 @@ const ANON_BY_DESIGN = [
   "get_menu_translations",
   "get_menu_languages",
   "get_public_menus",
-];
-
-const ANON_EXECUTABLE_PENDING_REVIEW = [
-  "add_restaurant_staff_by_email",
-  "assert_can_view_reports",
-  "attach_payment_checkout_session",
-  "attach_refund_stripe_id",
-  "cancel_pending_refund",
-  "cart_belongs_to_caller",
-  "commit_menu_import",
-  "confirm_menu_item_allergens",
-  "confirm_reservation_request",
-  "confirmed_allergen_ids",
-  "count_recent_reservation_requests",
-  "count_recent_sessions_for_table",
-  "create_reservation",
-  "create_restaurant",
-  "current_restaurant_role",
-  "get_best_selling_items",
-  "get_kitchen_queue_ahead",
-  "get_payment_history",
-  "get_public_order_settings",
-  "get_public_payment_settings",
   "get_table_by_token",
-  "get_takings_by_method",
-  "get_takings_summary",
+  "count_recent_sessions_for_table",
+  "get_public_order_settings",
   "is_menu_item_publicly_visible",
-  "is_restaurant_manager_or_owner",
-  "is_restaurant_member",
   "is_restaurant_publicly_active",
-  "is_valid_order_status_transition",
-  "is_valid_reservation_status_transition",
-  "link_restaurant_payment_account",
-  "merge_orders_into_ticket",
-  "order_belongs_to_caller",
-  "order_status_rank",
-  "payment_refunded_total",
-  "platform_fee_for_payment",
-  "platform_fee_minor_units",
-  "recompute_order_status_from_groups",
-  "record_cash_payment",
-  "request_reservation",
-  "reverse_cash_payment",
-  "role_can_transition_order",
-  "split_order_into_tickets",
-  "start_order_payment",
-  "start_refund",
-  "submit_order",
-  "sync_restaurant_payment_account_status",
-  "transition_reservation_status",
-  "transition_ticket_group_status",
-  "update_reservation_details",
 ];
 
 describe("function EXECUTE grants", () => {
@@ -204,8 +206,9 @@ describe("function EXECUTE grants", () => {
     const anonCallable = (await grants())
       .filter((r) => r.anon)
       .map((r) => r.name);
-    const reviewed = [...ANON_BY_DESIGN, ...ANON_EXECUTABLE_PENDING_REVIEW];
-    const unexpected = anonCallable.filter((name) => !reviewed.includes(name));
+    const unexpected = anonCallable.filter(
+      (name) => !ANON_BY_DESIGN.includes(name),
+    );
     expect(unexpected).toEqual([]);
   });
 
@@ -221,18 +224,6 @@ describe("function EXECUTE grants", () => {
     },
   );
 
-  it("keeps the pending-review list honest: every entry still exists and is still anon-callable", async () => {
-    // When a later migration revokes anon from one of these, this fails
-    // until the entry is removed — so the list only ever shrinks.
-    const anonCallable = new Set(
-      (await grants()).filter((r) => r.anon).map((r) => r.name),
-    );
-    const stale = ANON_EXECUTABLE_PENDING_REVIEW.filter(
-      (name) => !anonCallable.has(name),
-    );
-    expect(stale).toEqual([]);
-  });
-
   it("really refuses anon at call time, not just in the catalog", async () => {
     await expect(
       db.asAnon((c) =>
@@ -247,6 +238,21 @@ describe("function EXECUTE grants", () => {
           "select public.record_restaurant_subscription($1, $2, 'cus', 'sub', 'active', now(), false);",
           [crypto.randomUUID(), crypto.randomUUID()],
         ),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+    // From the 2026-10-17 review: a staff report and order submission.
+    await expect(
+      db.asAnon((c) =>
+        c.query("select * from public.get_takings_summary($1, now(), now());", [
+          crypto.randomUUID(),
+        ]),
+      ),
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      db.asAnon((c) =>
+        c.query("select public.current_restaurant_role($1);", [
+          crypto.randomUUID(),
+        ]),
       ),
     ).rejects.toThrow(/permission denied/i);
   });
