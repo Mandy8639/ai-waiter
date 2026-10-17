@@ -40,6 +40,7 @@ export default async function SignupPage({
             pendingLabel="Creating account…"
             passwordAutoComplete="new-password"
             passwordHint="At least 8 characters."
+            confirmPassword
             inviteToken={inviteToken}
           />
           <p className="text-muted-foreground text-center text-sm">
