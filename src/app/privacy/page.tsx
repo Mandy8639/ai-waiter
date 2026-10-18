@@ -195,6 +195,13 @@ export default function PrivacyPolicyPage() {
             what anyone wrote.
           </li>
           <li>
+            <Term>Visit statistics:</Term> we count which pages are visited,
+            through Vercel Web Analytics, to see how people find and use
+            Tableside. It uses no cookies and keeps no personal information, and
+            links that contain table, invitation, order or payment codes have
+            those codes removed before anything is recorded.
+          </li>
+          <li>
             <Term>Cookies:</Term> only the ones needed to keep you signed in and
             to keep your visit to a table working. No advertising or analytics
             cookies, and no tracking across other sites.
@@ -251,11 +258,12 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <Term>Service providers</Term> that run parts of Tableside for us:
-            Supabase (database and sign-in), Vercel (hosting), Stripe
-            (payments), Anthropic and OpenRouter (the AI waiter), Sentry (error
-            reports), Resend (email), and your browser&apos;s push service, such
-            as Google, Apple or Mozilla, or Apple&apos;s push notification
-            service in the iPhone and iPad app (notifications).
+            Supabase (database and sign-in), Vercel (hosting and visit
+            statistics), Stripe (payments), Anthropic and OpenRouter (the AI
+            waiter), Sentry (error reports), Resend (email), and your
+            browser&apos;s push service, such as Google, Apple or Mozilla, or
+            Apple&apos;s push notification service in the iPhone and iPad app
+            (notifications).
           </li>
           <li>
             <Term>When the law requires it</Term>, or to protect the rights,

@@ -26,6 +26,16 @@ describe("scrubUrl", () => {
     );
   });
 
+  it("redacts a staff invitation token, which admits whoever holds it", () => {
+    expect(scrubUrl("/join/9f2c4e1a7b3d5f60")).toBe("/join/[redacted]");
+  });
+
+  it("redacts a split bill's payment-link token", () => {
+    expect(scrubUrl("/r/nashta/split/5c7e9a1b3d")).toBe(
+      "/r/nashta/split/[redacted]",
+    );
+  });
+
   it("drops the query string wholesale", () => {
     // A per-parameter allowlist is open by default, and this one carries
     // Stripe session ids.

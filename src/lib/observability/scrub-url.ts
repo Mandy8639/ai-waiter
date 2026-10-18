@@ -1,5 +1,6 @@
 /**
- * Redacting what a browser URL would otherwise leak to Sentry.
+ * Redacting what a browser URL would otherwise leak to Sentry and to Vercel
+ * Web Analytics (src/lib/analytics/scrub.ts).
  *
  * Pure and free of `server-only` so it is directly testable — the same
  * extract-the-core convention as src/lib/observability/scrub.ts, which does
@@ -17,8 +18,13 @@
  * diner's order, and an error report is not a place to accumulate them.
  */
 
-/** Path segments whose FOLLOWING segment is sensitive and must not leave the browser. */
-const REDACT_AFTER = new Set(["table", "order", "receipt"]);
+/**
+ * Path segments whose FOLLOWING segment is sensitive and must not leave the
+ * browser. `join` and `split` carry bearer tokens just like `table`: a staff
+ * invitation (/join/<token>) and a split bill's payment link
+ * (/r/<slug>/split/<token>) admit whoever holds the URL.
+ */
+const REDACT_AFTER = new Set(["table", "order", "receipt", "join", "split"]);
 
 /**
  * Replaces sensitive path segments and drops the query string entirely.
