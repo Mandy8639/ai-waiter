@@ -40,7 +40,11 @@ export type Match =
 export type Resolution =
   | { type: "one"; match: Match }
   | { type: "several"; matches: Match[] }
-  | { type: "none" };
+  /**
+   * Nothing matched. `closest` are near-misses for a typo ("fries rice" →
+   * "Veg Fried Rice"), offered as choices and never used on their own.
+   */
+  | { type: "none"; closest: Match[] };
 
 /** For comparing names: lowercase words, no punctuation, no plural "s". */
 export function normalizeName(name: string): string {
@@ -97,7 +101,7 @@ export function resolveTarget(
 ): Resolution {
   const wanted = normalizeName(target);
   const wantedWords = wanted.split(" ").filter(Boolean);
-  if (!wanted) return { type: "none" };
+  if (!wanted) return { type: "none", closest: [] };
 
   const options = dishesOnly ? [] : catalog.options;
   const pick = (matches: Match[]): Resolution | null => {
@@ -125,7 +129,49 @@ export function resolveTarget(
       .map((dish) => ({ type: "dish" as const, dish })),
     ...optionGroups(options.filter((o) => containsAll(o.name, wantedWords))),
   ];
-  return pick(partial) ?? { type: "none" };
+  const found = pick(partial);
+  if (found) return found;
+
+  // A typo: every word typed is within an edit or two of a word in the
+  // name. Offered as "did you mean?", never acted on.
+  const near = (name: string) =>
+    wantedWords.length > 0 &&
+    wantedWords.every((w) => words(name).some((n) => closeWords(w, n)));
+  return {
+    type: "none",
+    closest: [
+      ...catalog.dishes
+        .filter((d) => near(d.name))
+        .map((dish) => ({ type: "dish" as const, dish })),
+      ...optionGroups(options.filter((o) => near(o.name))),
+    ].slice(0, 6),
+  };
+}
+
+/** Same word, or a typo of it: one edit for 4–6 letters, two from 7. */
+export function closeWords(a: string, b: string): boolean {
+  if (a === b) return true;
+  const longest = Math.max(a.length, b.length);
+  if (Math.min(a.length, b.length) < 4) return false;
+  const allowed = longest >= 7 ? 2 : 1;
+  if (Math.abs(a.length - b.length) > allowed) return false;
+  return editDistance(a, b) <= allowed;
+}
+
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[b.length];
 }
 
 /** "Grilled salmon" or "Oat milk (on 4 dishes)". */

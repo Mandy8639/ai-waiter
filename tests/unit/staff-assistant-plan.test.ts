@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  closeWords,
   normalizeName,
   resolveTarget,
   type Catalog,
@@ -266,7 +267,71 @@ describe("planning", () => {
   });
 });
 
+describe("typos", () => {
+  const withRice: Catalog = {
+    ...catalog,
+    dishes: [
+      ...catalog.dishes,
+      {
+        id: id(6),
+        name: "Veg Fried Rice",
+        price: 12,
+        available: true,
+        backAt: null,
+      },
+      {
+        id: id(7),
+        name: "Egg Fried Rice",
+        price: 13,
+        available: true,
+        backAt: null,
+      },
+    ],
+  };
+
+  it('offers "did you mean?" for a typo, and changes nothing', () => {
+    // As typed on Nashta's phone, 2026-10-18.
+    const plan = planIntent(
+      { kind: "sold_out", target: "fries rice", until: "next_opening" },
+      ctx({ catalog: withRice }),
+    );
+    expect(plan.type).toBe("choose");
+    if (plan.type !== "choose") return;
+    expect(plan.text).toContain('I couldn\'t find "fries rice". Did you mean');
+    expect(plan.buttons.map((b) => b.label)).toEqual([
+      "Veg Fried Rice",
+      "Egg Fried Rice",
+    ]);
+    expect(plan.buttons.every((b) => !b.confirmed)).toBe(true);
+  });
+
+  it("doesn't stretch a short word or a different word into a match", () => {
+    expect(closeWords("tea", "pea")).toBe(false);
+    expect(closeWords("chai", "chat")).toBe(true);
+    expect(closeWords("salmon", "lemon")).toBe(false);
+    expect(
+      planIntent(
+        { kind: "sold_out", target: "lobster", until: "next_opening" },
+        ctx(),
+      ).type,
+    ).toBe("not_found");
+  });
+});
+
 describe("after a change", () => {
+  it("explains a 4 AM return when the menu has no opening hours", () => {
+    const text = doneText(
+      { kind: "dish_sold_out", dishId: id(3), until: "next_opening" },
+      catalog,
+      { backAt: "2026-11-04T09:00:00Z" },
+      NY,
+      now,
+      { hasMenuHours: false },
+    );
+    expect(text).toContain("Back tomorrow 4:00 AM, by itself.");
+    expect(text).toContain("Menu → Menus");
+  });
+
   it("says when a dish comes back, in the restaurant's time", () => {
     expect(
       doneText(

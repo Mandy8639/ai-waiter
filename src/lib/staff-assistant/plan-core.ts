@@ -37,6 +37,11 @@ export interface PlanContext {
   source: "rules" | "ai" | "button";
   timeZone: string;
   now?: Date;
+  /**
+   * Whether any published menu has opening hours. Without them "the next
+   * opening" is 4 AM, which is worth saying out loud.
+   */
+  hasMenuHours?: boolean;
 }
 
 export interface ReplyButton {
@@ -328,6 +333,18 @@ export function planIntent(intent: StaffIntent, ctx: PlanContext): Plan {
               : false;
         },
       });
+      if (resolution.type === "none" && resolution.closest.length > 0) {
+        return {
+          type: "choose",
+          text: `I couldn't find "${intent.target}". Did you mean one of these? Nothing has been changed yet.`,
+          buttons: resolution.closest.map((m) => ({
+            label: matchLabel(m),
+            action: actionForMatch(intent, m),
+            confirmed: false,
+            variant: "secondary",
+          })),
+        };
+      }
       if (resolution.type === "none") {
         return {
           type: "not_found",
@@ -417,13 +434,18 @@ export function doneText(
   result: RunResult,
   timeZone: string,
   now: Date = new Date(),
+  { hasMenuHours = true }: { hasMenuHours?: boolean } = {},
 ): string {
   switch (action.kind) {
     case "dish_sold_out": {
       const name = dishById(catalog, action.dishId)?.name ?? "That dish";
-      return result.backAt
-        ? `Done: ${name} is sold out. ${formatBackAt(result.backAt, timeZone, now)}, by itself.`
-        : `Done: ${name} is sold out until someone brings it back.`;
+      if (!result.backAt) {
+        return `Done: ${name} is sold out until someone brings it back.`;
+      }
+      const done = `Done: ${name} is sold out. ${formatBackAt(result.backAt, timeZone, now)}, by itself.`;
+      return hasMenuHours
+        ? done
+        : `${done}\n\nYour menu has no opening hours, so "tomorrow" starts at 4 AM. An owner or manager can set hours in Menu → Menus, and it will come back when you open instead.`;
     }
     case "dish_back":
       return `Done: ${dishById(catalog, action.dishId)?.name ?? "That dish"} is back on the menu.`;

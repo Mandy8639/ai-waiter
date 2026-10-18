@@ -199,9 +199,13 @@ export function parseStaffCommand(input: string): StaffIntent {
   {
     const patterns = [
       /^(?:un-?86|bring back|put back|restock|unblock|turn on|reactivate)(?: on)? (.+)$/,
+      /^(?:bring|put) (.+?) back(?: on)?(?: the menu)?$/,
       /^(?:mark|set|make) (.+?) (?:as )?(?:available|back|in stock)(?: again)?$/,
       /^(.+?)(?: is| are|'s|'re) (?:back|available|back on|back in stock|in stock)(?: again| now)?$/,
       /^(.+?) back on(?: the menu)?$/,
+      // "Noodles available", "naan back in stock": said without the verb.
+      /^(.+?) (?:available|back in stock|in stock|restocked)(?: again| now)?$/,
+      /^(.+?) (?:back)(?: again| now)?$/,
       /^we (?:have|got) (.+?) (?:again|back)$/,
       /^(?:got|have) (.+?) back$/,
     ];

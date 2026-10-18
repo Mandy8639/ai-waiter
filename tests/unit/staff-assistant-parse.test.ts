@@ -58,6 +58,11 @@ describe("back in stock", () => {
     ["oat milk is available again", "oat milk"],
     ["we have naan again", "naan"],
     ["samosas are back in stock", "samosas"],
+    // As typed on Nashta's phone, 2026-10-18.
+    ["Noodles available", "noodles"],
+    ["naan back in stock", "naan"],
+    ["salmon back", "salmon"],
+    ["bring the salmon back", "salmon"],
   ])("%s", (text, target) => {
     expect(parseStaffCommand(text)).toEqual({ kind: "back", target });
   });
