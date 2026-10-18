@@ -1438,6 +1438,7 @@ then to `/reset-password`.
 through Resend over custom SMTP. The default Supabase sender only reaches the project team's own
 addresses, so this is what lets restaurant owners receive them. Production settings, in Supabase →
 Authentication → Emails:
+
 - **SMTP:** host `smtp.resend.com`, port `465`, username `resend`, sender
   `no-reply@mail.tableside.menu` (name `Tableside`). The password is a Resend API key with sending
   access to `mail.tableside.menu` only, named "Supabase auth emails" in Resend. Rotate it there and
