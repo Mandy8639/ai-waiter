@@ -108,13 +108,20 @@ export function normaliseCategoryName(raw: string): string {
     .trim();
 }
 
-export function parseExtraction(rawText: string): ParseOutcome {
+/**
+ * One model reply → the categories it lists, or why it can't be used.
+ * Split from parseExtraction so several replies (one per photo) can be
+ * read separately and merged before drafts are made.
+ */
+export function readExtraction(
+  rawText: string,
+):
+  | { ok: true; categories: ExtractionResult["categories"] }
+  | { ok: false; error: string } {
   const json = extractJsonObject(rawText);
   if (!json) {
     return {
       ok: false,
-      drafts: [],
-      unpricedCount: 0,
       error: "Couldn't read a menu from that response. Please try again.",
     };
   }
@@ -125,8 +132,6 @@ export function parseExtraction(rawText: string): ParseOutcome {
   } catch {
     return {
       ok: false,
-      drafts: [],
-      unpricedCount: 0,
       error:
         "The menu reader returned something unreadable. Please try again, or upload a clearer photo.",
     };
@@ -136,18 +141,33 @@ export function parseExtraction(rawText: string): ParseOutcome {
   if (!result.success) {
     return {
       ok: false,
-      drafts: [],
-      unpricedCount: 0,
       error:
         "The menu reader returned an unexpected shape. Please try again, or upload a clearer photo.",
     };
   }
+  return { ok: true, categories: result.data.categories };
+}
 
+export function parseExtraction(rawText: string): ParseOutcome {
+  const read = readExtraction(rawText);
+  if (!read.ok) {
+    return { ok: false, drafts: [], unpricedCount: 0, error: read.error };
+  }
+  return draftsFromCategories(read.categories);
+}
+
+/**
+ * Categories (from one reply, or several merged in page order) → draft
+ * rows, with the same dish read twice dropped.
+ */
+export function draftsFromCategories(
+  categories: ExtractionResult["categories"],
+): ParseOutcome {
   const drafts: DraftItem[] = [];
   let order = 0;
   const seen = new Set<string>();
 
-  for (const category of result.data.categories) {
+  for (const category of categories) {
     const categoryName = normaliseCategoryName(category.name);
     if (!categoryName) continue;
 

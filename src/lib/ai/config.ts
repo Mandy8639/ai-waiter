@@ -86,6 +86,9 @@ const defaultModelsByProvider: Record<AiProviderName, string[]> = {
     // The incumbent, and the only model with a long track record here:
     // every live waiter turn during this feature's development was served
     // by it, including the preparation, portion and spice conversations.
+    // NO LONGER FREE as of 2026-10-18 (OpenRouter answers 404 for it), so
+    // in practice the waiter has no fallback. Kept until a replacement has
+    // held a real conversation in the app (see above), not swapped blind.
     "minimax/minimax-m3:free",
   ],
 };
@@ -106,14 +109,24 @@ const defaultModelsByProvider: Record<AiProviderName, string[]> = {
  *   dots-studio/dots-3-note-preview:free   12/12  1122ms
  *
  * All three read every price and none invented one for the trap line.
+ *
+ * Re-vetted 2026-10-18, after a real two-photo import failed:
+ *
+ *   nvidia/nemotron-3.5-super-vl:free       11/12   658ms  (new; invented none)
+ *   dots-studio/dots-3-note-preview:free    12/12   915ms
+ *   nvidia/nemotron-3-nano-omni…:free       FAIL    unparseable (busy upstream)
+ *   minimax/minimax-m3:free                 gone    no longer free (404)
+ *
+ * dots-3 now leads: every price, and it read Nashta's own boards. The
+ * nano-omni stays last, as a fallback only.
  * Three is the whole list, not a top-five cut: OpenRouter has seven free
  * vision models, two are access-gated (403) and two rate-limit on every
  * attempt.
  */
 export const DEFAULT_VISION_MODELS = [
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-  "minimax/minimax-m3:free",
   "dots-studio/dots-3-note-preview:free",
+  "nvidia/nemotron-3.5-super-vl:free",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
 ];
 
 /**
@@ -145,7 +158,7 @@ export const DEFAULT_VISION_MODELS = [
  */
 export const DEFAULT_SUGGESTION_MODELS = [
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-  "z-ai/glm-5.2:free",
+  // z-ai/glm-5.2:free was here; no longer offered free (2026-10-18).
   "nvidia/nemotron-3-super-120b-a12b:free",
   "cohere/north-mini-code:free",
   "dots-studio/dots-3-note-preview:free",
