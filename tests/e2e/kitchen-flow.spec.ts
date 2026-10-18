@@ -67,7 +67,7 @@ test.describe("kitchen display: order lifecycle", () => {
     await page
       .getByLabel("Restaurant name")
       .fill("Kitchen Flow Test Restaurant");
-    await page.getByLabel("Slug").fill(slug);
+    await page.getByLabel("Web address").fill(slug);
     await page.getByRole("button", { name: "Create restaurant" }).click();
     await page.waitForURL("/dashboard");
 
@@ -229,7 +229,7 @@ test.describe("kitchen display: order lifecycle", () => {
       await p.waitForURL("/onboarding");
       const slug = `e2e-kitchen-tenant-${testId}-${suffix}`;
       await p.getByLabel("Restaurant name").fill(`Tenant ${suffix} Restaurant`);
-      await p.getByLabel("Slug").fill(slug);
+      await p.getByLabel("Web address").fill(slug);
       await p.getByRole("button", { name: "Create restaurant" }).click();
       await p.waitForURL("/dashboard");
       return slug;

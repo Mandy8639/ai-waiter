@@ -80,7 +80,7 @@ test.describe("AI waiter: full conversational order flow", () => {
 
     const slug = `e2e-ai-waiter-${testId}`;
     await page.getByLabel("Restaurant name").fill("AI Waiter Test Restaurant");
-    await page.getByLabel("Slug").fill(slug);
+    await page.getByLabel("Web address").fill(slug);
     await page.getByRole("button", { name: "Create restaurant" }).click();
     await page.waitForURL("/dashboard");
 
@@ -324,7 +324,7 @@ test.describe("AI waiter: never blocks normal ordering", () => {
     await page
       .getByLabel("Restaurant name")
       .fill("AI Fallback Test Restaurant");
-    await page.getByLabel("Slug").fill(slug);
+    await page.getByLabel("Web address").fill(slug);
     await page.getByRole("button", { name: "Create restaurant" }).click();
     await page.waitForURL("/dashboard");
 
