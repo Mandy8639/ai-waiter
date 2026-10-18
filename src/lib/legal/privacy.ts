@@ -11,6 +11,6 @@
 export const PRIVACY_CONTACT_EMAIL = "privacy@tableside.menu";
 
 /** Shown as "Last updated". Change it whenever the policy's substance changes. */
-export const PRIVACY_POLICY_UPDATED = "October 11, 2026";
+export const PRIVACY_POLICY_UPDATED = "October 17, 2026";
 
 export const PRIVACY_POLICY_PATH = "/privacy";
