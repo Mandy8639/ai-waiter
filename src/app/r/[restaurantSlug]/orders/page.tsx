@@ -12,6 +12,7 @@ import { CUSTOMER_STATUS_LABELS as STATUS_LABELS } from "@/lib/orders/status";
 import { getTabPaymentState } from "@/lib/payments/tab-queries";
 import { startTabCheckout } from "@/lib/payments/tab-checkout";
 import { SplitBillStart } from "@/components/customer/split-bill-start";
+import { OrderAgainButton } from "@/components/customer/order-again-button";
 import { createSplit } from "@/lib/payments/split-actions";
 import { createClient } from "@/lib/supabase/server";
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
@@ -148,6 +149,12 @@ export default async function OrderHistoryPage({
         </div>
       ) : (
         <div className="flex flex-col gap-3">
+          {/* The newest order, which is the round a table repeats. */}
+          <OrderAgainButton
+            orderId={orders[0].id}
+            orderNumber={orders[0].orderNumber}
+            restaurantSlug={restaurantSlug}
+          />
           {orders.map((order) => (
             <Link
               key={order.id}

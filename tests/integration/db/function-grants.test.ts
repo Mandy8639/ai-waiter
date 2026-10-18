@@ -28,6 +28,7 @@ const SIGNED_IN_ONLY = [
   "get_restaurant_staff",
   "record_in_person_payment",
   "set_menu_item_availability",
+  "set_menu_item_sold_out_until_next_opening",
   "set_modifier_option_availability",
   "pause_new_orders",
   "resume_new_orders",
@@ -121,6 +122,10 @@ const SIGNED_IN_ONLY = [
  * - get_public_order_settings: whether the restaurant takes orders and
  *   allows notes or AI suggestions, shown on the public menu and dish pages
  *   before any scan. Four booleans.
+ * - get_special_hours_today: whether the restaurant is closed today or on
+ *   special hours (a holiday), with the owner's short public note, shown
+ *   on the public menu before any scan. Today's row only, active
+ *   restaurants only. See 20261019090000_service_features.sql.
  * - is_menu_item_publicly_visible, is_restaurant_publicly_active: called
  *   by the {anon, authenticated} SELECT policies on the menu tables, so the
  *   public menu cannot load without them. Each returns one boolean about
@@ -142,6 +147,7 @@ const ANON_BY_DESIGN = [
   "get_table_by_token",
   "count_recent_sessions_for_table",
   "get_public_order_settings",
+  "get_special_hours_today",
   "is_menu_item_publicly_visible",
   "is_restaurant_publicly_active",
 ];

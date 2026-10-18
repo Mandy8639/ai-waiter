@@ -1,7 +1,7 @@
 import { SoldOutBoard } from "@/components/kitchen/sold-out-board";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { createClient } from "@/lib/supabase/server";
-import { buildSoldOutMenu } from "@/lib/menu/sold-out-core";
+import { buildSoldOutMenu, type SoldOutRows } from "@/lib/menu/sold-out-core";
 
 export const metadata = {
   title: "Sold out — Tableside",
@@ -26,7 +26,9 @@ export default async function SoldOutPage() {
       .eq("is_active", true),
     supabase
       .from("menu_items")
-      .select("id, name, category_id, is_available, display_order")
+      .select(
+        "id, name, category_id, is_available, available_again_at, display_order",
+      )
       .eq("restaurant_id", restaurant.id),
     supabase
       .from("menu_item_modifiers")
@@ -45,7 +47,8 @@ export default async function SoldOutPage() {
 
   const menu = buildSoldOutMenu({
     categories: categories.data ?? [],
-    dishes: dishes.data ?? [],
+    // database.types.ts predates available_again_at (20261019090000).
+    dishes: (dishes.data ?? []) as unknown as SoldOutRows["dishes"],
     groups: groups.data ?? [],
     options: options.data ?? [],
   });
@@ -56,10 +59,16 @@ export default async function SoldOutPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Sold out</h1>
         <p className="text-muted-foreground text-sm">
           Ran out of something? Tap it. Diners stop seeing it straight away, and
-          it can&apos;t be ordered until you tap it back.
+          it can&apos;t be ordered until you tap it back — or choose
+          &ldquo;Until tomorrow&rdquo; and it comes back by itself when you next
+          open.
         </p>
       </div>
-      <SoldOutBoard restaurantId={restaurant.id} menu={menu} />
+      <SoldOutBoard
+        restaurantId={restaurant.id}
+        menu={menu}
+        timeZone={restaurant.timezone}
+      />
     </div>
   );
 }

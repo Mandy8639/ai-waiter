@@ -7,7 +7,12 @@ import {
 } from "@/components/dashboard/menus-manager";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
-import type { MenuHoursWindow } from "@/lib/menus/core";
+import { SpecialHoursCard } from "@/components/dashboard/special-hours-card";
+import {
+  todayIn,
+  type MenuHoursWindow,
+  type SpecialHours,
+} from "@/lib/menus/core";
 
 export const metadata = {
   title: "Menus — Tableside",
@@ -28,7 +33,20 @@ export default async function MenusPage() {
   const untyped = supabase as unknown as {
     from: (table: string) => {
       select: (columns: string) => {
-        eq: (c: string, v: string) => Promise<{ data: unknown[] | null }>;
+        eq: (
+          c: string,
+          v: string,
+        ) => Promise<{ data: unknown[] | null }> & {
+          gte: (
+            c: string,
+            v: string,
+          ) => {
+            order: (
+              c: string,
+              o: { ascending: boolean },
+            ) => Promise<{ data: unknown[] | null }>;
+          };
+        };
       };
     };
     rpc: (
@@ -37,7 +55,8 @@ export default async function MenusPage() {
     ) => Promise<{ data: unknown }>;
   };
 
-  const [menusRes, hoursRes, sectionsRes, { data: categories }] =
+  const today = todayIn(restaurant.timezone);
+  const [menusRes, hoursRes, sectionsRes, { data: categories }, specialRes] =
     await Promise.all([
       untyped
         .from("menus")
@@ -56,6 +75,12 @@ export default async function MenusPage() {
         .select("id, name, is_active, display_order")
         .eq("restaurant_id", restaurant.id)
         .order("display_order", { ascending: true }),
+      untyped
+        .from("restaurant_special_hours")
+        .select("id, day, closed, opens_at, closes_at, note")
+        .eq("restaurant_id", restaurant.id)
+        .gte("day", today)
+        .order("day", { ascending: true }),
     ]);
 
   // Which menus are on right now, decided by the database in the
@@ -77,6 +102,24 @@ export default async function MenusPage() {
     menu_id: string;
     category_id: string;
   }>;
+
+  const upcoming: SpecialHours[] = (
+    (specialRes.data ?? []) as Array<{
+      id: string;
+      day: string;
+      closed: boolean;
+      opens_at: string | null;
+      closes_at: string | null;
+      note: string | null;
+    }>
+  ).map((r) => ({
+    id: r.id,
+    day: r.day,
+    closed: r.closed,
+    opens: r.opens_at && toTime(r.opens_at),
+    closes: r.closes_at && toTime(r.closes_at),
+    note: r.note,
+  }));
 
   const menus: ManagedMenu[] = (
     (menusRes.data ?? []) as Array<{
@@ -136,6 +179,11 @@ export default async function MenusPage() {
           name: c.name,
           isActive: c.is_active,
         }))}
+      />
+      <SpecialHoursCard
+        restaurantId={restaurant.id}
+        upcoming={upcoming}
+        today={today}
       />
     </div>
   );

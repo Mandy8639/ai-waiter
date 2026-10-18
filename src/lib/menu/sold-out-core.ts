@@ -17,6 +17,8 @@ export interface SoldOutDish {
   id: string;
   name: string;
   available: boolean;
+  /** When a dish sold out "until tomorrow" comes back by itself (ISO); null otherwise. */
+  backAt: string | null;
   options: SoldOutOption[];
 }
 
@@ -33,6 +35,7 @@ export interface SoldOutRows {
     name: string;
     category_id: string;
     is_available: boolean;
+    available_again_at?: string | null;
     display_order: number;
   }[];
   groups: {
@@ -76,6 +79,7 @@ export function buildSoldOutMenu(rows: SoldOutRows): SoldOutCategory[] {
     id: dish.id,
     name: dish.name,
     available: dish.is_available,
+    backAt: dish.is_available ? null : (dish.available_again_at ?? null),
     options: (groupsByDish.get(dish.id) ?? []).flatMap((group) =>
       (optionsByGroup.get(group.id) ?? []).map((option) => ({
         id: option.id,
@@ -137,7 +141,7 @@ export function filterSoldOutMenu(
 }
 
 export type SoldOutEntry =
-  | { kind: "dish"; id: string; label: string }
+  | { kind: "dish"; id: string; label: string; backAt: string | null }
   | { kind: "option"; id: string; label: string };
 
 /** Everything off the menu right now, for the list at the top of the screen. */
@@ -146,7 +150,12 @@ export function soldOutNow(menu: SoldOutCategory[]): SoldOutEntry[] {
   for (const category of menu) {
     for (const dish of category.dishes) {
       if (!dish.available) {
-        entries.push({ kind: "dish", id: dish.id, label: dish.name });
+        entries.push({
+          kind: "dish",
+          id: dish.id,
+          label: dish.name,
+          backAt: dish.backAt,
+        });
       }
       for (const option of dish.options) {
         if (!option.available) {
@@ -160,4 +169,36 @@ export function soldOutNow(menu: SoldOutCategory[]): SoldOutEntry[] {
     }
   }
   return entries;
+}
+
+/** A calendar date, YYYY-MM-DD, in the given timezone. */
+function localDate(date: Date, timeZone: string): string {
+  return date.toLocaleDateString("en-CA", { timeZone });
+}
+
+/**
+ * When a dish sold out "until tomorrow" comes back, the way a cook says it:
+ * "Back tomorrow 11:00 AM", "Back today 5:00 PM", or "Back Thu 11:00 AM"
+ * after a closed day. In the restaurant's timezone, not the tablet's.
+ */
+export function formatBackAt(
+  backAt: string,
+  timeZone: string,
+  now: Date = new Date(),
+): string {
+  const at = new Date(backAt);
+  const time = at.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
+  const day = localDate(at, timeZone);
+  const tomorrow = localDate(new Date(now.getTime() + 86_400_000), timeZone);
+  if (day === localDate(now, timeZone)) return `Back today ${time}`;
+  if (day === tomorrow) return `Back tomorrow ${time}`;
+  const weekday = at.toLocaleDateString("en-US", {
+    weekday: "short",
+    timeZone,
+  });
+  return `Back ${weekday} ${time}`;
 }
