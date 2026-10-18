@@ -16,6 +16,7 @@ import { NativeAppBridge } from "@/components/kitchen/native-app-bridge";
 import { RestaurantSwitcher } from "@/components/dashboard/restaurant-switcher";
 import { TwoFactorReminder } from "@/components/dashboard/two-factor-reminder";
 import { BillingBanner } from "@/components/dashboard/billing-banner";
+import { StaffAssistantProvider } from "@/components/dashboard/staff-assistant";
 import { billingNotice } from "@/lib/billing/trial-core";
 import { getRestaurantBilling } from "@/lib/billing/trial-queries";
 import { canSellPlans } from "@/lib/app-shell/core";
@@ -110,6 +111,21 @@ export default async function DashboardLayout({
     timeZone: restaurant.timezone,
   });
 
+  // The Chef (staff assistant) floats on every page for the roles that
+  // can use it; see src/components/dashboard/staff-assistant.tsx.
+  const hasChef = ["owner", "manager", "kitchen"].includes(restaurant.role);
+  const withChef = (content: React.ReactNode) =>
+    hasChef ? (
+      <StaffAssistantProvider
+        restaurantId={restaurant.id}
+        canChangePrices={["owner", "manager"].includes(restaurant.role)}
+      >
+        {content}
+      </StaffAssistantProvider>
+    ) : (
+      content
+    );
+
   // The kitchen account is a screen on the pass: no sidebar, no money, no
   // settings — the board at full width and its two tabs. Which pages it
   // may open at all is decided in src/lib/dashboard/access-core.ts.
@@ -139,9 +155,10 @@ export default async function DashboardLayout({
             <LogoutButton />
           </div>
         </header>
-        <main className="w-full flex-1 px-3 py-4 sm:px-4">
+        {/* Bottom padding keeps the last ticket clear of "Ask the Chef". */}
+        <main className="w-full flex-1 px-3 pt-4 pb-24 sm:px-4">
           {notice && <BillingBanner notice={notice} />}
-          {children}
+          {withChef(children)}
         </main>
         <NativeAppBridge />
       </div>
@@ -218,11 +235,17 @@ export default async function DashboardLayout({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <main
+          className={
+            hasChef
+              ? "mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-24 sm:px-6 sm:pt-8"
+              : "mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8"
+          }
+        >
           {notice && <BillingBanner notice={notice} />}
           {["owner", "manager"].includes(restaurant.role) &&
             !hasVerifiedTwoFactor(user.factors) && <TwoFactorReminder />}
-          {children}
+          {withChef(children)}
         </main>
         <NativeAppBridge />
       </div>
