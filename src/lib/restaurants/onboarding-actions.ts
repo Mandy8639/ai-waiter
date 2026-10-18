@@ -9,8 +9,11 @@ import {
   createRestaurant,
   createRestaurantInputSchema,
 } from "./create-restaurant";
+import { isValidTimeZone, slugCandidates, slugify } from "./slug-core";
 
 const onboardingSchema = createRestaurantInputSchema.extend({
+  // Optional here: left blank, it's made from the name.
+  slug: createRestaurantInputSchema.shape.slug.optional(),
   phone: z.string().trim().max(50).optional(),
   address: z.string().trim().max(200).optional(),
   city: z.string().trim().max(100).optional(),
@@ -21,6 +24,27 @@ const onboardingSchema = createRestaurantInputSchema.extend({
 export interface OnboardingFormState {
   error?: string;
   fieldErrors?: Record<string, string[] | undefined>;
+  /** What was submitted, so a failed attempt never wipes the form. */
+  values?: Record<string, string>;
+}
+
+const FIELDS = [
+  "name",
+  "slug",
+  "description",
+  "phone",
+  "address",
+  "city",
+  "state",
+  "postalCode",
+] as const;
+
+function isDuplicateSlug(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : "";
+  return (
+    message.includes("duplicate key") ||
+    message.includes("restaurants_slug_key")
+  );
 }
 
 export async function createRestaurantAction(
@@ -29,9 +53,16 @@ export async function createRestaurantAction(
 ): Promise<OnboardingFormState> {
   await requireUser();
 
+  const values = Object.fromEntries(
+    FIELDS.map((f) => [f, String(formData.get(f) ?? "")]),
+  );
+  // The owner's own browser timezone, so menu hours and "back tomorrow"
+  // are in their time, not New York's. Ignored unless it's a real zone.
+  const timezoneRaw = String(formData.get("timezone") ?? "").trim();
+
   const parsed = onboardingSchema.safeParse({
     name: formData.get("name"),
-    slug: formData.get("slug"),
+    slug: emptyToUndefined(formData.get("slug")),
     description: emptyToUndefined(formData.get("description")),
     phone: emptyToUndefined(formData.get("phone")),
     address: emptyToUndefined(formData.get("address")),
@@ -41,29 +72,54 @@ export async function createRestaurantAction(
   });
 
   if (!parsed.success) {
-    return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
+    const fieldErrors = z.flattenError(parsed.error).fieldErrors;
+    if (fieldErrors.name) fieldErrors.name = ["Enter your restaurant's name."];
+    if (fieldErrors.slug) {
+      fieldErrors.slug = [
+        "Use only lowercase letters, numbers and dashes, like spice-garden.",
+      ];
+    }
+    return { fieldErrors, values };
   }
 
+  // An address the owner typed is theirs to change if taken; one made from
+  // the name is ours, so the next free variant is used instead.
+  const slugAuto = formData.get("slugAuto") === "1";
+  const chosen = slugAuto ? undefined : parsed.data.slug;
+  const candidates = chosen
+    ? [chosen]
+    : slugCandidates(parsed.data.slug ?? slugify(parsed.data.name));
+  const timezone = isValidTimeZone(timezoneRaw) ? timezoneRaw : undefined;
+
   let restaurant;
-  try {
-    restaurant = await createRestaurant({
-      name: parsed.data.name,
-      slug: parsed.data.slug,
-      description: parsed.data.description,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "";
-    if (
-      message.includes("duplicate key") ||
-      message.includes("restaurants_slug_key")
-    ) {
+  for (const slug of candidates) {
+    try {
+      restaurant = await createRestaurant({
+        name: parsed.data.name,
+        slug,
+        description: parsed.data.description,
+        timezone,
+      });
+      break;
+    } catch (err) {
+      if (isDuplicateSlug(err)) continue;
       return {
-        fieldErrors: {
-          slug: ["That slug is already taken — try a different one."],
-        },
+        error: "Could not create your restaurant. Please try again.",
+        values,
       };
     }
-    return { error: "Could not create your restaurant. Please try again." };
+  }
+  if (!restaurant) {
+    return {
+      fieldErrors: {
+        slug: [
+          chosen
+            ? "That web address is already taken. Try another, or clear it and one will be picked for you."
+            : "Couldn't find a free web address. Type one you'd like.",
+        ],
+      },
+      values,
+    };
   }
 
   const hasContactFields =

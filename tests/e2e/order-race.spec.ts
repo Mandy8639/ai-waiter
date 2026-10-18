@@ -53,7 +53,7 @@ test.describe("submit_order() concurrent-race protection (live)", () => {
 
     const slug = `e2e-order-race-${testId}`;
     await page.getByLabel("Restaurant name").fill("Order Race Test Restaurant");
-    await page.getByLabel("Slug").fill(slug);
+    await page.getByLabel("Web address").fill(slug);
     await page.getByRole("button", { name: "Create restaurant" }).click();
     await page.waitForURL("/dashboard");
 

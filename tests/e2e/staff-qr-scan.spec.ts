@@ -50,7 +50,7 @@ test.describe("staff scanning a table QR code", () => {
     await page.waitForURL("/onboarding");
 
     await page.getByLabel("Restaurant name").fill("Staff QR Test Restaurant");
-    await page.getByLabel("Slug").fill(slug);
+    await page.getByLabel("Web address").fill(slug);
     await page.getByRole("button", { name: "Create restaurant" }).click();
     await page.waitForURL("/dashboard");
 
