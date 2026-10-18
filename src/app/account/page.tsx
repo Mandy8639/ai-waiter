@@ -15,9 +15,11 @@ import {
   PRIVACY_CONTACT_EMAIL,
   PRIVACY_POLICY_PATH,
 } from "@/lib/legal/privacy";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export const metadata = {
   title: "Account — Tableside",
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 /**

@@ -7,9 +7,11 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export const metadata = {
   title: "Forgot password — Tableside",
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 /**

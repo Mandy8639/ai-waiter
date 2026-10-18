@@ -4,9 +4,11 @@ import { SplitBillPanel } from "@/components/customer/split-bill-panel";
 import { createClient } from "@/lib/supabase/server";
 import { getRequestOrigin } from "@/lib/tables/qr";
 import { toSplitView } from "@/lib/payments/split";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export const metadata = {
   title: "Split bill — Tableside",
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 /**

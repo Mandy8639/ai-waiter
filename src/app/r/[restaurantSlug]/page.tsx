@@ -9,6 +9,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
+import { publicPageMetadata } from "@/lib/seo/metadata";
+import {
+  restaurantDescription,
+  restaurantShareImage,
+} from "@/lib/seo/restaurant";
+import { JsonLd } from "@/components/seo/json-ld";
+import { restaurantJsonLd } from "@/lib/seo/structured-data";
 
 export async function generateMetadata({
   params,
@@ -17,11 +24,13 @@ export async function generateMetadata({
 }) {
   const { restaurantSlug } = await params;
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
-  return {
-    title: restaurant
-      ? `${restaurant.name} — Tableside`
-      : "Restaurant not found",
-  };
+  if (!restaurant) return { title: "Restaurant not found" };
+  return publicPageMetadata({
+    title: `${restaurant.name} — Tableside`,
+    description: restaurantDescription(restaurant),
+    path: `/r/${restaurant.slug}`,
+    image: restaurantShareImage(restaurant),
+  });
 }
 
 export default async function RestaurantLandingPage({
@@ -55,6 +64,7 @@ export default async function RestaurantLandingPage({
 
   return (
     <div className="flex flex-1 flex-col gap-6">
+      <JsonLd data={restaurantJsonLd(restaurant)} />
       <RestaurantHero restaurant={restaurant} />
 
       <div className="flex flex-col gap-2.5 sm:flex-row">

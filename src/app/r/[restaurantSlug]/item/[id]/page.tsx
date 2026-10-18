@@ -27,6 +27,10 @@ import {
   getPublicOrderSettings,
 } from "@/lib/customer/restaurant";
 import { addToCart } from "@/lib/cart/actions";
+import { publicPageMetadata } from "@/lib/seo/metadata";
+import { restaurantShareImage, trimForSnippet } from "@/lib/seo/restaurant";
+import { JsonLd } from "@/components/seo/json-ld";
+import { breadcrumbJsonLd } from "@/lib/seo/structured-data";
 
 export async function generateMetadata({
   params,
@@ -39,15 +43,19 @@ export async function generateMetadata({
   const supabase = await createClient();
   const { data: item } = await supabase
     .from("menu_items")
-    .select("name")
+    .select("name, description")
     .eq("id", id)
     .eq("restaurant_id", restaurant.id)
     .maybeSingle();
-  return {
-    title: item
-      ? `${item.name} — ${restaurant.name}`
-      : `Menu item — ${restaurant.name}`,
-  };
+  if (!item) return { title: `Menu item — ${restaurant.name}` };
+  return publicPageMetadata({
+    title: `${item.name} — ${restaurant.name}`,
+    description: item.description?.trim()
+      ? trimForSnippet(item.description)
+      : `${item.name}, on the menu at ${restaurant.name}.`,
+    path: `/r/${restaurant.slug}/item/${id}`,
+    image: restaurantShareImage(restaurant),
+  });
 }
 
 const spiceLevelLabels: Record<string, string> = {
@@ -237,13 +245,31 @@ export default async function MenuItemDetailPage({
   return (
     <div className="flex flex-1 flex-col gap-6">
       <DishViewBeacon menuItemId={item.id} />
-      <Link
-        href={`/r/${restaurantSlug}/menu`}
-        className="type-label text-muted-foreground hover:text-foreground -ml-1 inline-flex w-fit items-center gap-1 rounded-lg px-1 py-1 transition-colors"
-      >
-        <ChevronLeft className="size-4" aria-hidden="true" />
-        Menu
-      </Link>
+      {/* The trail back to the menu. Looks like a back link; to a screen
+          reader and a search engine it is "Menu > this dish" (the dish
+          name is the h1 just below, so it isn't shown twice). */}
+      <nav aria-label="Breadcrumb">
+        <ol className="flex">
+          <li>
+            <Link
+              href={`/r/${restaurantSlug}/menu`}
+              className="type-label text-muted-foreground hover:text-foreground -ml-1 inline-flex w-fit items-center gap-1 rounded-lg px-1 py-1 transition-colors"
+            >
+              <ChevronLeft className="size-4" aria-hidden="true" />
+              Menu
+            </Link>
+          </li>
+          <li className="sr-only" aria-current="page">
+            {item.name}
+          </li>
+        </ol>
+      </nav>
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Menu", path: `/r/${restaurantSlug}/menu` },
+          { name: item.name, path: `/r/${restaurantSlug}/item/${item.id}` },
+        ])}
+      />
 
       {/* The one image above the fold, so it loads eagerly. Renders
           nothing at all when the dish has no photo — no reserved box, no

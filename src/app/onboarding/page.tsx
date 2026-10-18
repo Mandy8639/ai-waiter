@@ -6,9 +6,11 @@ import {
 } from "@/components/ui/card";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
 import { requireUser } from "@/lib/auth/session";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export const metadata = {
   title: "Create your restaurant — Tableside",
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 export default async function OnboardingPage() {

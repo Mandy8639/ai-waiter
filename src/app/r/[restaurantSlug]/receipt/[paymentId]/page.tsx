@@ -13,9 +13,11 @@ import {
 } from "@/lib/payments/receipt-status";
 import { formatReservationTime } from "@/lib/reservations/timezone";
 import { ShareReceipt } from "@/components/customer/share-receipt";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export const metadata = {
   title: "Receipt",
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 /**

@@ -14,6 +14,7 @@ import { startTabCheckout } from "@/lib/payments/tab-checkout";
 import { SplitBillStart } from "@/components/customer/split-bill-start";
 import { createSplit } from "@/lib/payments/split-actions";
 import { createClient } from "@/lib/supabase/server";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export async function generateMetadata({
   params,
@@ -24,6 +25,7 @@ export async function generateMetadata({
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
   return {
     title: restaurant ? `Your orders — ${restaurant.name}` : "Your orders",
+    robots: PRIVATE_PAGE_ROBOTS,
   };
 }
 

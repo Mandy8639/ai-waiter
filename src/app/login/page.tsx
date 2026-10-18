@@ -11,10 +11,14 @@ import { isInviteToken } from "@/lib/staff/invitations-core";
 import { signIn } from "@/lib/auth/actions";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
 import { SUPPORT_PATH } from "@/lib/legal/support";
+import { publicPageMetadata } from "@/lib/seo/metadata";
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: "Sign in — Tableside",
-};
+  description:
+    "Sign in to Tableside to manage your restaurant's menu, orders and kitchen board.",
+  path: "/login",
+});
 
 export default async function LoginPage({
   searchParams,

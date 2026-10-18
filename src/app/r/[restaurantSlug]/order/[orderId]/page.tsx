@@ -14,6 +14,7 @@ import { getOrderEta } from "@/lib/orders/order-eta";
 import { etaSentence } from "@/lib/orders/prep-estimate";
 import { getMyFeedbackState } from "@/lib/feedback/queries";
 import { OrderFeedbackPanel } from "@/components/customer/order-feedback-panel";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export async function generateMetadata({
   params,
@@ -22,7 +23,10 @@ export async function generateMetadata({
 }) {
   const { orderId } = await params;
   const order = await getOrderById(orderId);
-  return { title: order ? `Order #${order.orderNumber}` : "Order" };
+  return {
+    title: order ? `Order #${order.orderNumber}` : "Order",
+    robots: PRIVATE_PAGE_ROBOTS,
+  };
 }
 
 export default async function OrderConfirmationPage({

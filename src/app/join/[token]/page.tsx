@@ -17,12 +17,13 @@ import {
   roleLabel,
   type InvitationState,
 } from "@/lib/staff/invitations-core";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export const metadata = {
   title: "Join a restaurant — Tableside",
   // Nothing here should ever appear in a search result: the URL IS the
   // credential.
-  robots: { index: false, follow: false },
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 interface Preview {

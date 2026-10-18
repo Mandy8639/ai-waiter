@@ -2,12 +2,14 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
 import { SUPPORT_CONTACT_EMAIL } from "@/lib/legal/support";
+import { publicPageMetadata } from "@/lib/seo/metadata";
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: "Support — Tableside",
   description:
     "Help with Tableside: signing in, kitchen alerts on your phone, your team, and how to reach us.",
-};
+  path: "/support",
+});
 
 /**
  * Help for restaurant staff, and the App Store listing's Support URL (Apple
