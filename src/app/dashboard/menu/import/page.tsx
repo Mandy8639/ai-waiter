@@ -5,6 +5,10 @@ import { MenuImportUpload } from "@/components/dashboard/menu-import-upload";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { isMenuImportConfigured } from "@/lib/menu-import/vision";
 
+// Reading photos runs inside this page's server action: up to two tries of
+// 120 s per photo, photos in parallel (src/lib/menu-import/vision.ts).
+export const maxDuration = 300;
+
 export const metadata = {
   title: "Import menu — Tableside",
 };

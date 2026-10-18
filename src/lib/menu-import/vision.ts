@@ -1,10 +1,7 @@
 import "server-only";
 import { aiConfig } from "@/lib/ai/config";
-import {
-  parseExtraction,
-  EXTRACTION_PROMPT,
-  type ParseOutcome,
-} from "./extraction";
+import { EXTRACTION_PROMPT, type ParseOutcome } from "./extraction";
+import { extractPages, type CallVisionModel } from "./vision-core";
 
 /**
  * Sends menu photographs to a vision model and returns draft rows.
@@ -31,11 +28,18 @@ const OPENROUTER_ENDPOINT =
   process.env.OPENROUTER_ENDPOINT ??
   "https://openrouter.ai/api/v1/chat/completions";
 
-/** A whole board's worth of JSON. Set high because truncation looks exactly like a bad model. */
-const MAX_OUTPUT_TOKENS = 8000;
+/**
+ * One photo's worth of JSON plus the model's thinking. Set high because
+ * truncation looks exactly like a bad model: at 8,000 a dense two-page
+ * menu read in one request ran out (vision-core.ts).
+ */
+const MAX_OUTPUT_TOKENS = 16_000;
 
-/** Reading several photographs is slow; this is generous on purpose. */
-const REQUEST_TIMEOUT_MS = 180_000;
+/**
+ * Per try. Photos are read at the same time and each gets two tries, so
+ * the worst case (2 × 120 s) stays inside the import page's 300 s limit.
+ */
+const REQUEST_TIMEOUT_MS = 120_000;
 
 /**
  * The reader's preference list, primary first.
@@ -93,87 +97,66 @@ export async function extractMenuFromImages(
     };
   }
 
-  const model = visionModel();
-
-  let response: Response;
-  try {
-    response = await fetch(OPENROUTER_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://tableside.menu",
-        "X-Title": "Tableside menu import",
-      },
-      body: JSON.stringify({
-        // `models`, never `models` AND `model` together: the singular
-        // field wins and the fallback list is silently ignored, with no
-        // error — see docs/ai.md#model-fallback.
-        models: visionModels(),
-        max_tokens: MAX_OUTPUT_TOKENS,
-        messages: [
-          {
-            role: "user",
-            // All pages in one message: a menu split across photographs is
-            // one document, and categories routinely continue across a
-            // page break.
-            content: [
-              { type: "text", text: EXTRACTION_PROMPT },
-              ...input.imageDataUrls.map((url) => ({
-                type: "image_url" as const,
-                image_url: { url },
-              })),
-            ],
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch (error) {
-    const timedOut = error instanceof Error && error.name === "TimeoutError";
+  const call: CallVisionModel = async (imageDataUrl, modelList) => {
+    let response: Response;
+    try {
+      response = await fetch(OPENROUTER_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://tableside.menu",
+          "X-Title": "Tableside menu import",
+        },
+        body: JSON.stringify({
+          // `models`, never `models` AND `model` together: the singular
+          // field wins and the fallback list is silently ignored, with no
+          // error — see docs/ai.md#model-fallback.
+          models: modelList,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          // These models think before answering, and the thinking spends
+          // the same allowance as the answer. Reading a board needs
+          // little of it. Ignored by models that don't think.
+          reasoning: { effort: "low" },
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: EXTRACTION_PROMPT },
+                {
+                  type: "image_url" as const,
+                  image_url: { url: imageDataUrl },
+                },
+              ],
+            },
+          ],
+        }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      return {
+        status: 0,
+        content: "",
+        timedOut: error instanceof Error && error.name === "TimeoutError",
+      };
+    }
+    const json = (await response.json().catch(() => null)) as {
+      model?: string;
+      error?: { message?: string };
+      choices?: Array<{
+        finish_reason?: string | null;
+        message?: { content?: string | null };
+      }>;
+    } | null;
     return {
-      ok: false,
-      drafts: [],
-      unpricedCount: 0,
-      model,
-      error: timedOut
-        ? "Reading the menu took too long. Try fewer pages at a time."
-        : "Couldn't reach the menu reader. Please try again.",
+      status: response.status,
+      content: json?.choices?.[0]?.message?.content ?? "",
+      finishReason: json?.choices?.[0]?.finish_reason,
+      servedModel: json?.model,
+      bodyError: json?.error?.message,
     };
-  }
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      drafts: [],
-      unpricedCount: 0,
-      model,
-      error:
-        response.status === 429
-          ? "The menu reader is busy right now. Please try again in a moment."
-          : "The menu reader failed. Please try again.",
-    };
-  }
-
-  let json: {
-    model?: string;
-    choices?: Array<{ message?: { content?: string | null } }>;
   };
-  try {
-    json = await response.json();
-  } catch {
-    return {
-      ok: false,
-      drafts: [],
-      unpricedCount: 0,
-      model,
-      error: "The menu reader returned something unreadable. Please try again.",
-    };
-  }
 
-  const text = json.choices?.[0]?.message?.content ?? "";
-  const parsed = parseExtraction(text);
-  // json.model, not the requested one: under any routing the served model
-  // is what should be recorded against the import.
-  return { ...parsed, model: json.model ?? model };
+  const outcome = await extractPages(input.imageDataUrls, visionModels(), call);
+  return { ...outcome, model: outcome.model ?? visionModel() };
 }

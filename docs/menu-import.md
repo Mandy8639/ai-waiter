@@ -55,6 +55,33 @@ Override with `MENU_IMPORT_VISION_MODEL`. Re-vet before changing it: "supports i
 the bar — _"does not invent a price"_ is. Several free models advertise vision and are unusable;
 one never responded to a single board at all.
 
+### One request per photo (2026-10-18)
+
+A real two-photo import failed with "Couldn't read a menu from that response". There were two causes:
+
+- **The reply ran out of room.** The free vision models think before they answer, and the thinking
+  spends the same output allowance as the answer. A dense two-page menu in one request used 7,984
+  of 8,000 tokens in testing. Real photos went over, and the JSON was cut off.
+- **A busy model's error arrived as a success.** An overloaded model came back as HTTP 200 with an
+  error in the body and no reply (`ResourceExhausted`), which read as an unreadable menu.
+
+What it does now (`src/lib/menu-import/vision-core.ts`):
+
+- Each photo is its own request, and the requests run at the same time.
+- Each request has a 16,000-token allowance and asks for low reasoning effort.
+- A failed photo is retried once, with a different model first.
+- Results are merged in photo order, and a dish read twice across overlapping photos is dropped.
+- If any photo still fails, nothing is kept, and the message names the photo ("Couldn't read
+  photo 2…"), says the reader is busy, or says it took too long.
+
+On the realistic 60-dish, two-page test menu, it read every dish in about 36 seconds. The single
+request it replaced took 71–98 seconds and came close to running out of room.
+
+The list was re-vetted the same day: `dots-3` leads (12/12), then the new
+`nvidia/nemotron-3.5-super-vl:free` (11/12, invented none), then `nemotron-3-nano-omni` as a last
+resort. `minimax/minimax-m3:free` is no longer free. The page allows 300 seconds (two tries of 120
+seconds, photos in parallel).
+
 Extraction deliberately does **not** go through `src/lib/ai/providers/`. That seam models a
 conversation — history, tools, a tool-call loop, refusal handling. This is one image-in, JSON-out
 call with none of those, and forcing it through would distort an interface whose value is that
