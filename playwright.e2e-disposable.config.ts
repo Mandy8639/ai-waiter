@@ -27,7 +27,7 @@ process.env.E2E_DISPOSABLE_PROJECT = "1";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: "dashboard-flow.spec.ts",
+  testMatch: ["dashboard-flow.spec.ts", "password-change-reset.spec.ts"],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

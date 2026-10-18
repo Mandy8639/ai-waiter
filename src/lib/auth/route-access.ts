@@ -9,7 +9,13 @@
 
 import { TWO_FACTOR_PATH } from "@/lib/auth/two-factor-core";
 
-export const PROTECTED_PREFIXES = ["/dashboard", "/onboarding", "/account"];
+export const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/onboarding",
+  "/account",
+  // Reached signed in, from a password-reset link (/auth/confirm).
+  "/reset-password",
+];
 export const AUTH_PAGES = ["/login", "/signup"];
 
 export interface RouteVisitor {
@@ -85,7 +91,8 @@ export function decideRouteAccess(
   // A password alone isn't enough once two-step verification is on. The
   // database refuses such a session too (20261018090000_two_factor_login).
   if (isProtected && twoFactorPending) {
-    return { type: "redirect", to: TWO_FACTOR_PATH };
+    // The code step only honours named pages (/reset-password) from this.
+    return { type: "redirect", to: TWO_FACTOR_PATH, redirectTo: pathname };
   }
 
   if (AUTH_PAGES.includes(pathname) && isOperator) {

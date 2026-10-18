@@ -8,6 +8,7 @@ import {
 import { TwoFactorVerifyForm } from "@/components/auth/two-factor-verify-form";
 import { signOut } from "@/lib/auth/actions";
 import { isInviteToken } from "@/lib/staff/invitations-core";
+import { allowedNextPath } from "@/lib/auth/password-reset-core";
 
 export const metadata = {
   title: "Verification code — Tableside",
@@ -22,10 +23,11 @@ export const metadata = {
 export default async function TwoFactorVerifyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string }>;
+  searchParams: Promise<{ invite?: string; redirectTo?: string }>;
 }) {
-  const { invite } = await searchParams;
+  const { invite, redirectTo } = await searchParams;
   const inviteToken = isInviteToken(invite) ? invite : undefined;
+  const next = allowedNextPath(redirectTo) ?? undefined;
 
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-16">
@@ -38,7 +40,7 @@ export default async function TwoFactorVerifyPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          <TwoFactorVerifyForm inviteToken={inviteToken} />
+          <TwoFactorVerifyForm inviteToken={inviteToken} next={next} />
           <div className="text-muted-foreground flex flex-col items-center gap-3 text-center text-sm">
             <p>
               Lost your phone? Use the setup key you saved to add Tableside to

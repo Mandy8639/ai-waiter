@@ -58,8 +58,10 @@ export default function SupportPage() {
           The app uses the same account as tableside.menu. If you&apos;re new,
           your restaurant&apos;s owner or manager can invite you from the Staff
           page; open the invite link, set a password, then sign in with that
-          email in the app. Forgotten your password or locked out? Email us from
-          your account&apos;s address.
+          email in the app. Forgotten your password? Tap{" "}
+          <Term>Forgot password?</Term> on the sign-in page and we&apos;ll email
+          you a link to choose a new one. Lost the phone with your authenticator
+          app, or still locked out? Email us from your account&apos;s address.
         </p>
       </Section>
 
