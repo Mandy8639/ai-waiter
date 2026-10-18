@@ -52,8 +52,10 @@ import { fallbackText } from "../fallback-text";
 const STRONG_CLAIM_PATTERNS: RegExp[] = [
   // "you now have…", "you'll have…", "you will have…"
   /\byou(?:'ll|\s+will|\s+now)\s+have\b/i,
-  // "your cart has/contains/includes…", "your order now holds…"
-  /\byour\s+(?:cart|order)\b[^.!?]{0,40}\b(?:has|have|contains|includes|holds|is)\b/i,
+  // "your cart has/contains/includes…", "your order now holds…". The gap
+  // stops at a comma or dash: "…to your cart, or is there anything else?"
+  // is an offer followed by a new clause, not a claim about the cart.
+  /\byour\s+(?:cart|order)\b[^.!?,;—–]{0,40}\b(?:has|have|contains|includes|holds|is)\b/i,
   // "in your cart", "in your order"
   /\bin\s+your\s+(?:cart|order)\b/i,
   // "your total is…", "the subtotal comes to…"
@@ -66,6 +68,8 @@ const STRONG_CLAIM_PATTERNS: RegExp[] = [
 const WEAK_CLAIM_PATTERNS: RegExp[] = [
   // "you have two dosas", "you have 3 items" — but not "do you have any…"
   /\byou\s+have\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i,
+  // "…to your order, which now has three items", "it currently holds two"
+  /\b(?:now|currently)\s+(?:has|have|holds|contains|includes)\b/i,
   // "that's two items", "that makes three items"
   /\b(?:that(?:'s| is)|that makes)\b[^.!?]{0,20}\bitems?\b/i,
 ];
@@ -77,19 +81,38 @@ function sentences(text: string): string[] {
 }
 
 /**
+ * An OFFER to add something names the cart without saying anything about
+ * what it holds: "Shall I add the samosa to your cart?", "want me to put it
+ * in your order?". Before 2026-10-18 these were flagged, so whenever the
+ * reply ended with such an offer and the model hadn't read the cart, the
+ * guard replaced a perfectly good answer about a dish with a report that
+ * the cart was empty. The action phrase is blanked out before matching.
+ * "Added…" is untouched (\badd\b doesn't match it), and "you now have two
+ * dosas in your cart" has no action verb, so real claims still match.
+ */
+const OFFER_TO_ADD =
+  /\b(?:add|put|place|pop|drop|throw|include|move|stick)\b[^.!?]{0,80}?\b(?:to|in|into|onto)\s+your\s+(?:cart|order)\b/gi;
+
+function withoutOffers(sentence: string): string {
+  return sentence.replace(OFFER_TO_ADD, " ");
+}
+
+/**
  * Deliberately narrow, for the same reason menu-fact-detection.ts is —
  * see the block comment above for why the weak patterns are anchor-gated.
  */
 export function looksLikeCartStateClaim(text: string): boolean {
-  return sentences(text).some((sentence) => {
-    if (STRONG_CLAIM_PATTERNS.some((pattern) => pattern.test(sentence))) {
-      return true;
-    }
-    return (
-      WEAK_CLAIM_PATTERNS.some((pattern) => pattern.test(sentence)) &&
-      CART_ANCHOR.test(sentence)
-    );
-  });
+  return sentences(text)
+    .map(withoutOffers)
+    .some((sentence) => {
+      if (STRONG_CLAIM_PATTERNS.some((pattern) => pattern.test(sentence))) {
+        return true;
+      }
+      return (
+        WEAK_CLAIM_PATTERNS.some((pattern) => pattern.test(sentence)) &&
+        CART_ANCHOR.test(sentence)
+      );
+    });
 }
 
 /**
@@ -130,7 +153,7 @@ export function acceptsCartStateClaim(
 
 /** See menu-fact-detection.ts — injected transiently, never persisted to ai_conversation_messages. */
 export const CART_STATE_CORRECTIVE_INSTRUCTION =
-  "[System note: your reply states what the customer's cart contains or what it costs, but you have not read the cart this turn. Call get_cart now and restate it from that result — your own earlier messages in this conversation are not a reliable record of the cart, since an add may have failed or the customer may have changed it another way.]";
+  "[System note: your reply states what the customer's cart contains or what it costs, but you have not read the cart this turn. Call get_cart now and restate it from that result — your own earlier messages in this conversation are not a reliable record of the cart, since an add may have failed or the customer may have changed it another way. Keep the rest of your reply: still answer what the customer actually asked.]";
 
 /** Customer-facing fallback if the model still won't call get_cart after the one corrective retry — never surfaces the internal instruction text. */
 export const CART_STATE_GUARD_FALLBACK_TEXT = fallbackText("cartState", "en");

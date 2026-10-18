@@ -15,6 +15,32 @@ const failed = (toolName: string): LoopToolOutcome => ({
   result: { ok: false, error: "nope" },
 });
 
+describe("looksLikeCartStateClaim: offers are not claims (2026-10-18)", () => {
+  // Observed on Nashta: "Tell me about the Samosa (2 pcs)" got "I've
+  // checked, and your cart is currently empty" instead of the dish. The
+  // draft ended with an offer to add it, the guard read that as a cart
+  // claim, and the forced cart check replaced the answer.
+  it.each([
+    "Would you like me to add it to your cart, or is there anything else you'd like to know?",
+    "Shall I add the Samosa (2 pcs) to your order, or is there something else?",
+    "It's $4.99 — want me to put it in your cart?",
+    "I can pop one into your order whenever you're ready.",
+    "Would you like to add it to your order? It is a great starter.",
+  ])("does not flag the offer %j", (text) => {
+    expect(looksLikeCartStateClaim(text)).toBe(false);
+  });
+
+  it.each([
+    "Done — you now have two chicken tikka masala in your order.",
+    "Added one samosa to your order, which now has three items.",
+    "Your cart has two dosas.",
+    "Your order now holds three items.",
+    "That brings your total to $14.97.",
+  ])("still flags the real claim %j", (text) => {
+    expect(looksLikeCartStateClaim(text)).toBe(true);
+  });
+});
+
 describe("looksLikeCartStateClaim", () => {
   it("flags the exact reply that motivated this guard", () => {
     // Observed in production: the cart held one item, not two. The model
