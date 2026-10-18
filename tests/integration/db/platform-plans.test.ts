@@ -8,7 +8,7 @@
 // here.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb, type TestDb } from "./setup";
-import { fullRestaurantFixture } from "./helpers";
+import { endFreeMonth, fullRestaurantFixture } from "./helpers";
 
 async function fee(db: TestDb, restaurantId: string, totalMinor: number) {
   const { rows } = await db.admin.query<{ platform_fee_minor_units: number }>(
@@ -90,14 +90,17 @@ describe("platform_fee_minor_units", () => {
   });
 
   it("uses the default plan when a restaurant has chosen none", async () => {
-    // Starter is 100 bps = 1%. $19.99 -> 1999 minor -> 19.
+    // Starter is 100 bps = 1%. $19.99 -> 1999 minor -> 19. (After the
+    // free month; inside it the fee is 0, tested below.)
     const f = await fullRestaurantFixture(db);
+    await endFreeMonth(db, f.restaurantId);
     expect(await fee(db, f.restaurantId, 1999)).toBe(19);
   });
 
   it("uses the restaurant's own plan once assigned", async () => {
     // Pro is 25 bps = 0.25%. 1999 * 0.0025 = 4.9975 -> 4.
     const f = await fullRestaurantFixture(db);
+    await endFreeMonth(db, f.restaurantId);
     await db.admin.query(
       "insert into public.restaurant_plans (restaurant_id, plan_id) values ($1, $2);",
       [f.restaurantId, await planId(db, "pro")],
@@ -109,9 +112,15 @@ describe("platform_fee_minor_units", () => {
     // A fee is a share of someone else's money. 1 minor unit at 1% is
     // 0.01 — rounding that up would take a cent that was not earned.
     const f = await fullRestaurantFixture(db);
+    await endFreeMonth(db, f.restaurantId);
     expect(await fee(db, f.restaurantId, 1)).toBe(0);
     expect(await fee(db, f.restaurantId, 99)).toBe(0);
     expect(await fee(db, f.restaurantId, 100)).toBe(1);
+  });
+
+  it("takes nothing during a restaurant's free first month", async () => {
+    const f = await fullRestaurantFixture(db);
+    expect(await fee(db, f.restaurantId, 100_000)).toBe(0);
   });
 
   it("takes nothing from a zero payment", async () => {

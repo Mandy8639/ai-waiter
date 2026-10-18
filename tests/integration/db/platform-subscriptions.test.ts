@@ -8,7 +8,7 @@
 // harmless.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb, type TestDb } from "./setup";
-import { fullRestaurantFixture } from "./helpers";
+import { endFreeMonth, fullRestaurantFixture } from "./helpers";
 
 async function planId(db: TestDb, slug: string) {
   const { rows } = await db.admin.query<{ id: string }>(
@@ -108,6 +108,7 @@ describe("recording a subscription", () => {
     // Part 1's fee reads restaurant_plans. If subscribing did not update
     // it, a restaurant paying for Pro would still be charged Starter's 1%.
     const f = await fullRestaurantFixture(db);
+    await endFreeMonth(db, f.restaurantId);
     await record(db, f.restaurantId, await planId(db, "pro"));
 
     const { rows } = await db.admin.query<{ platform_fee_minor_units: number }>(
@@ -240,12 +241,26 @@ describe("a free plan has no price", () => {
 
   it("refuses a price id on a free plan", async () => {
     // A price on a free plan would make Subscribe offer a charge nobody
-    // agreed to.
+    // agreed to. Starter costs $19 since 20261018120000, so a free plan is
+    // made for the test.
+    await db.admin.query(
+      "insert into public.platform_plans (slug, name, monthly_price_cents, fee_bps, is_default) values ('free-test', 'Free test', 0, 100, false);",
+    );
     await expect(
       db.admin.query(
-        "update public.platform_plans set stripe_price_id = 'price_x' where slug = 'starter';",
+        "update public.platform_plans set stripe_price_id = 'price_x' where slug = 'free-test';",
       ),
     ).rejects.toThrow();
+  });
+
+  it("lets Starter, now $19/month, hold a price", async () => {
+    await db.admin.query(
+      "update public.platform_plans set stripe_price_id = 'price_starter' where slug = 'starter';",
+    );
+    const { rows } = await db.admin.query<{ monthly_price_cents: number }>(
+      "select monthly_price_cents from public.platform_plans where slug = 'starter';",
+    );
+    expect(rows[0].monthly_price_cents).toBe(1900);
   });
 
   it("allows a paid plan to have none yet, since the script fills it in", async () => {

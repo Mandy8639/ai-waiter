@@ -7,6 +7,8 @@ import { getStripe, isStripeConfigured } from "@/lib/payments/stripe";
 import { reportError } from "@/lib/observability/report";
 import { canSellPlans } from "@/lib/app-shell/core";
 import { getAppShell } from "@/lib/app-shell/server";
+import { getRestaurantBilling } from "@/lib/billing/trial-queries";
+import { stripeTrialEnd } from "@/lib/billing/trial-core";
 
 /**
  * Subscribing a restaurant to a paid plan.
@@ -77,6 +79,17 @@ export async function startSubscriptionCheckout(
     };
   }
 
+  // Founding restaurants keep the free Starter: nothing to subscribe to.
+  const billing = await getRestaurantBilling(restaurantId);
+  if (billing?.state === "exempt" && plan.slug === "starter") {
+    return { error: "Starter is already free for your restaurant." };
+  }
+  // Subscribing during the free month doesn't cut it short.
+  const trialEnd =
+    billing?.state === "trial"
+      ? stripeTrialEnd(billing.trialEndsAt)
+      : undefined;
+
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const proto = h.get("x-forwarded-proto") ?? "https";
@@ -96,6 +109,7 @@ export async function startSubscriptionCheckout(
       metadata: { restaurant_id: restaurantId, plan_id: plan.id },
       subscription_data: {
         metadata: { restaurant_id: restaurantId, plan_id: plan.id },
+        ...(trialEnd && { trial_end: trialEnd }),
       },
     });
 
