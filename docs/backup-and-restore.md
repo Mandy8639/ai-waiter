@@ -70,6 +70,28 @@ generated columns discovered and skipped, every `auth.users`-referencing column 
 than hardcoded, and user triggers disabled for the load. Current result: **1,574 of 1,574 rows,
 every table matching.**
 
+### Found 2026-10-17: the backup had silently shrunk to 3 tables
+
+`npm run db:backup` exported **3 of 61 tables (41 rows)** and only printed a warning. Two cycles
+between tables had appeared since the last check:
+
+- `restaurants.active_hero_video_id` → `restaurant_hero_videos` (20260923090000);
+- `menu_items (active_image_id, id)` → `menu_item_images` (20260919100000).
+
+The table ordering stopped at the first cycle, and the export covered only what it had ordered,
+which dropped every table that depends on `restaurants`.
+
+Now (`src/lib/backup/schema-order.ts`, `introspect.ts`):
+
+- **Every table is always exported.**
+- A cycle is broken at a key that can be left empty. A multi-column key counts as optional if any
+  of its columns is nullable, since Postgres doesn't check it then.
+- The restore inserts those columns empty, together with any column a CHECK ties to them
+  (`image_source`, `hero_video`), and fills them in with one UPDATE once every table is in.
+- `tests/integration/db/backup-table-order.test.ts` fails if any table is missing from the order.
+
+Result: **6,099 of 6,099 rows across 61 tables**, every table matching.
+
 ## ⚠️ The gap: this backup does not include logins
 
 The backup covers the `public` schema only. Supabase's `auth` schema — the actual user accounts
