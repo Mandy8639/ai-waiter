@@ -14,6 +14,7 @@ import {
   Settings,
   ShieldAlert,
   SlidersHorizontal,
+  Sparkles,
   UtensilsCrossed,
   Users,
   type LucideIcon,
@@ -49,7 +50,7 @@ export interface NavItem {
  *   - owner, manager: everything.
  *   - staff (floor and front desk): Overview, Kitchen, Orders, Settle up,
  *     Reservations.
- *   - kitchen (the screen on the pass): Kitchen and Sold out only.
+ *   - kitchen (the screen on the pass): Kitchen, Sold out and Assistant.
  * src/lib/dashboard/access-core.ts enforces the same table on the server.
  */
 const MANAGERS: readonly RestaurantRole[] = ["owner", "manager"];
@@ -77,6 +78,15 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/dashboard/kitchen/sold-out",
     group: "Service",
     icon: CircleSlash,
+    roles: KITCHEN_SIDE,
+  },
+  // "86 the salmon", typed: the same switches as Sold out and the
+  // kitchen's pause and running-behind controls (src/lib/staff-assistant/).
+  {
+    label: "Assistant",
+    href: "/dashboard/assistant",
+    group: "Service",
+    icon: Sparkles,
     roles: KITCHEN_SIDE,
   },
   // Front of house: a waiter settling a dispute needs order history as

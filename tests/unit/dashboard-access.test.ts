@@ -13,12 +13,13 @@ import { NAV_ITEMS } from "@/components/dashboard/nav-items";
  */
 
 describe("the kitchen account", () => {
-  it.each(["/dashboard/kitchen", "/dashboard/kitchen/sold-out"])(
-    "opens %s",
-    (path) => {
-      expect(canOpenDashboardPath("kitchen", path)).toBe(true);
-    },
-  );
+  it.each([
+    "/dashboard/kitchen",
+    "/dashboard/kitchen/sold-out",
+    "/dashboard/assistant",
+  ])("opens %s", (path) => {
+    expect(canOpenDashboardPath("kitchen", path)).toBe(true);
+  });
 
   it.each([
     "/dashboard",
@@ -66,6 +67,7 @@ describe("front-of-house staff", () => {
 
   it.each([
     "/dashboard/kitchen/sold-out",
+    "/dashboard/assistant",
     "/dashboard/menu",
     "/dashboard/payments",
     "/dashboard/settings",

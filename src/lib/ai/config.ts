@@ -191,6 +191,17 @@ export const aiConfig = {
   suggestionModels: envList("MENU_SUGGESTION_MODEL", DEFAULT_SUGGESTION_MODELS),
 
   /**
+   * The staff assistant's reader (src/lib/staff-assistant/): one short
+   * message in, one small JSON command out, no tools. The suggester's job
+   * shape — short text in, strict JSON out — so it starts from that vetted
+   * list. Its own env var, because it is its own job.
+   */
+  staffAssistantModels: envList(
+    "STAFF_ASSISTANT_MODEL",
+    DEFAULT_SUGGESTION_MODELS,
+  ),
+
+  /**
    * Anthropic-only: Claude Opus 5 has adaptive thinking on by default;
    * disabling it has documented failure modes (tool calls/`<thinking>`
    * leaking into visible text). Cost/latency is controlled via output
