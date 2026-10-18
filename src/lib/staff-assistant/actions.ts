@@ -81,6 +81,7 @@ async function carryOut(
         result.result,
         ctx.timeZone,
         ctx.now,
+        { hasMenuHours: ctx.hasMenuHours },
       ),
       tone: "done",
       buttons: undo ? [undo] : [],

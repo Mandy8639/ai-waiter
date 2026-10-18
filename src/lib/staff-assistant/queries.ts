@@ -49,8 +49,10 @@ export function assistantDb(supabase: Client): AssistantDb {
 export async function loadAssistantContext(
   supabase: Client,
   restaurantId: string,
-): Promise<Pick<PlanContext, "catalog" | "state" | "timeZone">> {
-  const [restaurant, dishes, groups, status] = await Promise.all([
+): Promise<
+  Pick<PlanContext, "catalog" | "state" | "timeZone" | "hasMenuHours">
+> {
+  const [restaurant, dishes, groups, status, hours] = await Promise.all([
     supabase
       .from("restaurants")
       .select("timezone")
@@ -67,6 +69,22 @@ export async function loadAssistantContext(
     supabase
       .rpc("get_kitchen_status", { target_restaurant_id: restaurantId })
       .maybeSingle(),
+    // database.types.ts predates menu_hours (20261004090000).
+    (
+      supabase as unknown as {
+        from: (t: string) => {
+          select: (
+            c: string,
+            o: { count: "exact"; head: true },
+          ) => {
+            eq: (c: string, v: string) => Promise<{ count: number | null }>;
+          };
+        };
+      }
+    )
+      .from("menu_hours")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", restaurantId),
   ]);
 
   // database.types.ts predates available_again_at (20261019090000).
@@ -128,6 +146,8 @@ export async function loadAssistantContext(
     catalog,
     state,
     timeZone: restaurant.data?.timezone ?? "UTC",
+    // Unknown (a failed count) reads as "has hours": no tip beats a wrong one.
+    hasMenuHours: hours.count !== 0,
   };
 }
 
