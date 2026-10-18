@@ -15,6 +15,11 @@ import { LogoutButton } from "@/components/dashboard/logout-button";
 import { NativeAppBridge } from "@/components/kitchen/native-app-bridge";
 import { RestaurantSwitcher } from "@/components/dashboard/restaurant-switcher";
 import { TwoFactorReminder } from "@/components/dashboard/two-factor-reminder";
+import { BillingBanner } from "@/components/dashboard/billing-banner";
+import { billingNotice } from "@/lib/billing/trial-core";
+import { getRestaurantBilling } from "@/lib/billing/trial-queries";
+import { canSellPlans } from "@/lib/app-shell/core";
+import { getAppShell } from "@/lib/app-shell/server";
 import { hasVerifiedTwoFactor } from "@/lib/auth/two-factor-core";
 import { getDashboardContext } from "@/lib/restaurants/require-current-restaurant";
 import { countPendingReservationRequests } from "@/lib/notifications/pending-requests";
@@ -97,6 +102,14 @@ export default async function DashboardLayout({
 
   const { restaurant } = state;
 
+  // The free month / plan notice (20261018120000). Plans can't be offered
+  // for purchase inside the store apps, so there it carries no price or link.
+  const notice = billingNotice(await getRestaurantBilling(restaurant.id), {
+    canManage: ["owner", "manager"].includes(restaurant.role),
+    canSell: canSellPlans(await getAppShell()),
+    timeZone: restaurant.timezone,
+  });
+
   // The kitchen account is a screen on the pass: no sidebar, no money, no
   // settings — the board at full width and its two tabs. Which pages it
   // may open at all is decided in src/lib/dashboard/access-core.ts.
@@ -126,7 +139,10 @@ export default async function DashboardLayout({
             <LogoutButton />
           </div>
         </header>
-        <main className="w-full flex-1 px-3 py-4 sm:px-4">{children}</main>
+        <main className="w-full flex-1 px-3 py-4 sm:px-4">
+          {notice && <BillingBanner notice={notice} />}
+          {children}
+        </main>
         <NativeAppBridge />
       </div>
     );
@@ -203,6 +219,7 @@ export default async function DashboardLayout({
         </header>
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+          {notice && <BillingBanner notice={notice} />}
           {["owner", "manager"].includes(restaurant.role) &&
             !hasVerifiedTwoFactor(user.factors) && <TwoFactorReminder />}
           {children}

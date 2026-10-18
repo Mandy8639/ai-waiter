@@ -19,6 +19,7 @@ import { startSubscriptionCheckout } from "@/lib/billing/subscription-actions";
 import { SubscribeButton } from "@/components/payments/subscribe-button";
 import { canSellPlans } from "@/lib/app-shell/core";
 import { getAppShell } from "@/lib/app-shell/server";
+import { getRestaurantBilling } from "@/lib/billing/trial-queries";
 
 export const metadata = {
   title: "Payments — Tableside",
@@ -75,6 +76,9 @@ export default async function PaymentsPage() {
   const stripeConfigured = isStripeConfigured();
   const plan = await getRestaurantPlan(restaurant.id);
   const subscription = await getRestaurantSubscription(restaurant.id);
+  const billing = await getRestaurantBilling(restaurant.id);
+  const exempt = billing?.state === "exempt";
+  const inTrial = billing?.state === "trial" && billing.trialEndsAt;
 
   // Every plan, so a restaurant can see what it could move to. Read
   // through RLS: platform_plans is readable by any signed-in user because
@@ -116,8 +120,9 @@ export default async function PaymentsPage() {
                 )}
               </span>
               <span className="text-muted-foreground">
-                {formatMonthlyPrice(plan.monthlyPriceCents, plan.currency)} per
-                month
+                {exempt
+                  ? "No monthly fee"
+                  : `${formatMonthlyPrice(plan.monthlyPriceCents, plan.currency)} per month`}
               </span>
             </div>
             <p className="text-muted-foreground">
@@ -127,6 +132,24 @@ export default async function PaymentsPage() {
               The platform takes {formatFeeBps(plan.feeBps)} of each card
               payment, excluding tips. Cash payments are not charged.
             </p>
+            {exempt && (
+              <p className="text-muted-foreground">
+                Founding restaurant: Starter stays free for you, with no monthly
+                fee.
+              </p>
+            )}
+            {inTrial && billing.trialEndsAt && (
+              <p className="font-medium">
+                Your first month is free: no fee on card payments until{" "}
+                {billing.trialEndsAt.toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  timeZone: restaurant.timezone,
+                })}
+                . Subscribing now doesn&apos;t cut it short: the first charge
+                comes when it ends.
+              </p>
+            )}
             {subscription ? (
               <p className="text-muted-foreground text-xs">
                 Subscription:{" "}
@@ -138,7 +161,7 @@ export default async function PaymentsPage() {
               </p>
             ) : (
               <p className="text-muted-foreground text-xs">
-                No subscription — you&apos;re on the free plan.
+                {exempt ? "No subscription needed." : "No subscription yet."}
               </p>
             )}
           </CardContent>
@@ -170,7 +193,11 @@ export default async function PaymentsPage() {
                       {formatFeeBps(p.fee_bps)} of each card payment
                     </span>
                   </div>
-                  {isCurrent ? (
+                  {exempt && p.slug === "starter" ? (
+                    <span className="text-muted-foreground text-xs">
+                      Free for you
+                    </span>
+                  ) : isCurrent && (exempt || subscription) ? (
                     <span className="text-muted-foreground text-xs">
                       Current plan
                     </span>

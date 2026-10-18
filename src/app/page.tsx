@@ -58,7 +58,7 @@ const HOW_IT_WORKS = [
 const PLANS = [
   {
     name: "Starter",
-    price: "Free",
+    price: "$19/month",
     fee: "1% of each card payment",
     note: "Everything included. Cash payments are never charged.",
   },
@@ -66,7 +66,7 @@ const PLANS = [
     name: "Standard",
     price: "$49/month",
     fee: "0.5% of each card payment",
-    note: "Pays for itself once cards pass roughly $10,000 a month.",
+    note: "Cheaper than Starter once cards pass roughly $6,000 a month.",
   },
   {
     name: "Pro",
@@ -108,8 +108,9 @@ export default function Home() {
             </Link>
           </div>
           <p className="text-muted-foreground text-sm">
-            Free to start. You review and edit everything the AI knows about
-            your menu before a single diner sees it.
+            Your first month is free, with no fee on card payments. You review
+            and edit everything the AI knows about your menu before a single
+            diner sees it.
           </p>
         </section>
 
@@ -146,9 +147,10 @@ export default function Home() {
             What it costs
           </h2>
           <p className="text-muted-foreground text-sm">
-            Card payments go directly to your own Stripe account — this platform
-            never holds your money. You pay Stripe&apos;s usual card fee, plus
-            our percentage below.
+            Your first month is free: no monthly fee and no percentage on card
+            payments. After that, choose a plan below. Card payments go directly
+            to your own Stripe account — this platform never holds your money.
+            You pay Stripe&apos;s usual card fee, plus our percentage.
           </p>
           <ul className="flex flex-col gap-4">
             {PLANS.map((plan) => (

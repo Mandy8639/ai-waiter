@@ -379,3 +379,19 @@ export async function fullOrderFixture(db: TestDb, staffRole: Role = "owner") {
     orderId: order.id,
   };
 }
+
+/**
+ * Puts a restaurant past its free first month (20261018120000), so the
+ * platform fee and billing rules after it apply. New restaurants, fixtures
+ * included, start inside it: no fee on card payments.
+ */
+export async function endFreeMonth(
+  db: TestDb,
+  restaurantId: string,
+  daysAgo = 1,
+): Promise<void> {
+  await db.admin.query(
+    "update public.restaurants set trial_ends_at = now() - make_interval(days => $2) where id = $1;",
+    [restaurantId, daysAgo],
+  );
+}

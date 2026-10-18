@@ -1408,6 +1408,37 @@ The action checks the typed `DELETE` again on the server, calls the function, si
 out, and lands on `/login?deleted=1`. Tested against Postgres in
 `tests/integration/db/delete-my-account.test.ts` and in `tests/unit/account-deletion.test.tsx`.
 
+## Pricing and platform billing
+
+Decided 2026-10-18 (`20261018120000_free_month_then_starter.sql`).
+
+| Plan     | Monthly | Platform fee on in-app card payments (tips excluded) |
+| -------- | ------- | ---------------------------------------------------- |
+| Starter  | $19     | 1%                                                   |
+| Standard | $49     | 0.5%                                                 |
+| Pro      | $149    | 0.25%                                                |
+
+- **Free first month:** every new restaurant gets `trial_ends_at = now() + 30 days`. Until then
+  the platform fee is 0 and no subscription is needed. A subscription started during the free month
+  is given Stripe `trial_end`, so the first charge lands when the month ends.
+- **Founding restaurants:** those that existed before this change (Nashta and the two demos) have
+  `billing_exempt`. They keep free Starter (1%, no monthly fee) and are never paused.
+- **Enforcement:** with no subscription Stripe is collecting on, **new QR orders** are refused 7
+  days after the free month ends. Collecting means `trialing`, `active` or `past_due`, so a failed
+  card Stripe is retrying never pauses anything. A cancelled or unpaid subscription works until 7
+  days past its paid period.
+  - The lock is a BEFORE INSERT trigger on `orders` (`ORDER_RESTAURANT_UNAVAILABLE`).
+  - The door is `get_public_order_settings().accepting_orders`.
+  - Diners never see a billing message, and the menu stays up. Unknown state fails open.
+- **Self-service:** owners and managers cannot change `trial_ends_at` or `billing_exempt` through
+  the API (`restaurants_guard_billing_columns`).
+- **Dashboard:** `get_restaurant_billing()` drives the banner (`src/lib/billing/trial-core.ts`).
+  Inside the store apps the banner carries no price or link (Apple and Google billing rules).
+- **Stripe:** the $19 Starter price is created by `npx tsx --env-file=.env.local
+scripts/setup-stripe-prices.ts`, run by hand because it writes to live Stripe. Until it runs, "Subscribe
+  to Starter" shows "Not available yet". It must run before the first new restaurant's free month
+  plus grace ends.
+
 ## Passwords and two-step verification
 
 **Two-step verification** (TOTP authenticator apps) is optional, set up from `/account`. Once on,
