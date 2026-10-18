@@ -1434,23 +1434,21 @@ then to `/reset-password`.
 - Tested end to end against real Supabase Auth: `tests/e2e/password-change-reset.spec.ts`, run with
   `npm run test:e2e:disposable`.
 
-**Email delivery: needed before real restaurants sign up.** Custom SMTP is **off** on the production
-project, so Supabase's built-in sender is used. It only delivers to the project team's own addresses,
-a few an hour. That covers reset links **and sign-up confirmation emails**. To fix it, use Resend
-(the `mail.tableside.menu` domain is already verified there):
-
-1. Supabase → Authentication → Emails → SMTP Settings → enable.
-2. Host `smtp.resend.com`, port `465`, username `resend`, password = a Resend API key with sending
-   access to `mail.tableside.menu`.
-3. Sender `no-reply@mail.tableside.menu`, name `Tableside`.
-
-With custom SMTP on, the templates become editable. Change "Reset password" to link to
-`{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`. Then
-the link works on any device. With the default template, the link uses this app's PKCE `?code=`, so
-it only works in the browser that asked for it. `/auth/confirm` handles both.
-
-Also on the dashboard: Supabase's minimum password length is 6, while the app asks for 8. Set it to
-8 (Authentication → Sign In / Providers → Email) so the API can't be used to pick a shorter one.
+**Email delivery (set up 2026-10-17).** Auth emails (sign-up confirmations, password resets) go
+through Resend over custom SMTP. The default Supabase sender only reaches the project team's own
+addresses, so this is what lets restaurant owners receive them. Production settings, in Supabase →
+Authentication → Emails:
+- **SMTP:** host `smtp.resend.com`, port `465`, username `resend`, sender
+  `no-reply@mail.tableside.menu` (name `Tableside`). The password is a Resend API key with sending
+  access to `mail.tableside.menu` only, named "Supabase auth emails" in Resend. Rotate it there and
+  paste the new one here.
+- **"Reset password" template:** links straight to
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`,
+  so the link works on any device. The Site URL is `https://tableside.menu`. If the template is
+  ever reset to the default (`{{ .ConfirmationURL }}`), the link falls back to this app's PKCE
+  `?code=`, which only works in the browser that asked for it. `/auth/confirm` handles both.
+- **Minimum password length:** 8, matching the app. Link expiry: 3600 s (the email says 1 hour).
+  Resend's free plan allows 100 emails a day.
 
 ## Health check endpoint — (implemented in Batch 8)
 
