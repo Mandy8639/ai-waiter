@@ -59,8 +59,47 @@ describe("orderTablesForRestore", () => {
         { child: "b", parent: "a" },
       ],
     );
-    expect(order).toEqual([]);
+    // Reported, and still exported: a backup must never drop a table.
+    expect(order).toEqual(["a", "b"]);
     expect(unresolved).toEqual(["a", "b"]);
+  });
+
+  it("breaks a cycle at a nullable key, which can go in empty", () => {
+    // restaurants.active_hero_video_id -> restaurant_hero_videos (nullable),
+    // restaurant_hero_videos.restaurant_id -> restaurants (required), and a
+    // child of restaurants that must still come after it.
+    const { order, unresolved } = orderTablesForRestore(
+      ["restaurant_hero_videos", "restaurants", "menus"],
+      [
+        {
+          child: "restaurants",
+          parent: "restaurant_hero_videos",
+          optional: true,
+        },
+        { child: "restaurant_hero_videos", parent: "restaurants" },
+        { child: "menus", parent: "restaurants" },
+      ],
+    );
+    expect(order).toEqual(["restaurants", "menus", "restaurant_hero_videos"]);
+    expect(unresolved).toEqual([]);
+  });
+
+  it("lists the nullable columns a restore must fill in afterwards", () => {
+    const { deferred } = orderTablesForRestore(
+      ["menu_item_images", "menu_items"],
+      [
+        {
+          child: "menu_items",
+          parent: "menu_item_images",
+          optional: true,
+          nullableColumns: ["active_image_id"],
+        },
+        { child: "menu_item_images", parent: "menu_items" },
+      ],
+    );
+    expect(deferred).toEqual([
+      { table: "menu_items", columns: ["active_image_id"] },
+    ]);
   });
 
   it("still orders the acyclic tables when part of the graph cycles", () => {
@@ -71,7 +110,7 @@ describe("orderTablesForRestore", () => {
         { child: "b", parent: "a" },
       ],
     );
-    expect(order).toEqual(["standalone"]);
+    expect(order).toEqual(["standalone", "a", "b"]);
     expect(unresolved).toEqual(["a", "b"]);
   });
 
@@ -93,6 +132,7 @@ describe("orderTablesForRestore", () => {
     expect(orderTablesForRestore([], [])).toEqual({
       order: [],
       unresolved: [],
+      deferred: [],
     });
   });
 });

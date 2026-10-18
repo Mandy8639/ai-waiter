@@ -18,6 +18,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   generatedColumns,
+  introspectPublicTables,
   columnsReferencingAuthUsers,
 } from "../src/lib/backup/introspect";
 import { SUPABASE_PLATFORM_STUB_SQL } from "../src/lib/backup/supabase-stub";
@@ -102,6 +103,13 @@ async function main(): Promise<void> {
     backup,
   );
   const generated = await generatedColumns(db);
+  // Keys that run "backwards" through a cycle (restaurants' active hero
+  // video, menu_items' active image): those columns go in empty and are
+  // filled in once every table is restored, as they were first written.
+  const { deferred } = await introspectPublicTables(db);
+  const deferredByTable = new Map(
+    deferred.map((d) => [d.table, new Set(d.columns)]),
+  );
 
   // Some migrations seed reference data (platform_plans is the one that
   // bit: restoring its rows collided with the seeded ones on the slug
@@ -139,17 +147,38 @@ async function main(): Promise<void> {
     const quoted = columns.map((c) => `"${c}"`).join(", ");
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
 
+    const later = deferredByTable.get(table) ?? new Set<string>();
     for (const row of rows) {
       try {
         await db.query(
           `insert into public."${table}" (${quoted}) values (${placeholders});`,
-          columns.map((c) => row[c] ?? null),
+          columns.map((c) => (later.has(c) ? null : (row[c] ?? null))),
         );
         restored += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         failures.push(`${table}: ${message}`);
         break; // one message per table is enough to diagnose
+      }
+    }
+  }
+
+  // Second pass: the deferred columns, now that what they point at exists.
+  for (const [table, later] of deferredByTable) {
+    for (const row of backup.data[table] ?? []) {
+      const values = [...later].filter((c) => row[c] != null);
+      if (values.length === 0) continue;
+      try {
+        await db.query(
+          `update public."${table}" set ${values
+            .map((c, i) => `"${c}" = $${i + 2}`)
+            .join(", ")} where id = $1;`,
+          [row.id, ...values.map((c) => row[c])],
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push(`${table} (deferred ${values.join(", ")}): ${message}`);
+        break;
       }
     }
   }

@@ -1,5 +1,9 @@
 import type { PGlite } from "@electric-sql/pglite";
-import { orderTablesForRestore, type ForeignKeyEdge } from "./schema-order";
+import {
+  orderTablesForRestore,
+  type DeferredColumns,
+  type ForeignKeyEdge,
+} from "./schema-order";
 
 /**
  * Reads the real table list and foreign-key graph out of a database that
@@ -11,6 +15,7 @@ import { orderTablesForRestore, type ForeignKeyEdge } from "./schema-order";
 export async function introspectPublicTables(db: PGlite): Promise<{
   order: string[];
   unresolved: string[];
+  deferred: DeferredColumns[];
 }> {
   const { rows: tableRows } = await db.query<{ table_name: string }>(
     `select table_name
@@ -21,22 +26,82 @@ export async function introspectPublicTables(db: PGlite): Promise<{
   );
   const tables = tableRows.map((r) => r.table_name);
 
-  const { rows: fkRows } = await db.query<{ child: string; parent: string }>(
-    `select tc.table_name as child, ccu.table_name as parent
-       from information_schema.table_constraints tc
-       join information_schema.constraint_column_usage ccu
-         on ccu.constraint_name = tc.constraint_name
-        and ccu.table_schema = tc.table_schema
-      where tc.constraint_type = 'FOREIGN KEY'
-        and tc.table_schema = 'public';`,
+  // One row per foreign key. Optional when it can be left unenforced by an
+  // empty column: under the default MATCH SIMPLE a multi-column key is not
+  // checked if ANY of its columns is NULL (menu_items' (active_image_id, id)
+  // key on menu_item_images); under MATCH FULL every column must be.
+  const { rows: fkRows } = await db.query<{
+    child: string;
+    parent: string;
+    optional: boolean;
+    nullable_columns: string[] | null;
+  }>(
+    `select cl.relname as child,
+            pcl.relname as parent,
+            case when con.confmatchtype = 'f'
+                 then bool_and(not att.attnotnull)
+                 else bool_or(not att.attnotnull) end as optional,
+            array_agg(att.attname::text order by att.attname)
+              filter (where not att.attnotnull) as nullable_columns
+       from pg_constraint con
+       join pg_class cl on cl.oid = con.conrelid
+       join pg_namespace ns on ns.oid = cl.relnamespace
+       join pg_class pcl on pcl.oid = con.confrelid
+       join pg_namespace pns on pns.oid = pcl.relnamespace
+       join pg_attribute att
+         on att.attrelid = con.conrelid and att.attnum = any (con.conkey)
+      where con.contype = 'f'
+        and ns.nspname = 'public'
+        and pns.nspname = 'public'
+      group by con.oid, con.confmatchtype, cl.relname, pcl.relname;`,
   );
 
   const edges: ForeignKeyEdge[] = fkRows.map((r) => ({
     child: r.child,
     parent: r.parent,
+    optional: r.optional,
+    nullableColumns: r.nullable_columns ?? [],
   }));
 
-  return orderTablesForRestore(tables, edges);
+  const result = orderTablesForRestore(tables, edges);
+  return { ...result, deferred: await withCheckPartners(db, result.deferred) };
+}
+
+/**
+ * A deferred column can be tied to others by a CHECK (menu_items:
+ * `(active_image_id is null) = (image_source is null)`; restaurants: the
+ * same for hero_video). Emptying it alone would break that check, so its
+ * nullable partners are deferred with it and filled in by the same UPDATE.
+ */
+async function withCheckPartners(
+  db: PGlite,
+  deferred: DeferredColumns[],
+): Promise<DeferredColumns[]> {
+  const out: DeferredColumns[] = [];
+  for (const { table, columns } of deferred) {
+    const { rows } = await db.query<{ columns: string[] }>(
+      `select array_agg(att.attname::text) as columns
+         from pg_constraint con
+         join pg_class cl on cl.oid = con.conrelid
+         join pg_namespace ns on ns.oid = cl.relnamespace
+         join pg_attribute att
+           on att.attrelid = con.conrelid and att.attnum = any (con.conkey)
+        where con.contype = 'c'
+          and ns.nspname = 'public'
+          and cl.relname = $1
+          and not att.attnotnull
+        group by con.oid;`,
+      [table],
+    );
+    const all = new Set(columns);
+    for (const check of rows) {
+      if (check.columns.some((c) => all.has(c))) {
+        for (const c of check.columns) all.add(c);
+      }
+    }
+    out.push({ table, columns: [...all].sort() });
+  }
+  return out;
 }
 
 /**
