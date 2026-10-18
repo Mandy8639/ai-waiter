@@ -11,37 +11,12 @@ import { toFriendlyError } from "@/lib/errors/database-error";
 import { getPublicOrderSettings } from "@/lib/customer/restaurant";
 import { addToCartSchema, updateQuantitySchema } from "./schema";
 import { validateAndPriceSelection } from "./validate";
+import { getOrCreateCartId, insertCartLine } from "./add-line";
 
 export interface CartActionState {
   error?: string;
   success?: boolean;
   fieldErrors?: Record<string, string[] | undefined>;
-}
-
-async function getOrCreateCartId(
-  restaurantId: string,
-  customerSessionId: string,
-): Promise<string | null> {
-  const supabase = await createClient();
-
-  const { data: existing } = await supabase
-    .from("carts")
-    .select("id")
-    .eq("customer_session_id", customerSessionId)
-    .maybeSingle();
-
-  if (existing) return existing.id;
-
-  const { data: created } = await supabase
-    .from("carts")
-    .insert({
-      customer_session_id: customerSessionId,
-      restaurant_id: restaurantId,
-    })
-    .select("id")
-    .single();
-
-  return created?.id ?? null;
 }
 
 export async function addToCart(
@@ -79,7 +54,11 @@ export async function addToCart(
   );
   if (!validation.ok) return { error: validation.error };
 
-  const cartId = await getOrCreateCartId(session.restaurantId, session.id);
+  const cartId = await getOrCreateCartId(
+    supabase,
+    session.restaurantId,
+    session.id,
+  );
   if (!cartId) return { error: "Could not open your cart. Please try again." };
 
   // A restaurant that has turned customer notes off has turned them off:
@@ -100,52 +79,16 @@ export async function addToCart(
     if (!settings.allowCustomerNotes) notes = undefined;
   }
 
-  const { unitPrice, modifiersPrice, selectedOptions } = validation.priced;
-  const lineTotal = Math.max(
-    0,
-    (unitPrice + modifiersPrice) * parsed.data.quantity,
-  );
-
-  const { data: cartItem, error: itemError } = await supabase
-    .from("cart_items")
-    .insert({
-      cart_id: cartId,
-      restaurant_id: session.restaurantId,
-      menu_item_id: parsed.data.menuItemId,
-      quantity: parsed.data.quantity,
-      unit_price: unitPrice,
-      modifiers_price: modifiersPrice,
-      line_total: lineTotal,
-      spice_preference: parsed.data.spicePreference ?? null,
-      notes: notes ?? null,
-    })
-    .select("id")
-    .single();
-
-  if (itemError || !cartItem) {
-    return { error: toFriendlyError(itemError!, "cart item") };
-  }
-
-  if (selectedOptions.length > 0) {
-    const { error: modifiersError } = await supabase
-      .from("cart_item_modifiers")
-      .insert(
-        selectedOptions.map((option) => ({
-          cart_item_id: cartItem.id,
-          restaurant_id: session.restaurantId,
-          modifier_id: option.modifierId,
-          modifier_option_id: option.id,
-          name: option.name,
-          price_adjustment: option.priceAdjustment,
-        })),
-      );
-    if (modifiersError) {
-      // Roll back the orphaned line rather than leaving a cart item with no
-      // (or partial) modifiers silently mismatched from what the customer picked.
-      await supabase.from("cart_items").delete().eq("id", cartItem.id);
-      return { error: toFriendlyError(modifiersError, "cart item") };
-    }
-  }
+  const inserted = await insertCartLine(supabase, {
+    cartId,
+    restaurantId: session.restaurantId,
+    menuItemId: parsed.data.menuItemId,
+    quantity: parsed.data.quantity,
+    priced: validation.priced,
+    spicePreference: parsed.data.spicePreference ?? null,
+    notes: notes ?? null,
+  });
+  if (inserted.error) return { error: inserted.error };
 
   await touchCustomerSession(session.id);
   revalidatePath("/r/[restaurantSlug]/cart", "page");
@@ -238,6 +181,7 @@ export async function clearCart(): Promise<{ error?: string }> {
 
   const supabase = await createClient();
   const cartId = await getOrCreateCartId(
+    supabase,
     sessionResult.session.restaurantId,
     sessionResult.session.id,
   );

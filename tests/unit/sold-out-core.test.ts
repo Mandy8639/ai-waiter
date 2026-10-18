@@ -3,6 +3,7 @@ import {
   OTHER_CATEGORY_ID,
   buildSoldOutMenu,
   filterSoldOutMenu,
+  formatBackAt,
   soldOutNow,
   type SoldOutRows,
 } from "@/lib/menu/sold-out-core";
@@ -119,9 +120,52 @@ describe("filterSoldOutMenu", () => {
 describe("soldOutNow", () => {
   it("lists what's off, naming the dish an add-on belongs to", () => {
     expect(soldOutNow(buildSoldOutMenu(rows))).toEqual([
-      { kind: "dish", id: "naan", label: "Garlic naan" },
+      { kind: "dish", id: "naan", label: "Garlic naan", backAt: null },
       { kind: "option", id: "xnaan", label: "Extra naan (Butter chicken)" },
     ]);
+  });
+
+  it("carries when a dish comes back by itself, only while it's off", () => {
+    const at = "2026-11-04T16:00:00.000Z";
+    const withTimer: SoldOutRows = {
+      ...rows,
+      dishes: rows.dishes.map((d) => ({ ...d, available_again_at: at })),
+    };
+    const entries = soldOutNow(buildSoldOutMenu(withTimer));
+    expect(entries[0]).toEqual({
+      kind: "dish",
+      id: "naan",
+      label: "Garlic naan",
+      backAt: at,
+    });
+    const available = buildSoldOutMenu(withTimer)
+      .flatMap((c) => c.dishes)
+      .filter((d) => d.available);
+    expect(available.every((d) => d.backAt === null)).toBe(true);
+  });
+});
+
+describe("formatBackAt", () => {
+  const NY = "America/New_York";
+  // Tuesday 2026-11-03, 9pm in New York.
+  const now = new Date("2026-11-04T02:00:00Z");
+
+  it("says tomorrow, in the restaurant's timezone", () => {
+    expect(formatBackAt("2026-11-04T16:00:00Z", NY, now)).toBe(
+      "Back tomorrow 11:00 AM",
+    );
+  });
+
+  it("says today for a dish back later the same day", () => {
+    expect(formatBackAt("2026-11-04T03:30:00Z", NY, now)).toBe(
+      "Back today 10:30 PM",
+    );
+  });
+
+  it("names the day after a closed day", () => {
+    expect(formatBackAt("2026-11-05T16:00:00Z", NY, now)).toBe(
+      "Back Thu 11:00 AM",
+    );
   });
 });
 

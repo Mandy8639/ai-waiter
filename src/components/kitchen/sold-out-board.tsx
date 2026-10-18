@@ -7,11 +7,13 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   filterSoldOutMenu,
+  formatBackAt,
   soldOutNow,
   type SoldOutCategory,
 } from "@/lib/menu/sold-out-core";
 import {
   setDishAvailability,
+  setDishSoldOutUntilTomorrow,
   setOptionAvailability,
 } from "@/lib/menu/sold-out-actions";
 
@@ -22,16 +24,24 @@ const key = (kind: Kind, id: string) => `${kind}:${id}`;
  * Big, one-tap switches for a tablet on the pass. Each tap shows its new
  * state at once and is put back if the server refuses it, so a cook never
  * waits on a spinner to know what they did.
+ *
+ * A sold-out dish also offers "Until tomorrow": it then comes back by
+ * itself at the restaurant's next opening, so nobody has to remember.
  */
 export function SoldOutBoard({
   restaurantId,
   menu,
+  timeZone,
 }: {
   restaurantId: string;
   menu: SoldOutCategory[];
+  /** The restaurant's, for "Back tomorrow 11:00 AM". */
+  timeZone: string;
 }) {
   // Taps not yet confirmed by the server, layered over the page's data.
   const [overrides, setOverrides] = useState<Map<string, boolean>>(new Map());
+  // Dishes' "back at" times changed since the page loaded (null: no timer).
+  const [backAts, setBackAts] = useState<Map<string, string | null>>(new Map());
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -43,6 +53,9 @@ export function SoldOutBoard({
         dishes: category.dishes.map((dish) => ({
           ...dish,
           available: overrides.get(key("dish", dish.id)) ?? dish.available,
+          backAt: backAts.has(dish.id)
+            ? (backAts.get(dish.id) ?? null)
+            : dish.backAt,
           options: dish.options.map((option) => ({
             ...option,
             available:
@@ -50,7 +63,7 @@ export function SoldOutBoard({
           })),
         })),
       })),
-    [menu, overrides],
+    [menu, overrides, backAts],
   );
   const visible = useMemo(
     () => filterSoldOutMenu(current, query),
@@ -62,6 +75,7 @@ export function SoldOutBoard({
     const k = key(kind, id);
     setError(null);
     setOverrides((prev) => new Map(prev).set(k, available));
+    if (kind === "dish") setBackAts((prev) => new Map(prev).set(id, null));
     startTransition(async () => {
       const result =
         kind === "dish"
@@ -71,6 +85,20 @@ export function SoldOutBoard({
         setError(result.error);
         setOverrides((prev) => new Map(prev).set(k, !available));
       }
+    });
+  }
+
+  function untilTomorrow(id: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await setDishSoldOutUntilTomorrow(restaurantId, id);
+      if (result.error || !result.backAt) {
+        setError(result.error ?? "Couldn't change that dish.");
+        return;
+      }
+      const backAt = result.backAt;
+      setOverrides((prev) => new Map(prev).set(key("dish", id), false));
+      setBackAts((prev) => new Map(prev).set(id, backAt));
     });
   }
 
@@ -109,7 +137,9 @@ export function SoldOutBoard({
                 >
                   {entry.label}
                   <span className="text-foreground/70 text-xs">
-                    Tap when back
+                    {entry.kind === "dish" && entry.backAt
+                      ? formatBackAt(entry.backAt, timeZone)
+                      : "Tap when back"}
                   </span>
                 </button>
               </li>
@@ -153,6 +183,23 @@ export function SoldOutBoard({
                   onToggle={() => toggle("dish", dish.id, !dish.available)}
                   emphasis
                 />
+                {!dish.available && (
+                  <div className="mt-2 flex items-center justify-end gap-2 text-sm">
+                    {dish.backAt ? (
+                      <span className="text-muted-foreground">
+                        {formatBackAt(dish.backAt, timeZone)}, by itself
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => untilTomorrow(dish.id)}
+                        className="hover:bg-muted min-h-11 rounded-full border px-4 font-medium"
+                      >
+                        Until tomorrow
+                      </button>
+                    )}
+                  </div>
+                )}
                 {dish.options.length > 0 && (
                   <ul className="mt-2 flex flex-col gap-1.5 border-t pt-2">
                     {dish.options.map((option) => (

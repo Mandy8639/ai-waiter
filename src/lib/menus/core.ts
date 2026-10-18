@@ -188,3 +188,135 @@ export function rowsFromRules(rules: HoursRule[]): HoursCheck {
   }
   return { ok: true, rows };
 }
+
+// Holiday and special hours -----------------------------------------------------
+
+/** One date the restaurant is closed, or open only between two times. */
+export interface SpecialHours {
+  id: string;
+  /** "2026-12-25", in the restaurant's timezone. */
+  day: string;
+  closed: boolean;
+  opens: string | null;
+  closes: string | null;
+  note: string | null;
+}
+
+export interface SpecialHoursInput {
+  day: string;
+  closed: boolean;
+  opens: string;
+  closes: string;
+  note: string;
+}
+
+export type SpecialHoursCheck =
+  | {
+      ok: true;
+      row: Omit<SpecialHours, "id">;
+    }
+  | { ok: false; error: string };
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+export const SPECIAL_HOURS_NOTE_MAX = 80;
+
+/** Today's date in a timezone, "2026-12-25". */
+export function todayIn(timeZone: string, now: Date = new Date()): string {
+  return now.toLocaleDateString("en-CA", { timeZone });
+}
+
+/**
+ * Checks a holiday or special-hours entry the way the database will
+ * (restaurant_special_hours_shape), and refuses dates already past.
+ */
+export function checkSpecialHours(
+  input: SpecialHoursInput,
+  today: string,
+): SpecialHoursCheck {
+  if (!DATE.test(input.day) || Number.isNaN(Date.parse(input.day))) {
+    return { ok: false, error: "Pick a date." };
+  }
+  if (input.day < today) {
+    return { ok: false, error: "That date has already passed." };
+  }
+  const note = input.note.trim().replace(/\s+/g, " ");
+  if (note.length > SPECIAL_HOURS_NOTE_MAX) {
+    return {
+      ok: false,
+      error: `Keep the note to ${SPECIAL_HOURS_NOTE_MAX} characters.`,
+    };
+  }
+  if (input.closed) {
+    return {
+      ok: true,
+      row: {
+        day: input.day,
+        closed: true,
+        opens: null,
+        closes: null,
+        note: note || null,
+      },
+    };
+  }
+  if (!TIME.test(input.opens) || !TIME.test(input.closes)) {
+    return { ok: false, error: "Times look like 11:00 or 17:30." };
+  }
+  if (input.closes <= input.opens) {
+    return { ok: false, error: "Closing time has to be after opening time." };
+  }
+  return {
+    ok: true,
+    row: {
+      day: input.day,
+      closed: false,
+      opens: input.opens,
+      closes: input.closes,
+      note: note || null,
+    },
+  };
+}
+
+/** "Thu, Dec 25" for a stored date. The date is already local; no shifting. */
+export function specialDayLabel(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** "17:00" → "5:00 PM"; "24:00" → "midnight". */
+export function clockLabel(time: string): string {
+  if (time === "24:00") return "midnight";
+  const [h, m] = time.split(":").map(Number);
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** "Closed" or "5:00 PM – 9:00 PM". */
+export function specialHoursLabel(entry: {
+  closed: boolean;
+  opens: string | null;
+  closes: string | null;
+}): string {
+  if (entry.closed || !entry.opens || !entry.closes) return "Closed";
+  return `${clockLabel(entry.opens)} – ${clockLabel(entry.closes)}`;
+}
+
+/** What a diner is told about today, from get_special_hours_today(). */
+export function specialHoursNotice(data: unknown): string | null {
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const r = data[0] as Record<string, unknown>;
+  const note =
+    typeof r.note === "string" && r.note.trim() ? ` (${r.note.trim()})` : "";
+  if (r.closed === true) return `Closed today${note}.`;
+  if (typeof r.opens_at === "string" && typeof r.closes_at === "string") {
+    return `Special hours today${note}: ${specialHoursLabel({
+      closed: false,
+      opens: r.opens_at,
+      closes: r.closes_at,
+    })}.`;
+  }
+  return null;
+}

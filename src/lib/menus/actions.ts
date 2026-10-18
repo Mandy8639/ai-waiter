@@ -3,7 +3,13 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
-import { rowsFromRules, type HoursRule } from "./core";
+import {
+  checkSpecialHours,
+  rowsFromRules,
+  todayIn,
+  type HoursRule,
+  type SpecialHoursInput,
+} from "./core";
 
 /**
  * Managing menus (phase L). Owners and managers, through the
@@ -197,4 +203,67 @@ export async function deleteMenu(
     .eq("id", menuId)
     .eq("restaurant_id", restaurantId);
   return error ? { error: friendly(error) } : done();
+}
+
+// Holiday and special hours (20261019090000_service_features.sql) ------------
+
+/**
+ * Adds a closed day or special hours for one date, replacing whatever that
+ * date had. The restaurant's timezone decides what "today" is.
+ */
+export async function saveSpecialHours(
+  restaurantId: string,
+  input: SpecialHoursInput,
+): Promise<MenuActionResult> {
+  const auth = await authorizeRestaurantAction(restaurantId, [
+    "owner",
+    "manager",
+  ]);
+  if (!auth.ok) return { error: auth.error };
+  const { data: restaurant } = await auth.context.supabase
+    .from("restaurants")
+    .select("timezone")
+    .eq("id", restaurantId)
+    .maybeSingle();
+  const checked = checkSpecialHours(
+    input,
+    todayIn(restaurant?.timezone ?? "UTC"),
+  );
+  if (!checked.ok) return { error: checked.error };
+
+  const db = auth.context.supabase as unknown as {
+    from: (table: string) => {
+      upsert: (
+        row: Record<string, unknown>,
+        options: { onConflict: string },
+      ) => Result;
+    };
+  };
+  const { error } = await db.from("restaurant_special_hours").upsert(
+    {
+      restaurant_id: restaurantId,
+      day: checked.row.day,
+      closed: checked.row.closed,
+      opens_at: checked.row.opens,
+      closes_at: checked.row.closes,
+      note: checked.row.note,
+    },
+    { onConflict: "restaurant_id,day" },
+  );
+  return error ? { error: "Couldn't save. Please try again." } : done();
+}
+
+export async function deleteSpecialHours(
+  restaurantId: string,
+  id: string,
+): Promise<MenuActionResult> {
+  const auth = await authorize(restaurantId);
+  if (!auth.ok) return { error: auth.error };
+  if (!uuid.safeParse(id).success) return { error: "Not found." };
+  const { error } = await auth.db
+    .from("restaurant_special_hours")
+    .delete()
+    .eq("id", id)
+    .eq("restaurant_id", restaurantId);
+  return error ? { error: "Couldn't remove it. Please try again." } : done();
 }

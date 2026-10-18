@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   categoriesOnNow,
+  checkSpecialHours,
+  clockLabel,
   hoursLabel,
   menusForCategory,
   onNowFilter,
   rowsFromRules,
   rulesFromHours,
   servedWhen,
+  specialDayLabel,
+  specialHoursLabel,
+  specialHoursNotice,
   toPublicMenus,
+  todayIn,
   type PublicMenu,
 } from "@/lib/menus/core";
 
@@ -167,5 +173,97 @@ describe("editing hours", () => {
 
   it("accepts no rules at all, meaning always on", () => {
     expect(rowsFromRules([])).toEqual({ ok: true, rows: [] });
+  });
+});
+
+describe("holiday and special hours", () => {
+  const today = "2026-11-20";
+  const input = {
+    day: "2026-11-26",
+    closed: true,
+    opens: "17:00",
+    closes: "21:00",
+    note: "  Thanksgiving  ",
+  };
+
+  it("stores a closed day without times, note tidied", () => {
+    expect(checkSpecialHours(input, today)).toEqual({
+      ok: true,
+      row: {
+        day: "2026-11-26",
+        closed: true,
+        opens: null,
+        closes: null,
+        note: "Thanksgiving",
+      },
+    });
+  });
+
+  it("stores special hours, and accepts today and midnight", () => {
+    expect(
+      checkSpecialHours(
+        { ...input, day: today, closed: false, closes: "24:00", note: "" },
+        today,
+      ),
+    ).toEqual({
+      ok: true,
+      row: {
+        day: today,
+        closed: false,
+        opens: "17:00",
+        closes: "24:00",
+        note: null,
+      },
+    });
+  });
+
+  it("refuses what the database would, and past dates", () => {
+    const error = (patch: Partial<typeof input>) => {
+      const r = checkSpecialHours({ ...input, ...patch }, today);
+      return r.ok ? null : r.error;
+    };
+    expect(error({ day: "" })).toBe("Pick a date.");
+    expect(error({ day: "2026-11-19" })).toBe("That date has already passed.");
+    expect(error({ closed: false, closes: "16:00" })).toBe(
+      "Closing time has to be after opening time.",
+    );
+    expect(error({ closed: false, opens: "5pm" })).toBe(
+      "Times look like 11:00 or 17:30.",
+    );
+    expect(error({ note: "x".repeat(81) })).toBe(
+      "Keep the note to 80 characters.",
+    );
+  });
+
+  it("words dates and hours", () => {
+    expect(specialDayLabel("2026-12-25")).toBe("Fri, Dec 25");
+    expect(specialHoursLabel({ closed: true, opens: null, closes: null })).toBe(
+      "Closed",
+    );
+    expect(
+      specialHoursLabel({ closed: false, opens: "12:00", closes: "24:00" }),
+    ).toBe("12:00 PM – midnight");
+    expect(clockLabel("00:30")).toBe("12:30 AM");
+  });
+
+  it("tells diners about today, from get_special_hours_today()", () => {
+    expect(specialHoursNotice([])).toBeNull();
+    expect(specialHoursNotice(null)).toBeNull();
+    expect(
+      specialHoursNotice([
+        { closed: true, opens_at: null, closes_at: null, note: "Diwali" },
+      ]),
+    ).toBe("Closed today (Diwali).");
+    expect(
+      specialHoursNotice([
+        { closed: false, opens_at: "17:00", closes_at: "21:00", note: null },
+      ]),
+    ).toBe("Special hours today: 5:00 PM – 9:00 PM.");
+  });
+
+  it("knows today in the restaurant's timezone, not the server's", () => {
+    const lateNightInNewYork = new Date("2026-11-27T03:00:00Z");
+    expect(todayIn("America/New_York", lateNightInNewYork)).toBe("2026-11-26");
+    expect(todayIn("UTC", lateNightInNewYork)).toBe("2026-11-27");
   });
 });

@@ -10,6 +10,7 @@ import { isAiWaiterAvailable } from "@/lib/ai/actions";
 import { isChefEnabled } from "@/lib/chef/feature";
 import { getKitchenStatus } from "@/lib/kitchen/busy-queries";
 import { dinerNotice } from "@/lib/kitchen/busy-core";
+import { getSpecialHoursNotice } from "@/lib/menus/queries";
 
 export default async function CustomerRestaurantLayout({
   children,
@@ -27,7 +28,11 @@ export default async function CustomerRestaurantLayout({
 
   // Kitchen busy mode: said on every page, before anyone builds an order
   // the kitchen can't take.
-  const kitchenNotice = dinerNotice(await getKitchenStatus(restaurant.id));
+  // Holidays and special hours likewise.
+  const [kitchenNotice, hoursNotice] = await Promise.all([
+    getKitchenStatus(restaurant.id).then(dinerNotice),
+    getSpecialHoursNotice(restaurant.id),
+  ]);
 
   const session = await getActiveCustomerSession();
   const isThisRestaurant = session && session.restaurantId === restaurant.id;
@@ -101,6 +106,14 @@ export default async function CustomerRestaurantLayout({
             )}
           </div>
         </header>
+
+        {hoursNotice && (
+          <div role="status" className="bg-muted text-foreground border-b">
+            <p className="mx-auto w-full max-w-2xl px-4 py-2.5 text-sm font-medium sm:px-6">
+              {hoursNotice}
+            </p>
+          </div>
+        )}
 
         {kitchenNotice && (
           <div
