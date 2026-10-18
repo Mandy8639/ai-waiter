@@ -16,7 +16,7 @@ import type { Metadata } from "next";
 export const SITE_URL = "https://tableside.menu";
 export const SITE_NAME = "Tableside";
 
-/** Made by scripts/make-og-image.cjs. */
+/** Made by scripts/make-og-image.ts. */
 export const DEFAULT_SHARE_IMAGE = {
   url: "/brand/og/tableside-og.png",
   width: 1200,

@@ -1,13 +1,12 @@
 // Builds public/brand/og/tableside-og.png, the 1200x630 image shown when a
 // Tableside link is shared (src/lib/seo/metadata.ts), from the brand icon.
-// Run from the repo root: node scripts/make-og-image.cjs
-const fs = require("fs");
-const path = require("path");
-const sharp = require(path.resolve("node_modules/sharp"));
-const icon = fs
-  .readFileSync("public/brand/tableside-icon.svg", "utf8")
+// Run from the repo root: npx tsx scripts/make-og-image.ts
+import { readFileSync } from "node:fs";
+import sharp from "sharp";
+
+const icon = readFileSync("public/brand/tableside-icon.svg", "utf8")
   .replace(/<\?xml[^>]*>/, "")
-  .replace(/<svg[^>]*>/, (m) =>
+  .replace(/<svg[^>]*>/, (m: string) =>
     m
       .replace(/width="\d+"/, 'width="300"')
       .replace(/height="\d+"/, 'height="300"'),
