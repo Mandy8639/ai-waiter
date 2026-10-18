@@ -1,0 +1,69 @@
+name: Auto-merge
+
+# Merges a pull request as soon as every check on its head commit is green
+# (asked for on 2026-10-18). GitHub's own auto-merge can't be used safely:
+# a private repo on the free plan can't require status checks on main, so
+# it merges immediately, before CI.
+#
+# Only PRs labelled `automerge` are merged. Remove the label to hold one
+# back. Never a draft, never anything not into main, never a commit that
+# changed since the checks ran (--match-head-commit).
+#
+# Note: merging to main applies database migrations to production by itself
+# (the Supabase integration) and deploys (Vercel), exactly as a hand merge
+# does.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  merge:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge the PR if every check on its head commit is green
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number,headRefOid,labels,isDraft,baseRefName \
+            --jq ".[] | select(.headRefOid == \"$SHA\" and .baseRefName == \"main\" and (.isDraft | not) and any(.labels[]; .name == \"automerge\")) | .number")
+          if [ -z "$pr" ]; then
+            echo "No open, labelled PR into main at $SHA. Nothing to do."
+            exit 0
+          fi
+
+          # CI runs twice per PR (push and pull_request). Wait for every
+          # check run except this job, finished and green.
+          not_green=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
+            --jq '[.check_runs[] | select(.name != "merge")
+                   | select(.status != "completed"
+                            or ((.conclusion == "success" or .conclusion == "skipped" or .conclusion == "neutral") | not))]
+                  | length')
+          if [ "$not_green" != "0" ]; then
+            echo "$not_green check run(s) not finished or not green yet. Waiting for the next CI completion."
+            exit 0
+          fi
+
+          # Commit statuses too (Vercel). None at all is fine.
+          read -r state count < <(gh api "repos/$REPO/commits/$SHA/status" --jq '"\(.state) \(.total_count)"')
+          if [ "$count" != "0" ] && [ "$state" != "success" ]; then
+            echo "Commit status is $state. Not merging."
+            exit 0
+          fi
+
+          gh pr merge "$pr" --repo "$REPO" --merge --delete-branch --match-head-commit "$SHA"
+          echo "Merged #$pr at $SHA."
