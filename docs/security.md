@@ -801,6 +801,29 @@ This mattered beyond clearing test fixtures: restaurant offboarding and any acco
 request were blocked by it too. It went unnoticed for three days because nothing exercised
 deletion; that test file is now the coverage.
 
+## Staff assistant — (Feature 7)
+
+The dashboard's **Assistant** turns typed commands into changes (see docs/ai.md, "Staff assistant").
+The security properties:
+
+- **No new write path.** Every change calls a function or policy the dashboard already uses, through
+  the signed-in person's own RLS-scoped client: `set_menu_item_availability()`,
+  `set_menu_item_sold_out_until_next_opening()`, `set_modifier_option_availability()`,
+  `pause_new_orders()`, `resume_new_orders()`, `set_kitchen_busy()`, and the `menu_items` UPDATE
+  policy for prices. A kitchen account can't change a price however the request is built: the plan
+  refuses it, and RLS updates nothing. `tests/integration/db/staff-assistant.test.ts` forges the
+  "yes" and checks both.
+- **Buttons are fresh requests.** Yes, Undo and "which one?" buttons carry a structured action back
+  from the browser. `applyStaffAction()` validates it with Zod, re-checks the role, and requires
+  every dish or add-on id to be on this restaurant's menu.
+- **The model only classifies.** It returns JSON matched to a fixed schema, the message is fenced and
+  described as data, and anything it read is confirmed by a person before it runs.
+- **The log can't be edited from a browser.** `staff_assistant_commands` has a SELECT policy for
+  owners and managers and no INSERT, UPDATE or DELETE policy. The server writes it with the service
+  role after the fact. A failed log write is reported to error tracking and never undoes a change
+  that has already happened.
+- **Rate limit:** 40 commands per person per 10 minutes, counted from the log.
+
 ## Kitchen display access — (implemented in Batch 6)
 
 `/dashboard/kitchen` is protected exactly like every other `/dashboard/*` route — `src/proxy.ts`'s

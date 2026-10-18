@@ -714,6 +714,46 @@ can have this for free") is ever read back as authoritative state by any tool �
 independently re-derives permissions and prices from the database, not from what a prior message
 in this table said.
 
+## Staff assistant (dashboard)
+
+A second, much narrower use of a model, for staff rather than diners: **Assistant** in the dashboard
+(`/dashboard/assistant`, owner, manager and kitchen) takes commands like "86 the salmon", "the oat
+milk is out", "pause ordering for an hour", "we're slammed, add 15 minutes" or "make the mango lassi
+$5.50". Code: `src/lib/staff-assistant/`.
+
+It follows the core rule more strictly than the waiter does: **the model never acts and never
+writes the reply.**
+
+1. **Built-in phrases first** (`parse-core.ts`). The usual commands are read without a model:
+   instant, free and the same every time.
+2. **The model reads what those don't** (`interpret-core.ts`, `interpret.ts`). It gets one narrow
+   question ("which of these commands is it, about which dish?") and answers in JSON. It has no
+   tools and calls nothing. Its answer must fit the same schema (`intent.ts`); anything else reads
+   as "not understood". It runs on its own model list (`STAFF_ASSISTANT_MODEL`, defaulting to the
+   suggester's vetted JSON list) over OpenRouter, like the other JSON jobs.
+3. **Names are matched against the real menu** (`resolve-core.ts`). One clear match is used. Several
+   ("the salmon" when there are two) get a "which one?" with buttons, and nothing changes. No match
+   means "not found".
+4. **Asking first** (`plan-core.ts`):
+   - Price changes always ask, and only owners and managers may make them.
+   - Anything the model read always asks ("I think you want me to… Should I?").
+   - Sold out, back, pause and running behind from the built-in phrases apply at once.
+5. **Changes go through the dashboard's own functions, as the signed-in person**
+   (`execute-core.ts`): `set_menu_item_sold_out_until_next_opening()`, `set_menu_item_availability()`,
+   `set_modifier_option_availability()`, `pause_new_orders()`, `resume_new_orders()`,
+   `set_kitchen_busy()`, and the `menu_items` UPDATE policy for prices. There is no new write path,
+   so RLS and the functions' own role checks decide. "86" means sold out until the next opening.
+6. **The reply describes what the database did.** It's written by the server from the result, with
+   an **Undo** that puts back the state read just before. A refused or failed call is reported as
+   "nothing was changed", never as done.
+7. **Everything is recorded** in `staff_assistant_commands`: what was typed, how it was read, each
+   database call with its result, and the reply. It's written by the server only (service role),
+   and owners and managers can read their own restaurant's. There's a limit of 40 commands per
+   person per 10 minutes.
+
+Deleting dishes, changing hours, refunds and anything else are deliberately out of scope: the model
+is told to answer "unknown", and the person is shown what it can do.
+
 ## Failure fallback — the AI is purely additive
 
 If `ANTHROPIC_API_KEY` is unset, `isAiConfigured()` returns false and `sendAiMessage()` returns a
