@@ -50,7 +50,7 @@ export interface NavItem {
  *   - owner, manager: everything.
  *   - staff (floor and front desk): Overview, Kitchen, Orders, Settle up,
  *     Reservations.
- *   - kitchen (the screen on the pass): Kitchen, Sold out and Chef.
+ *   - kitchen (the screen on the pass): Kitchen, Sold out and Waiter.
  * src/lib/dashboard/access-core.ts enforces the same table on the server.
  */
 const MANAGERS: readonly RestaurantRole[] = ["owner", "manager"];
@@ -80,10 +80,10 @@ export const NAV_ITEMS: NavItem[] = [
     icon: CircleSlash,
     roles: KITCHEN_SIDE,
   },
-  // The Chef, the staff assistant: "86 the salmon", typed. The same switches as Sold out and the
+  // The Waiter, the staff assistant (the diners' "Chef" character): "86 the salmon", typed. The same switches as Sold out and the
   // kitchen's pause and running-behind controls (src/lib/staff-assistant/).
   {
-    label: "Chef",
+    label: "Waiter",
     href: "/dashboard/assistant",
     group: "Service",
     icon: Sparkles,

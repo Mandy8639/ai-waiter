@@ -803,7 +803,7 @@ deletion; that test file is now the coverage.
 
 ## Staff assistant — (Feature 7)
 
-The dashboard's **Assistant** turns typed commands into changes (see docs/ai.md, "Staff assistant").
+The dashboard's **Waiter** (the staff assistant) turns typed commands into changes (see docs/ai.md, "Staff assistant").
 The security properties:
 
 - **No new write path.** Every change calls a function or policy the dashboard already uses, through

@@ -8,7 +8,7 @@ import { NAV_ITEMS } from "./nav-items";
 
 /**
  * The kitchen account's whole navigation: the pages its role may open
- * (today Kitchen, Sold out and Chef), as big tabs instead of a sidebar, so the
+ * (today Kitchen, Sold out and Waiter), as big tabs instead of a sidebar, so the
  * board gets the full width of the tablet.
  */
 export function KitchenTabs() {

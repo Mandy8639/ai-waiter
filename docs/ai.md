@@ -716,8 +716,10 @@ in this table said.
 
 ## Staff assistant (dashboard)
 
-A second, much narrower use of a model, for staff rather than diners: **Assistant** in the dashboard
-(`/dashboard/assistant`, owner, manager and kitchen) takes commands like "86 the salmon", "the oat
+A second, much narrower use of a model, for staff rather than diners: the **Waiter** in the dashboard
+(owner, manager and kitchen). It's the same illustrated character diners meet as "the Chef", named
+for what it is to the kitchen. A "Waiter" button floats on every dashboard page, and
+`/dashboard/assistant` shows the same conversation full-page. It takes commands like "86 the salmon", "the oat
 milk is out", "pause ordering for an hour", "we're slammed, add 15 minutes" or "make the mango lassi
 $5.50". Code: `src/lib/staff-assistant/`.
 
