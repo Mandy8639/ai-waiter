@@ -96,7 +96,9 @@ async function main(): Promise<void> {
     }
 
     const product = await stripe.products.create({
-      name: `AI Waiter — ${plan.name}`,
+      // What restaurant owners read on the Stripe checkout page and their
+      // invoices, so the product name, not the codebase name.
+      name: `Tableside — ${plan.name}`,
       metadata: { plan_slug: plan.slug },
     });
 
