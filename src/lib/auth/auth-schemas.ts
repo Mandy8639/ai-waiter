@@ -39,3 +39,33 @@ export const signUpSchema = z
     message: PASSWORD_MISMATCH_MESSAGE,
     path: ["confirmPassword"],
   });
+
+/** "Forgot password?": just the email. */
+export const forgotPasswordSchema = z.object({ email: emailSchema });
+
+/** Choosing a new password after a reset link: twice, matching. */
+export const newPasswordSchema = z
+  .object({
+    newPassword: signUpPasswordSchema,
+    confirmPassword: z.string().min(1, "Type your new password again."),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: PASSWORD_MISMATCH_MESSAGE,
+    path: ["confirmPassword"],
+  });
+
+/** "Change password" on /account: the current one, then the new one twice. */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: signInPasswordSchema,
+    newPassword: signUpPasswordSchema,
+    confirmPassword: z.string().min(1, "Type your new password again."),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: PASSWORD_MISMATCH_MESSAGE,
+    path: ["confirmPassword"],
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    message: "Choose a password different from your current one.",
+    path: ["newPassword"],
+  });

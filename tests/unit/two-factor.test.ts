@@ -72,6 +72,7 @@ describe("routing with two-step verification", () => {
       expect(decideRouteAccess(path, pending), path).toEqual({
         type: "redirect",
         to: TWO_FACTOR_PATH,
+        redirectTo: path,
       });
     }
   });

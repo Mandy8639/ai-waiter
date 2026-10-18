@@ -1408,6 +1408,50 @@ The action checks the typed `DELETE` again on the server, calls the function, si
 out, and lands on `/login?deleted=1`. Tested against Postgres in
 `tests/integration/db/delete-my-account.test.ts` and in `tests/unit/account-deletion.test.tsx`.
 
+## Passwords and two-step verification
+
+**Two-step verification** (TOTP authenticator apps) is optional, set up from `/account`. Once on,
+a password-only (aal1) session is sent to `/login/verify` by `src/proxy.ts`. The database refuses it
+too: `current_restaurant_role()` answers NULL until the token is aal2
+(`20261018090000_two_factor_login.sql`). Any new staff-permission check must go through that function.
+
+**Change password** (`/account`) asks for the current password. Supabase's "Require current password
+when updating" is **off** on the production project, so `changePassword()` checks it with a separate,
+throwaway sign-in and leaves the person's session and its aal untouched. After any password change,
+other sessions are signed out (`signOut({ scope: "others" })`).
+
+**Forgot password** goes from `/forgot-password` through Supabase's reset email to `/auth/confirm`,
+then to `/reset-password`.
+
+- `/forgot-password` always answers the same, whether or not the email has an account. Supabase's
+  errors (rate limits included) are logged, never shown.
+- `/auth/confirm` signs the person in and sets a signed, 15-minute cookie naming the user
+  (`src/lib/auth/password-reset-core.ts`, keyed from `SUPABASE_SECRET_KEY`). `/reset-password` only
+  shows its form with that cookie, so a signed-in browser can't be used to skip the
+  current-password check.
+- With two-step on, the code step comes first and returns to `/reset-password`. Only that path is
+  honoured as a destination.
+- Tested end to end against real Supabase Auth: `tests/e2e/password-change-reset.spec.ts`, run with
+  `npm run test:e2e:disposable`.
+
+**Email delivery: needed before real restaurants sign up.** Custom SMTP is **off** on the production
+project, so Supabase's built-in sender is used. It only delivers to the project team's own addresses,
+a few an hour. That covers reset links **and sign-up confirmation emails**. To fix it, use Resend
+(the `mail.tableside.menu` domain is already verified there):
+
+1. Supabase → Authentication → Emails → SMTP Settings → enable.
+2. Host `smtp.resend.com`, port `465`, username `resend`, password = a Resend API key with sending
+   access to `mail.tableside.menu`.
+3. Sender `no-reply@mail.tableside.menu`, name `Tableside`.
+
+With custom SMTP on, the templates become editable. Change "Reset password" to link to
+`{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`. Then
+the link works on any device. With the default template, the link uses this app's PKCE `?code=`, so
+it only works in the browser that asked for it. `/auth/confirm` handles both.
+
+Also on the dashboard: Supabase's minimum password length is 6, while the app asks for 8. Set it to
+8 (Authentication → Sign In / Providers → Email) so the API can't be used to pick a shorter one.
+
 ## Health check endpoint — (implemented in Batch 8)
 
 `GET /api/health` (`src/app/api/health/route.ts`) reports high-level readiness — `status: "ok"`,

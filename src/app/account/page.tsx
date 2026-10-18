@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { DeleteAccountForm } from "@/components/account/delete-account-form";
 import { TwoFactorSettings } from "@/components/account/two-factor-settings";
+import { ChangePasswordForm } from "@/components/account/change-password-form";
 import { deleteMyAccount } from "@/lib/account/actions";
 import { getAccountOverview } from "@/lib/account/queries";
 import {
@@ -52,6 +53,21 @@ export default async function AccountPage() {
           <span className="text-foreground font-medium">{account.email}</span>
         </p>
       </div>
+
+      <Card id="password">
+        <CardHeader>
+          <h2 className="font-heading text-base leading-snug font-medium">
+            Change password
+          </h2>
+          <CardDescription>
+            Other devices signed in to your account are signed out when you
+            change it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChangePasswordForm />
+        </CardContent>
+      </Card>
 
       <Card id="two-step">
         <CardHeader>

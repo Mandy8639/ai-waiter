@@ -53,6 +53,7 @@ export default async function LoginPage({
             pendingLabel="Signing in…"
             passwordAutoComplete="current-password"
             inviteToken={inviteToken}
+            forgotPasswordHref="/forgot-password"
           />
           <p className="text-muted-foreground text-center text-sm">
             Don&apos;t have an account?{" "}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,8 @@ interface AuthFormProps {
   passwordHint?: string;
   /** Sign-up: a second password field that must match the first. */
   confirmPassword?: boolean;
+  /** Sign-in: where the "Forgot password?" link goes. */
+  forgotPasswordHref?: string;
   /**
    * Set when the visitor arrived from a staff invitation link. Carried
    * through the form so signing in or up returns them to /join/<token>
@@ -37,6 +40,7 @@ export function AuthForm({
   passwordAutoComplete,
   passwordHint,
   confirmPassword = false,
+  forgotPasswordHref,
   inviteToken,
 }: AuthFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialState);
@@ -100,7 +104,17 @@ export function AuthForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="password">Password</Label>
+        <div className="flex items-baseline justify-between gap-3">
+          <Label htmlFor="password">Password</Label>
+          {forgotPasswordHref && (
+            <Link
+              href={forgotPasswordHref}
+              className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
+            >
+              Forgot password?
+            </Link>
+          )}
+        </div>
         <PasswordInput
           id="password"
           name="password"

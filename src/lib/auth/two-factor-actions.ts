@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isInviteToken } from "@/lib/staff/invitations-core";
 import { normalizeTwoFactorCode } from "@/lib/auth/two-factor-core";
+import { allowedNextPath } from "@/lib/auth/password-reset-core";
 
 /**
  * Two-step verification with an authenticator app (Supabase Auth TOTP).
@@ -44,8 +45,10 @@ export async function verifyTwoFactorSignIn(
   });
   if (error) return { error: WRONG_CODE };
 
+  // Back to a reset in progress, or on to an invitation, else the dashboard.
+  const next = allowedNextPath(formData.get("next"));
   const token = formData.get("inviteToken");
-  redirect(isInviteToken(token) ? `/join/${token}` : "/dashboard");
+  redirect(next ?? (isInviteToken(token) ? `/join/${token}` : "/dashboard"));
 }
 
 export interface TwoFactorSetup {

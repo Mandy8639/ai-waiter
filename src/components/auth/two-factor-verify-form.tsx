@@ -11,7 +11,13 @@ import {
 const initialState: TwoFactorFormState = {};
 
 /** The code step after a password sign-in. */
-export function TwoFactorVerifyForm({ inviteToken }: { inviteToken?: string }) {
+export function TwoFactorVerifyForm({
+  inviteToken,
+  next,
+}: {
+  inviteToken?: string;
+  next?: string;
+}) {
   const [state, formAction, isPending] = useActionState(
     verifyTwoFactorSignIn,
     initialState,
@@ -22,6 +28,7 @@ export function TwoFactorVerifyForm({ inviteToken }: { inviteToken?: string }) {
       {inviteToken && (
         <input type="hidden" name="inviteToken" value={inviteToken} />
       )}
+      {next && <input type="hidden" name="next" value={next} />}
       <TwoFactorCodeField error={state.error} disabled={isPending} autoFocus />
       <Button type="submit" disabled={isPending}>
         {isPending ? "Checking…" : "Verify"}
