@@ -1,5 +1,8 @@
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
+
 export const metadata = {
   title: "QR code not recognized — Tableside",
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 /**

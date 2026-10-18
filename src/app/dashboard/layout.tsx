@@ -19,6 +19,11 @@ import { hasVerifiedTwoFactor } from "@/lib/auth/two-factor-core";
 import { getDashboardContext } from "@/lib/restaurants/require-current-restaurant";
 import { countPendingReservationRequests } from "@/lib/notifications/pending-requests";
 import { selectRestaurant } from "@/lib/restaurants/actions";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
+
+// Signed in only; never listed. Pages below set just their title, which
+// the shallow metadata merge keeps alongside this.
+export const metadata = { robots: PRIVATE_PAGE_ROBOTS };
 
 export default async function DashboardLayout({
   children,

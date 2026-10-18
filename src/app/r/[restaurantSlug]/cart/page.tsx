@@ -17,6 +17,7 @@ import { getActiveCustomerSession } from "@/lib/customer/session";
 import { getCart } from "@/lib/cart/get-cart";
 import { getKitchenStatus } from "@/lib/kitchen/busy-queries";
 import { clearCart } from "@/lib/cart/actions";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export async function generateMetadata({
   params,
@@ -25,7 +26,10 @@ export async function generateMetadata({
 }) {
   const { restaurantSlug } = await params;
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
-  return { title: restaurant ? `Cart — ${restaurant.name}` : "Cart" };
+  return {
+    title: restaurant ? `Cart — ${restaurant.name}` : "Cart",
+    robots: PRIVATE_PAGE_ROBOTS,
+  };
 }
 
 export default async function CartPage({

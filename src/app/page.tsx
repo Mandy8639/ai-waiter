@@ -4,12 +4,16 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
 import { SUPPORT_PATH } from "@/lib/legal/support";
+import { publicPageMetadata } from "@/lib/seo/metadata";
+import { JsonLd } from "@/components/seo/json-ld";
+import { organizationJsonLd } from "@/lib/seo/structured-data";
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: "Tableside — an AI waiter for your restaurant",
   description:
     "Diners scan the table's QR code, ask questions in their own words, and order. Orders land on your kitchen board, and card payments go straight to your own Stripe account.",
-};
+  path: "/",
+});
 
 /**
  * The public landing page, written for a restaurant owner who typed the
@@ -75,6 +79,7 @@ const PLANS = [
 export default function Home() {
   return (
     <div className="flex flex-1 flex-col">
+      <JsonLd data={organizationJsonLd()} />
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-16 px-6 py-16 sm:py-24">
         <section className="flex flex-col items-center gap-6 text-center">
           <Badge variant="secondary" className="tracking-wide uppercase">

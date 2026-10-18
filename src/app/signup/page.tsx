@@ -9,10 +9,14 @@ import { AuthForm } from "@/components/auth/auth-form";
 import { isInviteToken } from "@/lib/staff/invitations-core";
 import { signUp } from "@/lib/auth/actions";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
+import { publicPageMetadata } from "@/lib/seo/metadata";
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: "Sign up — Tableside",
-};
+  description:
+    "Create a Tableside account and set up your restaurant: a QR code menu diners can ask questions of, orders straight to your kitchen board, and card payments to your own Stripe account.",
+  path: "/signup",
+});
 
 export default async function SignupPage({
   searchParams,

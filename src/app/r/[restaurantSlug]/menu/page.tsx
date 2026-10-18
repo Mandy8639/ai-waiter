@@ -36,6 +36,11 @@ import {
   toggleDietFilter,
   type DietFilterKey,
 } from "@/lib/menu/diet-filters";
+import { publicPageMetadata } from "@/lib/seo/metadata";
+import {
+  restaurantDescription,
+  restaurantShareImage,
+} from "@/lib/seo/restaurant";
 
 export async function generateMetadata({
   params,
@@ -44,7 +49,13 @@ export async function generateMetadata({
 }) {
   const { restaurantSlug } = await params;
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
-  return { title: restaurant ? `Menu — ${restaurant.name}` : "Menu" };
+  if (!restaurant) return { title: "Menu" };
+  return publicPageMetadata({
+    title: `Menu — ${restaurant.name}`,
+    description: restaurantDescription(restaurant),
+    path: `/r/${restaurant.slug}/menu`,
+    image: restaurantShareImage(restaurant),
+  });
 }
 
 /**

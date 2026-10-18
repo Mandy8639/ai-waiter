@@ -9,9 +9,11 @@ import {
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasValidResetMarker } from "@/lib/auth/password-reset-server";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export const metadata = {
   title: "Choose a new password — Tableside",
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 /**

@@ -9,9 +9,11 @@ import { TwoFactorVerifyForm } from "@/components/auth/two-factor-verify-form";
 import { signOut } from "@/lib/auth/actions";
 import { isInviteToken } from "@/lib/staff/invitations-core";
 import { allowedNextPath } from "@/lib/auth/password-reset-core";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export const metadata = {
   title: "Verification code — Tableside",
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 /**

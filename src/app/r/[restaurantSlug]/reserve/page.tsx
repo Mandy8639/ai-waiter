@@ -5,6 +5,8 @@ import { ReserveForm } from "@/components/customer/reserve-form";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { createClient } from "@/lib/supabase/server";
 import { requestReservation } from "@/lib/reservations/request-actions";
+import { publicPageMetadata } from "@/lib/seo/metadata";
+import { restaurantShareImage } from "@/lib/seo/restaurant";
 
 export async function generateMetadata({
   params,
@@ -13,9 +15,13 @@ export async function generateMetadata({
 }) {
   const { restaurantSlug } = await params;
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
-  return {
-    title: restaurant ? `Book a table — ${restaurant.name}` : "Book a table",
-  };
+  if (!restaurant) return { title: "Book a table" };
+  return publicPageMetadata({
+    title: `Book a table — ${restaurant.name}`,
+    description: `Ask ${restaurant.name} for a table: choose a day, a time and how many people, and the restaurant confirms.`,
+    path: `/r/${restaurant.slug}/reserve`,
+    image: restaurantShareImage(restaurant),
+  });
 }
 
 /**

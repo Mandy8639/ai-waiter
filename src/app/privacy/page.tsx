@@ -4,12 +4,14 @@ import {
   PRIVACY_CONTACT_EMAIL,
   PRIVACY_POLICY_UPDATED,
 } from "@/lib/legal/privacy";
+import { publicPageMetadata } from "@/lib/seo/metadata";
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: "Privacy policy — Tableside",
   description:
     "What Tableside collects from restaurant staff and diners, why, who it's shared with, and how to have it deleted.",
-};
+  path: "/privacy",
+});
 
 /**
  * The privacy policy, linked from the landing page, the sign-in and sign-up

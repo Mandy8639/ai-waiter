@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Languages } from "lucide-react";
 import { setMenuLanguage } from "@/lib/translations/actions";
@@ -22,12 +22,20 @@ export function MenuLanguagePicker({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [failed, setFailed] = useState(false);
   if (available.length === 0) return null;
 
+  // A dropped connection must not throw to the error page and take the
+  // whole menu with it: the menu stays as it was, with a line saying so.
   const choose = (code: string) =>
     start(async () => {
-      await setMenuLanguage(code);
-      router.refresh();
+      setFailed(false);
+      try {
+        await setMenuLanguage(code);
+        router.refresh();
+      } catch {
+        setFailed(true);
+      }
     });
 
   const options = [
@@ -67,6 +75,12 @@ export function MenuLanguagePicker({
           </button>
         );
       })}
+      {failed && (
+        <p role="alert" className="text-destructive type-caption w-full">
+          Couldn&apos;t change the language. Check your connection and try
+          again.
+        </p>
+      )}
     </div>
   );
 }

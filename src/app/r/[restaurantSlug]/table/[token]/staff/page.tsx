@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export const metadata = {
   title: "You're signed in as staff — Tableside",
+  robots: PRIVATE_PAGE_ROBOTS,
 };
 
 /**

@@ -168,7 +168,15 @@ export function AiWaiterPanel({
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+    // An explicit "smooth" overrides the CSS reduced-motion rule in
+    // globals.css, so it is asked for here only when motion is welcome.
+    const reduceMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    list.scrollTo({
+      top: list.scrollHeight,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
   }, [messages, isPending]);
 
   useEffect(() => {
