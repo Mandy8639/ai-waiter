@@ -31,8 +31,9 @@ import type {
 } from "@/lib/staff-assistant/plan-core";
 
 /**
- * The staff assistant, as the Chef: the same character diners meet, here
- * as the kitchen's helper. "Ask the Chef" floats on every dashboard page
+ * The staff assistant. Staff call it the Waiter (diners meet the same
+ * character as "the Chef"; to the kitchen it's the one taking their
+ * orders). "Waiter" floats on every dashboard page
  * for owners, managers and the kitchen, and opens the same slide-up chat
  * diners get; /dashboard/assistant shows the same conversation full-page
  * (the kitchen tablet's tab). One conversation, held here, so it carries
@@ -192,7 +193,7 @@ export function StaffAssistantProvider({
   );
 }
 
-/** "Ask the Chef", floating bottom-right like the diner's, on every page but the Assistant page itself. */
+/** "Waiter", floating bottom-right like the diner's "Ask the Chef", on every page but the Assistant page itself. */
 function StaffChefDock() {
   const ctx = useContext(StaffAssistantContext);
   const pathname = usePathname();
@@ -211,7 +212,7 @@ function StaffChefDock() {
           <ChefArt pose="neutral" size={28} />
         </span>
         <span className="type-label text-[0.9375rem] font-semibold whitespace-nowrap">
-          Ask the Chef
+          Waiter
         </span>
       </button>
     </div>
@@ -239,7 +240,7 @@ function ChefHeader({ asPage = false }: { asPage?: boolean }) {
     <header className="flex items-center gap-3 border-b px-5 pt-4 pb-3.5">
       <ChefArt pose="neutral" size={40} />
       <div className="min-w-0 pr-8">
-        <Title className="type-dish">Chef</Title>
+        <Title className="type-dish">Waiter</Title>
         <Description className="type-caption text-muted-foreground truncate">
           Your kitchen assistant
         </Description>
@@ -295,7 +296,7 @@ function StaffChefConversation({
         ref={listRef}
         role="log"
         aria-live="polite"
-        aria-label="Conversation with the Chef"
+        aria-label="Conversation with the Waiter"
         className="flex-1 overflow-y-auto overscroll-contain px-4 py-5"
       >
         {moment.placement === "welcome" && (
@@ -365,7 +366,7 @@ function StaffChefConversation({
                           : "bg-ai-soft text-foreground",
                     )}
                   >
-                    <span className="sr-only">Chef said: </span>
+                    <span className="sr-only">Waiter said: </span>
                     {m.text}
                   </p>
                   {!m.settled &&
@@ -437,7 +438,7 @@ function StaffChefConversation({
             onChange={(e) => setText(e.target.value)}
             maxLength={MAX_COMMAND_LENGTH}
             placeholder="e.g. 86 the salmon"
-            aria-label="Message the Chef"
+            aria-label="Message the Waiter"
             autoComplete="off"
             enterKeyHint="send"
             className="bg-muted/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/40 type-body h-11 min-w-0 flex-1 rounded-full border border-transparent px-4 transition-colors focus-visible:ring-3 focus-visible:outline-none"

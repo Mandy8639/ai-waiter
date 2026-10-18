@@ -111,7 +111,7 @@ export default async function DashboardLayout({
     timeZone: restaurant.timezone,
   });
 
-  // The Chef (staff assistant) floats on every page for the roles that
+  // The Waiter (staff assistant) floats on every page for the roles that
   // can use it; see src/components/dashboard/staff-assistant.tsx.
   const hasChef = ["owner", "manager", "kitchen"].includes(restaurant.role);
   const withChef = (content: React.ReactNode) =>
@@ -155,7 +155,7 @@ export default async function DashboardLayout({
             <LogoutButton />
           </div>
         </header>
-        {/* Bottom padding keeps the last ticket clear of "Ask the Chef". */}
+        {/* Bottom padding keeps the last ticket clear of the "Waiter" button. */}
         <main className="w-full flex-1 px-3 pt-4 pb-24 sm:px-4">
           {notice && <BillingBanner notice={notice} />}
           {withChef(children)}
