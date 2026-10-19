@@ -52,13 +52,13 @@ model name.
 later: pass or fail, each check with a tick or a cross, the reply, how long it took, what it cost
 (OpenRouter's own figure), and which model answered. Nothing is written anywhere:
 
-| Job               | The test                                                                           | Passes when                                                                                         |
-| ----------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Diner's AI waiter | "What's vegetarian and not too spicy?" against a built-in sample menu, real prompt | it used the menu tool, answered, named only vegetarian dishes from the menu, leaked no instructions |
-| Staff assistant   | "we've run out of paneer tikka for tonight"                                        | it reads "sold out" for paneer tikka (read, never run)                                              |
-| Menu photo reader | `tests/fixtures/menu-board.jpg`                                                    | at least 11 of the 12 prices right, and no price invented for the "ask at counter" line             |
-| Menu suggestions  | five dish names                                                                    | all five back, with ingredients, allergens and spice inside the allowed lists                       |
-| AI drafts         | one dish description into Spanish                                                  | a translation comes back                                                                            |
+| Job               | The test                                                                                                                              | Passes when                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Diner's AI waiter | "What's vegetarian and not too spicy?", then "What do you recommend?", each on a built-in sample menu with the real prompt and guards | it used the menu tool, answered, named only vegetarian dishes from the menu, then answered the second with a question (as its instructions say), and leaked no instructions either time |
+| Staff assistant   | "we've run out of paneer tikka for tonight"                                                                                           | it reads "sold out" for paneer tikka (read, never run)                                                                                                                                  |
+| Menu photo reader | `tests/fixtures/menu-board.jpg`                                                                                                       | at least 11 of the 12 prices right, and no price invented for the "ask at counter" line                                                                                                 |
+| Menu suggestions  | five dish names                                                                                                                       | all five back, with ingredients, allergens and spice inside the allowed lists                                                                                                           |
+| AI drafts         | one dish description into Spanish                                                                                                     | a translation comes back                                                                                                                                                                |
 
 The tests and their pass marks are in `src/lib/admin/model-test-core.ts` (the same bar as
 `scripts/vet-models-by-job.ts`); the calls are in `src/lib/admin/model-test.ts`. The waiter's
@@ -85,7 +85,14 @@ waiter with nothing to answer with. The safety net covers that.
   model OpenRouter lists, up to 12, six at a time. Free models only, so it costs nothing. **Check
   now** on `/admin` runs the same check.
 - **Who is in the net.** A model that passed in the last three days, and whose latest check didn't
-  fail. A model that was only busy keeps its last pass. Fastest passing Test first.
+  fail. A model that was only busy keeps its last pass.
+- **Never used.** `NEVER_USE` in `src/lib/ai/safety-net-core.ts` lists models that pass the Test
+  but failed in real conversations here (no lookups, made-up recommendations, reading out their
+  instructions). They are never checked or used, and `/admin` says why. Add a model there when it
+  misbehaves live.
+- **Order.** Models vetted for the waiter in a real conversation (the waiter's catalogue list)
+  first, then the rest, fastest passing Test first. Speed only breaks ties among the unvetted,
+  because it favours small models, which hold a conversation worst.
 - **When it is used.** Only when OpenRouter answers busy (429), an HTTP error or a timeout for the
   waiter's whole saved list. The waiter then makes one more try with the top three models in the
   net, skipping any already in its own list. Each use is logged as `waiter_safety_net_used`, and

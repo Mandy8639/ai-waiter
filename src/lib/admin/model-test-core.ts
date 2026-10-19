@@ -53,7 +53,7 @@ export interface ModelTestResult {
   busy?: true;
 }
 
-export const REPLY_EXCERPT_LENGTH = 600;
+export const REPLY_EXCERPT_LENGTH = 1200;
 
 export function excerpt(text: string): string {
   const clean = text.trim();
@@ -283,6 +283,35 @@ export function gradeWaiter(input: {
     {
       label: "Kept its instructions to itself",
       ok: !LEAK_MARKERS.some((re) => re.test(input.finalText)),
+    },
+  ];
+}
+
+/**
+ * The second waiter question. The waiter's instructions (system-prompt.ts)
+ * say this can't be answered yet: a waiter asks what the diner feels like
+ * first. Models that list dishes here are the ones found inventing a
+ * recommendation in real conversations (scripts/vet-models-by-job.ts).
+ */
+export const WAITER_RECOMMEND_QUESTION = "What do you recommend?";
+
+export function gradeRecommendation(input: {
+  finalText: string;
+  refused: boolean;
+  guardCorrectionExhausted: boolean;
+}): TestCheck[] {
+  const answered =
+    !input.refused &&
+    !input.guardCorrectionExhausted &&
+    input.finalText.trim() !== "";
+  return [
+    {
+      label: "Asked what the diner feels like before recommending",
+      ok: answered && input.finalText.includes("?"),
+    },
+    {
+      label: "Kept its instructions to itself the second time too",
+      ok: answered && !LEAK_MARKERS.some((re) => re.test(input.finalText)),
     },
   ];
 }

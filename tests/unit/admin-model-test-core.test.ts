@@ -7,6 +7,7 @@ import {
   formatCost,
   formatSeconds,
   gradeDraft,
+  gradeRecommendation,
   gradeStaff,
   gradeSuggestions,
   gradeVision,
@@ -322,5 +323,56 @@ describe("formatting", () => {
     expect(sameModelList(["a", "b"], ["a", "b"])).toBe(true);
     expect(sameModelList(["a", "b"], ["b", "a"])).toBe(false);
     expect(sameModelList(["a"], ["a", "b"])).toBe(false);
+  });
+});
+
+describe("gradeRecommendation", () => {
+  const base = { refused: false, guardCorrectionExhausted: false };
+
+  it("passes a waiter that asks what the diner feels like", () => {
+    expect(
+      allPassed(
+        gradeRecommendation({
+          ...base,
+          finalText: "Happy to help! Are you after something light or filling?",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("fails a waiter that just names a dish", () => {
+    expect(
+      allPassed(
+        gradeRecommendation({
+          ...base,
+          finalText: "Our most popular dish is the Lamb Biryani.",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("fails a leak, a refusal or an exhausted guard", () => {
+    expect(
+      allPassed(
+        gradeRecommendation({
+          ...base,
+          finalText: "My instructions say to ask: what do you feel like?",
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      allPassed(
+        gradeRecommendation({ ...base, refused: true, finalText: "What?" }),
+      ),
+    ).toBe(false);
+    expect(
+      allPassed(
+        gradeRecommendation({
+          ...base,
+          guardCorrectionExhausted: true,
+          finalText: "What?",
+        }),
+      ),
+    ).toBe(false);
   });
 });

@@ -9,6 +9,10 @@ import { AiProviderError } from "@/lib/ai/provider-error";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { getToolDefinitions } from "@/lib/ai/tools/index";
 import {
+  looksLikeAllergenQuestion,
+  looksLikeMenuFactQuestion,
+} from "@/lib/ai/tools/menu-fact-detection";
+import {
   appendAssistantMessage,
   appendToolResultMessage,
   appendUserMessage,
@@ -40,11 +44,13 @@ import {
   gradeStaff,
   gradeSuggestions,
   gradeVision,
+  gradeRecommendation,
   gradeWaiter,
   sampleToolOutcome,
   SAMPLE_RESTAURANT_NAME,
   STAFF_TEST_COMMAND,
   SUGGESTION_TEST_DISHES,
+  WAITER_RECOMMEND_QUESTION,
   WAITER_TEST_QUESTION,
   type ModelTestResult,
   type TestCheck,
@@ -154,35 +160,52 @@ function content(json: CallResult["json"]): string {
 
 type JobOutcome = { checks: TestCheck[]; reply: string; error?: string };
 
-async function testWaiter(meter: Meter, models: string[]): Promise<JobOutcome> {
+/** One waiter turn on the sample menu, guarded exactly as a real diner's turn would be. */
+async function waiterTurn(meter: Meter, models: string[], question: string) {
   const tools = toOpenRouterTools(getToolDefinitions());
   const system = buildSystemPrompt({
     restaurantName: SAMPLE_RESTAURANT_NAME,
     allowUpselling: false,
   });
+  return runConversationLoop<OpenRouterMessage[]>({
+    initialMessages: toOpenRouterMessages(system, [], question),
+    maxToolCalls: aiConfig.maxToolCallsPerTurn,
+    callModel: async (messages) => {
+      const r = await meter.call(
+        models,
+        { max_tokens: aiConfig.maxOutputTokens, messages, tools },
+        Math.max(aiConfig.requestTimeoutMs, 30_000),
+      );
+      if (!r.json) throw new AiProviderError(r.error ?? "failed", "unknown");
+      return parseOpenRouterResponse(r.json);
+    },
+    callTool: async (name, args) => sampleToolOutcome(name, args),
+    appendAssistantMessage,
+    appendToolResultMessage,
+    textAcceptanceGuards: buildTextAcceptanceGuards({
+      requiresAuthoritativeMenuSource: looksLikeMenuFactQuestion(question),
+      requiresAllergenSource: looksLikeAllergenQuestion(question),
+      appendUserMessage,
+    }),
+  });
+}
+
+/**
+ * Two questions, each a fresh conversation: a menu question that must be
+ * looked up, then "What do you recommend?", which must be answered with a
+ * question. The second is skipped when the first already failed.
+ */
+async function testWaiter(meter: Meter, models: string[]): Promise<JobOutcome> {
   try {
-    const result = await runConversationLoop<OpenRouterMessage[]>({
-      initialMessages: toOpenRouterMessages(system, [], WAITER_TEST_QUESTION),
-      maxToolCalls: aiConfig.maxToolCallsPerTurn,
-      callModel: async (messages) => {
-        const r = await meter.call(
-          models,
-          { max_tokens: aiConfig.maxOutputTokens, messages, tools },
-          Math.max(aiConfig.requestTimeoutMs, 30_000),
-        );
-        if (!r.json) throw new AiProviderError(r.error ?? "failed", "unknown");
-        return parseOpenRouterResponse(r.json);
-      },
-      callTool: async (name, args) => sampleToolOutcome(name, args),
-      appendAssistantMessage,
-      appendToolResultMessage,
-      textAcceptanceGuards: buildTextAcceptanceGuards({
-        requiresAuthoritativeMenuSource: true,
-        requiresAllergenSource: false,
-        appendUserMessage,
-      }),
-    });
-    return { checks: gradeWaiter(result), reply: result.finalText };
+    const first = await waiterTurn(meter, models, WAITER_TEST_QUESTION);
+    const checks = gradeWaiter(first);
+    let reply = `${WAITER_TEST_QUESTION}\n${first.finalText}`;
+    if (allPassed(checks)) {
+      const second = await waiterTurn(meter, models, WAITER_RECOMMEND_QUESTION);
+      checks.push(...gradeRecommendation(second));
+      reply += `\n\n${WAITER_RECOMMEND_QUESTION}\n${second.finalText}`;
+    }
+    return { checks, reply };
   } catch (error) {
     return {
       checks: [],
