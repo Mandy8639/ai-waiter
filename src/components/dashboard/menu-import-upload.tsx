@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { FileDropZone } from "@/components/ui/file-drop-zone";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -124,24 +125,21 @@ export function MenuImportUpload({ restaurantId }: { restaurantId: string }) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <label htmlFor="menu-pages" className="text-sm font-medium">
-          Photos of your menu
-        </label>
-        <input
-          id="menu-pages"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          disabled={busy}
-          onChange={(e) => onFiles(e.target.files)}
-          className="text-sm"
-        />
-        <p className="text-muted-foreground text-xs">
-          One photo per section of your menu works best. Up to {MAX_PAGES}{" "}
-          pages, 10 MB each.
-        </p>
-      </div>
+      <FileDropZone
+        id="menu-pages"
+        label="Photos of your menu"
+        buttonText={pages.length > 0 ? "Add more photos" : "Choose photos"}
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        disabled={busy}
+        onFiles={onFiles}
+        hint={
+          <>
+            One photo per section of your menu works best. Up to {MAX_PAGES}{" "}
+            photos, 10 MB each.
+          </>
+        }
+      />
 
       {pages.length > 0 && (
         <ul className="flex flex-col gap-1 text-sm">

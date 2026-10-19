@@ -1,5 +1,6 @@
 "use client";
 
+import { FileDropZone } from "@/components/ui/file-drop-zone";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -455,23 +456,15 @@ function UploadControls({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="dish-photo" className="text-sm font-medium">
-          {hasPhoto ? "Replace photo" : "Add a photo"}
-        </label>
-        <input
-          id="dish-photo"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={busy}
-          onChange={(e) => onChoose(e.target.files)}
-          className="text-sm"
-        />
-        <p className="text-muted-foreground text-xs">
-          Use a photo that represents the dish your restaurant serves. JPEG, PNG
-          or WebP, up to 15 MB.
-        </p>
-      </div>
+      <FileDropZone
+        id="dish-photo"
+        label={hasPhoto ? "Replace photo" : "Add a photo"}
+        buttonText={hasPhoto ? "Choose a new photo" : "Choose a photo"}
+        accept="image/jpeg,image/png,image/webp"
+        disabled={busy}
+        onFiles={onChoose}
+        hint="Use a photo that represents the dish your restaurant serves. JPEG, PNG or WebP, up to 15 MB."
+      />
 
       {file && (
         <label className="flex items-start gap-2 text-sm">
