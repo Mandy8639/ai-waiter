@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { ACTIVE_KITCHEN_STATUSES, type OrderStatus } from "./status";
+import { formatPickupTime, pickupLabel } from "@/lib/pickup/format-core";
 
 export interface KitchenOrderModifier {
   id: string;
@@ -48,6 +49,20 @@ export interface KitchenOrder {
   mergedWithOrderIds: string[];
   /** Stations that have marked their part of this order done (phase I). */
   stationsDone: string[];
+  /**
+   * Set for an order placed at a pickup counter (20261022090000). Times
+   * are already in the restaurant's clock. `startAt` is when the kitchen
+   * should start cooking; `slotMinutes` is how far one "push back" moves it.
+   */
+  pickup: {
+    /** The slot itself, as an instant, for moving it. */
+    at: string;
+    time: string;
+    name: string;
+    startAt: string;
+    startTime: string;
+    slotMinutes: number;
+  } | null;
 }
 
 /** How long a served order stays visible on the board before it drops off — long enough to catch a mistake, short enough not to clutter the screen (spec: "recent served orders for a limited period"). */
@@ -85,7 +100,8 @@ export async function getActiveOrdersForRestaurant(
   const { data: orders } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, table_id, customer_note, created_at, updated_at",
+      // pickup_*, ticket_release_at: 20261022090000, newer than database.types.ts.
+      "id, order_number, status, table_id, customer_note, created_at, updated_at, pickup_at, pickup_name, ticket_release_at" as "id, order_number, status, table_id, customer_note, created_at, updated_at",
     )
     .eq("restaurant_id", restaurantId)
     .gt(
@@ -110,20 +126,49 @@ export async function getActiveOrdersForRestaurant(
   const orderIds = visible.map((o) => o.id);
   const tableIds = [...new Set(visible.map((o) => o.table_id))];
 
-  const [{ data: items }, { data: tables }] = await Promise.all([
-    supabase
-      .from("order_items")
-      .select(
-        // station_id: 20261001090000, newer than database.types.ts.
-        "id, order_id, item_name, quantity, ticket_group_id, spice_preference, notes, station_id" as "id, order_id, item_name, quantity, ticket_group_id, spice_preference, notes",
-      )
-      .in("order_id", orderIds)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("tables")
-      .select("id, table_number, display_name")
-      .in("id", tableIds),
-  ]);
+  const hasPickup = visible.some(
+    (o) => (o as unknown as { pickup_at: string | null }).pickup_at,
+  );
+
+  const [{ data: items }, { data: tables }, { data: pickupContext }] =
+    await Promise.all([
+      supabase
+        .from("order_items")
+        .select(
+          // station_id: 20261001090000, newer than database.types.ts.
+          "id, order_id, item_name, quantity, ticket_group_id, spice_preference, notes, station_id" as "id, order_id, item_name, quantity, ticket_group_id, spice_preference, notes",
+        )
+        .in("order_id", orderIds)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("tables")
+        .select("id, table_number, display_name")
+        .in("id", tableIds),
+      hasPickup
+        ? Promise.all([
+            supabase
+              .from("restaurants")
+              .select("timezone")
+              .eq("id", restaurantId)
+              .maybeSingle(),
+            supabase
+              .from("restaurant_settings")
+              // 20261022090000, newer than database.types.ts.
+              .select("pickup_slot_minutes" as "restaurant_id")
+              .eq("restaurant_id", restaurantId)
+              .maybeSingle(),
+          ]).then(([tz, settings]) => ({
+            data: {
+              timezone: tz.data?.timezone ?? "UTC",
+              slotMinutes:
+                (settings.data as { pickup_slot_minutes?: number } | null)
+                  ?.pickup_slot_minutes ?? 15,
+            },
+          }))
+        : Promise.resolve({ data: null }),
+    ]);
+  const pickupTz = pickupContext?.timezone ?? "UTC";
+  const slotMinutes = pickupContext?.slotMinutes ?? 15;
 
   const ticketGroupIdByItemId = new Map<string, string>();
   for (const item of items ?? []) {
@@ -229,6 +274,22 @@ export async function getActiveOrdersForRestaurant(
 
   return visible.map((o) => {
     const table = tableById.get(o.table_id);
+    const p = o as unknown as {
+      pickup_at: string | null;
+      pickup_name: string | null;
+      ticket_release_at: string | null;
+    };
+    const pickup =
+      p.pickup_at && p.pickup_name && p.ticket_release_at
+        ? {
+            at: p.pickup_at,
+            time: formatPickupTime(p.pickup_at, pickupTz),
+            name: p.pickup_name,
+            startAt: p.ticket_release_at,
+            startTime: formatPickupTime(p.ticket_release_at, pickupTz),
+            slotMinutes,
+          }
+        : null;
     const groupIds = [...(ticketGroupIdsByOrderId.get(o.id) ?? [])];
     const mergedWithOrderIds = new Set<string>();
     for (const groupId of groupIds) {
@@ -241,8 +302,9 @@ export async function getActiveOrdersForRestaurant(
       id: o.id,
       orderNumber: o.order_number,
       status: o.status as OrderStatus,
-      tableLabel:
-        table?.display_name || (table ? `Table ${table.table_number}` : "—"),
+      tableLabel: pickup
+        ? pickupLabel(p.pickup_at!, pickup.name, pickupTz)
+        : table?.display_name || (table ? `Table ${table.table_number}` : "—"),
       customerNote: o.customer_note,
       createdAt: o.created_at,
       items: itemsByOrderId.get(o.id) ?? [],
@@ -256,6 +318,7 @@ export async function getActiveOrdersForRestaurant(
         .filter((g): g is KitchenTicketGroup => g !== null),
       mergedWithOrderIds: [...mergedWithOrderIds],
       stationsDone: stationsDoneByOrderId.get(o.id) ?? [],
+      pickup,
     };
   });
 }

@@ -105,7 +105,10 @@ export default async function ReservationsPage() {
   const { data: activeTables } = hasRequests
     ? await supabase
         .from("tables")
-        .select("id, table_number, display_name")
+        // kind: 20261022090000, newer than database.types.ts.
+        .select(
+          "id, table_number, display_name, kind" as "id, table_number, display_name",
+        )
         .eq("restaurant_id", restaurant.id)
         .eq("is_active", true)
         .order("table_number", { ascending: true })
@@ -116,10 +119,13 @@ export default async function ReservationsPage() {
           display_name: string | null;
         }[],
       };
-  const allTables = (activeTables ?? []).map((t) => ({
-    id: t.id,
-    label: t.display_name || `Table ${t.table_number}`,
-  }));
+  // A pickup counter can't be reserved (refuse_reservation_on_counter()).
+  const allTables = (activeTables ?? [])
+    .filter((t) => (t as { kind?: string }).kind !== "counter")
+    .map((t) => ({
+      id: t.id,
+      label: t.display_name || `Table ${t.table_number}`,
+    }));
 
   return (
     <div className="flex flex-col gap-6">

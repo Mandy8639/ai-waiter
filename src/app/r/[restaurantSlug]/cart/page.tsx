@@ -17,6 +17,7 @@ import { getActiveCustomerSession } from "@/lib/customer/session";
 import { getCart } from "@/lib/cart/get-cart";
 import { getKitchenStatus } from "@/lib/kitchen/busy-queries";
 import { clearCart } from "@/lib/cart/actions";
+import { getPickupOptions } from "@/lib/pickup/queries";
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export async function generateMetadata({
@@ -64,10 +65,11 @@ export default async function CartPage({
     );
   }
 
-  const [cart, orderSettings, kitchen] = await Promise.all([
+  const [cart, orderSettings, kitchen, pickup] = await Promise.all([
     getCart(restaurant.id, session.id),
     getPublicOrderSettings(restaurant.id),
     getKitchenStatus(restaurant.id),
+    getPickupOptions(),
   ]);
 
   const canPlaceOrder =
@@ -179,6 +181,7 @@ export default async function CartPage({
           restaurantSlug={restaurantSlug}
           disabled={!canPlaceOrder}
           allowCustomerNotes={orderSettings.allowCustomerNotes}
+          pickup={pickup.isCounter ? pickup : undefined}
         />
       </section>
 

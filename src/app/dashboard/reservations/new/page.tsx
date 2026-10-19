@@ -14,7 +14,10 @@ export default async function NewReservationPage() {
 
   const { data: tables } = await supabase
     .from("tables")
-    .select("id, table_number, display_name")
+    // kind: 20261022090000, newer than database.types.ts.
+    .select(
+      "id, table_number, display_name, kind" as "id, table_number, display_name",
+    )
     .eq("restaurant_id", restaurant.id)
     .eq("is_active", true)
     .order("table_number");
@@ -30,10 +33,13 @@ export default async function NewReservationPage() {
           <ReservationForm
             action={createReservation.bind(null, restaurant.id)}
             timeZone={restaurant.timezone}
-            tables={(tables ?? []).map((t) => ({
-              id: t.id,
-              label: t.display_name || `Table ${t.table_number}`,
-            }))}
+            // A pickup counter can't be reserved.
+            tables={(tables ?? [])
+              .filter((t) => (t as { kind?: string }).kind !== "counter")
+              .map((t) => ({
+                id: t.id,
+                label: t.display_name || `Table ${t.table_number}`,
+              }))}
             submitLabel="Book table"
           />
         </CardContent>

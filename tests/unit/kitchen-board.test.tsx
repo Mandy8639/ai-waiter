@@ -59,6 +59,10 @@ vi.mock("@/lib/orders/transition", () => ({
   transitionOrderStatus: vi.fn(),
 }));
 
+vi.mock("@/lib/pickup/actions", () => ({
+  pushBackPickup: vi.fn(async () => ({})),
+}));
+
 vi.mock("@/lib/kitchen/station-actions", () => ({
   setStationDone: vi.fn(async () => ({})),
 }));
@@ -81,6 +85,7 @@ function makeOrder(overrides: Partial<KitchenOrder> = {}): KitchenOrder {
     ticketGroups: [],
     mergedWithOrderIds: [],
     stationsDone: [],
+    pickup: null,
     ...overrides,
   };
 }
@@ -504,5 +509,61 @@ describe("KitchenBoard — unaccepted orders keep asking", () => {
     await flush();
 
     expect(screen.queryByText(/waiting to be accepted/i)).toBeNull();
+  });
+});
+
+describe("KitchenBoard — pickup orders", () => {
+  const pickup = (startInMinutes: number) => ({
+    at: new Date(Date.now() + (startInMinutes + 20) * 60_000).toISOString(),
+    time: "18:00",
+    name: "Priya",
+    startAt: new Date(Date.now() + startInMinutes * 60_000).toISOString(),
+    startTime: "17:40",
+    slotMinutes: 15,
+  });
+
+  it("puts an accepted pickup order that starts later below the work that is due", () => {
+    mockFetchActiveOrders.mockResolvedValue([]);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[
+          makeOrder({ id: "a", orderNumber: 1, status: "confirmed" }),
+          makeOrder({
+            id: "b",
+            orderNumber: 2,
+            status: "confirmed",
+            pickup: pickup(120),
+          }),
+          makeOrder({
+            id: "c",
+            orderNumber: 3,
+            status: "confirmed",
+            pickup: pickup(-5),
+          }),
+        ]}
+      />,
+    );
+    expect(orderCardIds()).toEqual(["1", "3", "2"]);
+    expect(screen.getByText("Start 17:40")).toBeTruthy();
+    expect(screen.getByText("Start now")).toBeTruthy();
+  });
+
+  it("tells the kitchen when to start a pickup order it hasn't accepted yet", () => {
+    mockFetchActiveOrders.mockResolvedValue([]);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[makeOrder({ status: "pending", pickup: pickup(120) })]}
+      />,
+    );
+    expect(screen.getByText("Start 17:40")).toBeTruthy();
+    expect(screen.queryByText("Start now")).toBeNull();
   });
 });

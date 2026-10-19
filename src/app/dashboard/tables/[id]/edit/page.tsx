@@ -20,7 +20,10 @@ export default async function EditTablePage({
 
   const { data: table } = await supabase
     .from("tables")
-    .select("id, table_number, display_name, is_active")
+    // kind: 20261022090000, newer than database.types.ts.
+    .select(
+      "id, table_number, display_name, is_active, kind" as "id, table_number, display_name, is_active",
+    )
     .eq("id", id)
     .eq("restaurant_id", restaurant.id)
     .maybeSingle();
@@ -43,6 +46,10 @@ export default async function EditTablePage({
               tableNumber: table.table_number,
               displayName: table.display_name,
               isActive: table.is_active,
+              kind:
+                (table as unknown as { kind?: string }).kind === "counter"
+                  ? "counter"
+                  : "table",
             }}
             submitLabel="Save changes"
             pendingLabel="Saving…"

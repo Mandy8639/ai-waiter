@@ -19,8 +19,10 @@ import {
   updateAiPersona,
   updateEmailPreferences,
   updateOperationalSettings,
+  updatePickupSettings,
   updateRestaurantProfile,
 } from "@/lib/settings/actions";
+import { PickupSettingsForm } from "@/components/settings/pickup-settings-form";
 
 export const metadata = {
   title: "Settings — Tableside",
@@ -60,6 +62,20 @@ export default async function SettingsPage() {
     instructions: (personaRow as { ai_instructions?: unknown } | null)
       ?.ai_instructions,
   });
+
+  // Pickup slot rules (20261022090000, newer than database.types.ts).
+  const { data: pickupRow } = await supabase
+    .from("restaurant_settings")
+    .select(
+      "pickup_slot_minutes, pickup_slot_capacity, pickup_lead_minutes" as "restaurant_id",
+    )
+    .eq("restaurant_id", restaurant.id)
+    .maybeSingle();
+  const pickup = pickupRow as {
+    pickup_slot_minutes?: number;
+    pickup_slot_capacity?: number;
+    pickup_lead_minutes?: number;
+  } | null;
 
   // Your own row: email preferences are per person (20260929090000, also
   // newer than database.types.ts). A missing value reads as the default, on.
@@ -165,6 +181,27 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Pickup</CardTitle>
+          <CardDescription>
+            For a pickup counter, where diners order ahead and choose a time.
+            Add one under Tables → New table → Pickup counter.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PickupSettingsForm
+            action={updatePickupSettings.bind(null, restaurant.id)}
+            defaultValues={{
+              slotMinutes: pickup?.pickup_slot_minutes ?? 15,
+              slotCapacity: pickup?.pickup_slot_capacity ?? 6,
+              leadMinutes: pickup?.pickup_lead_minutes ?? 20,
+            }}
+            disabled={!canManage}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

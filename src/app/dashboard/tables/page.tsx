@@ -18,7 +18,10 @@ export default async function TablesPage() {
 
   const { data: tables } = await supabase
     .from("tables")
-    .select("id, table_number, display_name, is_active")
+    // kind: 20261022090000, newer than database.types.ts.
+    .select(
+      "id, table_number, display_name, is_active, kind" as "id, table_number, display_name, is_active",
+    )
     .eq("restaurant_id", restaurant.id)
     .order("table_number");
 
@@ -31,7 +34,8 @@ export default async function TablesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tables</h1>
           <p className="text-muted-foreground text-sm">
-            Your restaurant&apos;s physical tables.
+            Your restaurant&apos;s tables, and any pickup counter where diners
+            order ahead.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -68,7 +72,12 @@ export default async function TablesPage() {
               <CardContent className="flex flex-col gap-3 py-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium">Table {table.table_number}</p>
+                    <p className="font-medium">
+                      {(table as unknown as { kind?: string }).kind ===
+                      "counter"
+                        ? `Pickup counter ${table.table_number}`
+                        : `Table ${table.table_number}`}
+                    </p>
                     {table.display_name && (
                       <p className="text-muted-foreground text-sm">
                         {table.display_name}

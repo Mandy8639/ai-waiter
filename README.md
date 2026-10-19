@@ -18,7 +18,9 @@ plans (Starter free at 1%, Standard $49/mo at 0.5%, Pro $149/mo at 0.25%) billed
 subscription; a **customer-facing order tracker**; **kitchen alerts** that keep sounding until an
 order is accepted; per-line **spice preferences and kitchen notes**; **preparation-time estimates**;
 and the **seam a POS connector plugs into** (see [`docs/pos-integration.md`](docs/pos-integration.md))
-— no Toast/Square connector is built, deliberately.
+— no Toast/Square connector is built, deliberately; and **pickup ordering**, where a pickup counter
+is a kind of table whose diners choose a pickup time and a name, and the kitchen sees when to start
+(see [`docs/pickup-ordering.md`](docs/pickup-ordering.md)).
 
 What exists: the Next.js foundation; the full multi-tenant database schema (restaurants, staff
 roles, menu, modifiers, ingredients, allergens, customer sessions, carts, orders, the order state
@@ -231,6 +233,8 @@ More detail, including what's intentionally _not_ created yet and why, in
 - [`docs/architecture.md`](docs/architecture.md) — system design, customer/restaurant/kitchen flows
 - [`docs/database.md`](docs/database.md) — schema, constraints, indexes, RLS
 - [`docs/ai.md`](docs/ai.md) — AI waiter architecture, tools, prompt injection defense
+- [`docs/pickup-ordering.md`](docs/pickup-ordering.md) — pickup counters, slots, when the kitchen
+  starts
 - [`docs/security.md`](docs/security.md) — security model, implemented vs. planned
 - [`docs/multi-tenancy.md`](docs/multi-tenancy.md) — tenant isolation model
 - [`docs/development.md`](docs/development.md) — day-to-day workflow
