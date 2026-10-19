@@ -52,6 +52,13 @@ export async function freeModelDraft<T>(input: {
             ? { models: [aiConfig.model, ...freeFallbacks] }
             : { model: aiConfig.model }),
           max_tokens: input.maxTokens,
+          // Thinking off: the free models think before answering, and the
+          // thinking spends the same allowance. Found 2026-10-18 on a real
+          // 249-dish menu: a 15-dish nutrition batch used 2,076 of 3,000
+          // tokens thinking and returned nothing ("The free AI model didn't
+          // answer"); with thinking off, all 15 in 7 s. Drafts are reviewed
+          // by a person anyway. Ignored by models that don't think.
+          reasoning: { enabled: false },
           messages: [
             { role: "system", content: input.system },
             { role: "user", content: input.user },
