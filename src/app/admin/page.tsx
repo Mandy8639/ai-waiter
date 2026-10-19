@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { requirePlatformAdmin } from "@/lib/admin/access";
+import { LogoutButton } from "@/components/dashboard/logout-button";
+import { getDashboardContext } from "@/lib/restaurants/require-current-restaurant";
 import { aiConfig } from "@/lib/ai/config";
 import { ModelEditor } from "@/components/admin/model-editor";
 import { HistoryCard } from "@/components/admin/history-card";
@@ -114,6 +116,10 @@ export default async function AdminPage() {
     getCostReport(weeks.thisWeek),
     getCostReport(weeks.lastWeek),
   ]);
+  // An admin with no restaurant is sent here from /dashboard, so a link
+  // back there would only bounce; they get Account and Log out instead.
+  const { state } = await getDashboardContext();
+  const hasRestaurant = state.status !== "none";
   const now = new Date();
   const provider = aiConfig.provider;
   const canTest = !!process.env.OPENROUTER_API_KEY;
@@ -121,13 +127,25 @@ export default async function AdminPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8">
       <div className="flex flex-col gap-2">
-        <Link
-          href="/dashboard"
-          className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm"
-        >
-          <ChevronLeft className="size-4" aria-hidden="true" />
-          Dashboard
-        </Link>
+        {hasRestaurant ? (
+          <Link
+            href="/dashboard"
+            className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm"
+          >
+            <ChevronLeft className="size-4" aria-hidden="true" />
+            Dashboard
+          </Link>
+        ) : (
+          <div className="flex items-center justify-end gap-2">
+            <Link
+              href="/account"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              Account
+            </Link>
+            <LogoutButton />
+          </div>
+        )}
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <ShieldCheck className="text-primary size-6" aria-hidden="true" />
           Admin
