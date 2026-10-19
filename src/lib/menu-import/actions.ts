@@ -287,6 +287,12 @@ export async function commitImport(
           "Some items still have no price. Add a price, or untick them, then try again.",
       };
     }
+    if (message.includes("MENU_IMPORT_PRICE_CONFLICT")) {
+      return {
+        error:
+          "Some dishes are listed twice in the same section at different prices. Untick one, fix a price, or rename one, then save and try again.",
+      };
+    }
     if (message.includes("MENU_IMPORT_ALREADY_COMMITTED")) {
       return { error: "This import has already been added to your menu." };
     }

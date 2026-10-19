@@ -158,7 +158,7 @@ export function parseExtraction(rawText: string): ParseOutcome {
 
 /**
  * Categories (from one reply, or several merged in page order) → draft
- * rows, with the same dish read twice dropped.
+ * rows, with the same dish read twice at the same price dropped.
  */
 export function draftsFromCategories(
   categories: ExtractionResult["categories"],
@@ -179,7 +179,12 @@ export function draftsFromCategories(
       // long board is shot in sections. Dropped here so a reviewer isn't
       // deduplicating by hand — scoped per category, since "Plain Dosa"
       // under two genuinely different headings is not a duplicate.
-      const key = `${categoryName.toLowerCase()}::${name.toLowerCase()}`;
+      //
+      // Only an exact repeat is dropped. The same dish at a DIFFERENT price
+      // is kept, because keeping the first one silently threw away the
+      // board's disagreement with itself; the review screen flags the pair
+      // (see price-conflicts.ts) and a person picks.
+      const key = `${categoryName.toLowerCase()}::${name.toLowerCase()}::${item.price ?? "none"}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
