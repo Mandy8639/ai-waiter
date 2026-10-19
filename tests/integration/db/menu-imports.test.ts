@@ -78,6 +78,59 @@ describe("commit_menu_import", () => {
     expect(Number(items[0].price)).toBe(7.99);
   });
 
+  it("keeps a dish named twice, in two sections, as two dishes", async () => {
+    // From a real 249-dish import (2026-10-18): the board listed Chilli
+    // Paneer as a $7 appetizer and a $17 entree, and the second collided
+    // on the slug, rolling the whole import back.
+    const importId = await newImport([
+      { category: "Veg Appetizers", name: "Chilli Paneer", price: 7 },
+      { category: "Veg Entrees", name: "Chilli Paneer", price: 17 },
+      { category: "Rice", name: "Jeera Rice", price: 5 },
+      { category: "Veg Rice & Biryani", name: "Jeera Rice", price: 14 },
+      { category: "Rice", name: "चावल", price: 3 },
+    ]);
+    const result = await db.asUser(ownerId, (client) =>
+      client.query<{ items_created: number }>(
+        "select * from public.commit_menu_import($1);",
+        [importId],
+      ),
+    );
+    expect(result.rows[0].items_created).toBe(5);
+
+    const { rows } = await db.admin.query<{ slug: string; price: string }>(
+      `select slug, price from public.menu_items
+       where restaurant_id = $1 and slug ~ '^(chilli-paneer|jeera-rice|item)'
+       order by slug;`,
+      [restaurantId],
+    );
+    expect(rows.map((r) => [r.slug, Number(r.price)])).toEqual([
+      ["chilli-paneer", 7],
+      ["chilli-paneer-2", 17],
+      ["item", 3],
+      ["jeera-rice", 5],
+      ["jeera-rice-2", 14],
+    ]);
+  });
+
+  it("imports onto a menu that already has a dish of that name", async () => {
+    const first = await newImport([
+      { category: "Chaat", name: "Dahi Puri", price: 7 },
+    ]);
+    const second = await newImport([
+      { category: "Chaat", name: "Dahi Puri", price: 7.5 },
+    ]);
+    for (const id of [first, second]) {
+      await db.asUser(ownerId, (client) =>
+        client.query("select * from public.commit_menu_import($1);", [id]),
+      );
+    }
+    const { rows } = await db.admin.query<{ slug: string }>(
+      "select slug from public.menu_items where restaurant_id = $1 and name = 'Dahi Puri' order by slug;",
+      [restaurantId],
+    );
+    expect(rows.map((r) => r.slug)).toEqual(["dahi-puri", "dahi-puri-2"]);
+  });
+
   it("refuses an included row with no price rather than importing it at zero", async () => {
     // The whole reason menu_import_items.price is nullable. A board that
     // says "ask at counter" must not become a £0.00 item a diner can order.
