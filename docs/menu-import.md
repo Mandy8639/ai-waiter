@@ -68,7 +68,12 @@ A real two-photo import failed with "Couldn't read a menu from that response". T
 What it does now (`src/lib/menu-import/vision-core.ts`):
 
 - Each photo is its own request, and the requests run at the same time.
-- Each request has a 16,000-token allowance and asks for low reasoning effort.
+- Each request has a 16,000-token allowance, with **thinking switched off** (`reasoning: { enabled:
+false }`). Asking for low effort wasn't enough. On DESI DHAMAKA's real 134-dish photo,
+  nemotron-3.5-super-vl spent all 16,000 tokens thinking, and dots-3 spent about 10,000, both
+  without answering. With thinking off, dots-3 read all 134 dishes in 27 seconds with every price
+  matching the board, read the other photo's 121 dishes in 20 seconds, and still left the
+  fixture's trap line unpriced on three runs out of three.
 - A failed photo is retried once, with a different model first.
 - Results are merged in photo order, and a dish read twice across overlapping photos is dropped.
 - If any photo still fails, nothing is kept, and the message names the photo ("Couldn't read

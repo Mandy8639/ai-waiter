@@ -114,10 +114,14 @@ export async function extractMenuFromImages(
           // error — see docs/ai.md#model-fallback.
           models: modelList,
           max_tokens: MAX_OUTPUT_TOKENS,
-          // These models think before answering, and the thinking spends
-          // the same allowance as the answer. Reading a board needs
-          // little of it. Ignored by models that don't think.
-          reasoning: { effort: "low" },
+          // Thinking off. These models think before answering, and on a
+          // dense board they never stop: on a real 134-dish photo (2026-10-18)
+          // nemotron-3.5-super-vl spent all 16,000 tokens thinking and dots-3
+          // ran out after ~10,000, both with no answer. "effort: low" and a
+          // thinking cap didn't help. With thinking off, dots-3 read all 134
+          // in 27 s and every price matched the board, and the trap line
+          // still came back unpriced. Reading print doesn't need deliberation.
+          reasoning: { enabled: false },
           messages: [
             {
               role: "user",
