@@ -157,11 +157,13 @@ export const DEFAULT_VISION_MODELS = [
  * that these lists have to be separate.
  */
 export const DEFAULT_SUGGESTION_MODELS = [
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-  // z-ai/glm-5.2:free was here; no longer offered free (2026-10-18).
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "cohere/north-mini-code:free",
+  // Re-vetted 2026-10-18 with thinking off, on 25 real dish names: all
+  // three returned 25/25 with descriptions (25 s, 36 s, 54 s). OpenRouter
+  // now refuses more than three models per request (model-list.ts).
+  // nano-omni dropped (answered nothing); glm-5.2 is no longer free.
   "dots-studio/dots-3-note-preview:free",
+  "cohere/north-mini-code:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
 ];
 
 export const aiConfig = {

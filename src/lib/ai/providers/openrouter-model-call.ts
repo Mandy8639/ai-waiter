@@ -1,3 +1,4 @@
+import { openRouterModels } from "../model-list";
 import type { LoopModelResponse } from "../loop";
 import { AiProviderError } from "../provider-error";
 import {
@@ -54,7 +55,7 @@ export async function callOpenRouterModel(
         // the real API, where a dead primary + healthy fallback returned
         // 429 with both fields set and succeeded with only `models`.
         ...(fallbackModels.length > 0
-          ? { models: [params.model, ...fallbackModels] }
+          ? { models: openRouterModels([params.model, ...fallbackModels]) }
           : { model: params.model }),
         max_tokens: params.maxOutputTokens,
         messages: params.messages,

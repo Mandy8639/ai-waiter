@@ -1,3 +1,4 @@
+import { openRouterModels } from "@/lib/ai/model-list";
 import "server-only";
 import { aiConfig } from "@/lib/ai/config";
 import { EXTRACTION_PROMPT, type ParseOutcome } from "./extraction";
@@ -161,6 +162,10 @@ export async function extractMenuFromImages(
     };
   };
 
-  const outcome = await extractPages(input.imageDataUrls, visionModels(), call);
+  const outcome = await extractPages(
+    input.imageDataUrls,
+    openRouterModels(visionModels()),
+    call,
+  );
   return { ...outcome, model: outcome.model ?? visionModel() };
 }
