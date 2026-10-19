@@ -30,6 +30,12 @@ const safetyNet = vi.fn(async () => ["net-a:free", "net-b:free"]);
 vi.mock("@/lib/ai/safety-net", () => ({
   getSafetyNetModels: () => safetyNet(),
 }));
+// Recording usage reaches the database client, which needs real
+// environment variables; here it only needs to be called.
+const recordAiUsage = vi.fn(async (..._args: unknown[]) => {});
+vi.mock("@/lib/ai/usage", () => ({
+  recordAiUsage: (...args: unknown[]) => recordAiUsage(...args),
+}));
 
 import { interpretWithModel } from "@/lib/staff-assistant/interpret";
 
@@ -60,6 +66,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   fetchMock.mockReset();
   safetyNet.mockClear();
+  recordAiUsage.mockClear();
 });
 
 function sentModels(call: number): string[] {
@@ -81,13 +88,18 @@ describe("interpretWithModel", () => {
     fetchMock
       .mockResolvedValueOnce(new Response("{}", { status: 429 }))
       .mockResolvedValueOnce(reply(SOLD_OUT, "net-a:free"));
-    const result = await interpretWithModel("out of paneer tikka");
+    const result = await interpretWithModel("out of paneer tikka", "r-1");
     expect(result).toMatchObject({
       intent: { kind: "sold_out" },
       model: "net-a:free",
     });
+    expect(recordAiUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ job: "staff_assistant", restaurantId: "r-1" }),
+    );
     expect(sentModels(0)).toEqual(["main:free"]);
     expect(sentModels(1)).toEqual(["net-a:free", "net-b:free"]);
+    // One use, both calls, against the restaurant.
+    expect(recordAiUsage).toHaveBeenCalledTimes(1);
   });
 
   it("says it didn't catch that when the net is busy too", async () => {
