@@ -161,6 +161,25 @@ describe("AI drafting", () => {
     expect(parseDraftReply(reply, fields, "es").get("f0")).toBe("Masala Dosa");
   });
 
+  it("accepts a reply in the request's own shape, with the translation in text", () => {
+    const reply = JSON.stringify({
+      f0: { kind: "dish name", text: "Masala Dosa" },
+      f1: { kind: "dish description", text: "Crepe de arroz crujiente." },
+      f2: { kind: "category name" },
+    });
+    expect(Object.fromEntries(parseDraftReply(reply, fields, "es"))).toEqual({
+      f0: "Masala Dosa",
+      f1: "Crepe de arroz crujiente.",
+    });
+  });
+
+  it("still drops an English echo in that shape for a non-Latin script", () => {
+    const reply = JSON.stringify({
+      f0: { kind: "dish name", text: "Masala Dosa" },
+    });
+    expect(parseDraftReply(reply, fields, "hi").size).toBe(0);
+  });
+
   it("returns nothing for a reply that isn't JSON", () => {
     expect(parseDraftReply("Sorry, I can't help.", fields, "te").size).toBe(0);
   });

@@ -113,7 +113,15 @@ export function parseDraftReply(
 
   const latin = languageInfo(language).latin;
   for (const field of fields) {
-    const value = (parsed as Record<string, unknown>)[field.key];
+    const raw = (parsed as Record<string, unknown>)[field.key];
+    // Some models answer in the request's own shape, {"f0": {"kind": ...,
+    // "text": "..."}}, with the translation in "text". Found 2026-10-19 on
+    // dots-3 by the Admin page's drafts Test; those drafts were being
+    // dropped.
+    const value =
+      raw && typeof raw === "object"
+        ? (raw as Record<string, unknown>).text
+        : raw;
     if (typeof value !== "string") continue;
     const text = value.trim();
     if (text === "" || text.length > 1000) continue;
