@@ -181,7 +181,9 @@ export async function clearNutrition(
  * How many dishes one press estimates, so a large menu can't outrun the
  * request: two batches at up to 45 s each fit the page's maxDuration.
  */
-const ESTIMATE_LIMIT = 30;
+// Per press: four batches of 15, about 7-15 s each with thinking off
+// (src/lib/ai/free-draft.ts), inside the page's 120 s.
+const ESTIMATE_LIMIT = 60;
 const BATCH_SIZE = 15;
 
 /**
