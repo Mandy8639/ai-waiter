@@ -18,6 +18,7 @@ function parse(formData: FormData) {
     tableNumber: formData.get("tableNumber"),
     displayName: emptyToUndefined(formData.get("displayName")),
     isActive: toBoolean(formData.get("isActive")),
+    kind: formData.get("kind") === "counter" ? "counter" : "table",
   });
 }
 
@@ -41,6 +42,8 @@ export async function createTable(
     table_number: parsed.data.tableNumber,
     display_name: parsed.data.displayName ?? null,
     is_active: parsed.data.isActive,
+    // kind: 20261022090000, newer than database.types.ts.
+    ...({ kind: parsed.data.kind } as object),
   });
 
   if (error) {
@@ -80,6 +83,7 @@ export async function updateTable(
       table_number: parsed.data.tableNumber,
       display_name: parsed.data.displayName ?? null,
       is_active: parsed.data.isActive,
+      ...({ kind: parsed.data.kind } as object),
     })
     .eq("id", tableId)
     .eq("restaurant_id", restaurantId);

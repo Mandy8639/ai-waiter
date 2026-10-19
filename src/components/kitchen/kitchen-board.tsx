@@ -27,6 +27,7 @@ import {
 } from "@/lib/kitchen/stations-core";
 import { STATUS_LABELS, type OrderStatus } from "@/lib/orders/status";
 import { OrderCard } from "./order-card";
+import { orderColumn } from "@/lib/pickup/board-core";
 import { OrderDetailDialog } from "./order-detail-dialog";
 import { SplitOrderDialog } from "./split-order-dialog";
 import { MergeOrderDialog } from "./merge-order-dialog";
@@ -147,6 +148,13 @@ export function KitchenBoard({
   const [connected, setConnected] = useState(false);
   const { muted, toggleMuted, unlock, play } = useNotificationSound();
   const [stationChoice, setStationChoice] = useState<StationChoice>("all");
+  // A pickup order's "start at" passes on its own, with no event to say
+  // so; this moves it up its column within half a minute of that time.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
   useWakeLock();
   const {
     settings: printer,
@@ -622,7 +630,10 @@ export function KitchenBoard({
       */}
       <div className="-mx-4 flex flex-1 snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:snap-none sm:px-0">
         {BOARD_COLUMNS.map((status) => {
-          const columnOrders = visibleOrders.filter((o) => o.status === status);
+          const columnOrders = orderColumn(
+            visibleOrders.filter((o) => o.status === status),
+            now,
+          );
           return (
             <section
               key={status}
@@ -647,6 +658,7 @@ export function KitchenBoard({
                   <OrderCard
                     key={order.id}
                     order={order}
+                    now={now}
                     role={role}
                     isPending={pendingIds.has(order.id)}
                     onTransition={handleTransition}
@@ -714,7 +726,13 @@ export function KitchenBoard({
         onPrint={
           canPrint ? (order) => printTicket(ticketFor(order, true)) : undefined
         }
-        order={detailOrder}
+        // The latest copy, so a pickup time moved from the dialog shows its
+        // new time there too, and a second push starts from it.
+        order={
+          detailOrder
+            ? (orders.find((o) => o.id === detailOrder.id) ?? detailOrder)
+            : null
+        }
         onOpenChange={(open) => {
           if (!open) setDetailOrder(null);
         }}

@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { formatPickupTime, pickupLabel } from "@/lib/pickup/format-core";
 
 export interface OrderItemModifierView {
   id: string;
@@ -35,6 +36,8 @@ export interface OrderView {
   restaurantId: string;
   restaurantSlug: string;
   tableLabel: string;
+  /** Set for an order placed at a pickup counter: when, in the restaurant's clock, and the name to call. */
+  pickup: { time: string; name: string } | null;
   items: OrderItemView[];
 }
 
@@ -54,18 +57,23 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
   const { data: order } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, subtotal, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id",
+      // pickup_*: 20261022090000, newer than database.types.ts.
+      "id, order_number, status, subtotal, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id, pickup_at, pickup_name" as "id, order_number, status, subtotal, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id",
     )
     .eq("id", orderId)
     .maybeSingle();
 
   if (!order) return null;
+  const { pickup_at: pickupAt, pickup_name: pickupName } = order as unknown as {
+    pickup_at: string | null;
+    pickup_name: string | null;
+  };
 
   const [{ data: restaurant }, { data: table }, { data: items }] =
     await Promise.all([
       supabase
         .from("restaurants")
-        .select("name, slug")
+        .select("name, slug, timezone")
         .eq("id", order.restaurant_id)
         .maybeSingle(),
       // Through get_order_table(), not a read of `tables`: a diner can't
@@ -151,7 +159,16 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
     restaurantId: order.restaurant_id,
     restaurantSlug: restaurant?.slug ?? "",
     tableLabel:
-      table?.display_name || (table ? `Table ${table.table_number}` : "—"),
+      pickupAt && pickupName
+        ? pickupLabel(pickupAt, pickupName, restaurant?.timezone ?? "UTC")
+        : table?.display_name || (table ? `Table ${table.table_number}` : "—"),
+    pickup:
+      pickupAt && pickupName
+        ? {
+            time: formatPickupTime(pickupAt, restaurant?.timezone ?? "UTC"),
+            name: pickupName,
+          }
+        : null,
     items: (items ?? []).map((i) => ({
       id: i.id,
       itemName: i.item_name,

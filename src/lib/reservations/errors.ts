@@ -21,6 +21,9 @@ const RESERVATION_MESSAGES: Record<string, string> = {
   RESERVATION_INVALID_STATUS: "That's not a valid reservation status.",
   RESERVATION_INVALID_TRANSITION:
     "That reservation can't move to that status from where it is.",
+  // refuse_reservation_on_counter(), 20261022090000_pickup_ordering.sql.
+  RESERVATION_COUNTER:
+    "That's a pickup counter, which can't be reserved. Choose a table.",
 
   // request_reservation()/confirm_reservation_request(), from
   // 20260902190000_customer_reservation_requests.sql. The first five are

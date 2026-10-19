@@ -71,3 +71,28 @@ export const aiPersonaSchema = z.object({
 });
 
 export type AiPersonaInput = z.infer<typeof aiPersonaSchema>;
+
+/** Every allowed length divides an hour; see 20261022090000_pickup_ordering.sql. */
+export const PICKUP_SLOT_LENGTHS = [5, 10, 15, 20, 30] as const;
+
+/** Pickup ordering's slot rules; the database's CHECKs are the same ranges. */
+export const pickupSettingsSchema = z.object({
+  slotMinutes: z
+    .number("Pick a slot length.")
+    .refine(
+      (n) => (PICKUP_SLOT_LENGTHS as readonly number[]).includes(n),
+      "Pick a slot length.",
+    ),
+  slotCapacity: z
+    .number("Enter a number.")
+    .int("Whole numbers only.")
+    .min(1, "At least 1.")
+    .max(100, "At most 100."),
+  leadMinutes: z
+    .number("Enter a number of minutes.")
+    .int("Whole minutes only.")
+    .min(5, "At least 5 minutes.")
+    .max(240, "At most 240 minutes."),
+});
+
+export type PickupSettingsInput = z.infer<typeof pickupSettingsSchema>;

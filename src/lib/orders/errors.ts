@@ -24,6 +24,9 @@ const PASSTHROUGH_PREFIXES = [
   "ORDER_MODIFIER_UNAVAILABLE",
   "ORDER_MODIFIER_INVALID",
   "ORDER_INVALID_INPUT",
+  // Pickup ordering (20261022090000): each message says what to change
+  // ("That pickup time just filled up. Please choose another.").
+  "ORDER_PICKUP",
 ];
 
 export function parseOrderError(rawMessage: string): string {

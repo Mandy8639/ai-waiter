@@ -115,7 +115,18 @@ export default async function OrderConfirmationPage({
         kitchen moves the order along — no second subscription for the
         same row, and no client state to drift.
       */}
-      <OrderProgress status={order.status} eta={etaSentence(eta)} />
+      <OrderProgress
+        status={order.status}
+        eta={
+          // A pickup order is cooked for its time, not as soon as possible,
+          // so the queue estimate would tell the diner the wrong thing.
+          order.pickup
+            ? ["ready", "served", "cancelled"].includes(order.status)
+              ? null
+              : `We'll have it ready for ${order.pickup.time}.`
+            : etaSentence(eta)
+        }
+      />
 
       <div className="flex flex-col gap-4">
         {order.items.map((item) => (

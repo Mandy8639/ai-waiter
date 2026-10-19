@@ -8,6 +8,7 @@ import { emptyToUndefined, toBoolean, toNumber } from "@/lib/forms/form-data";
 import {
   aiPersonaSchema,
   operationalSettingsSchema,
+  pickupSettingsSchema,
   restaurantProfileSchema,
 } from "./schema";
 
@@ -139,6 +140,43 @@ export async function updateAiPersona(
     .update({
       ai_tone: parsed.data.tone,
       ai_instructions: parsed.data.instructions,
+    } as never)
+    .eq("restaurant_id", restaurantId);
+
+  if (error) return { error: toFriendlyError(error, "settings") };
+
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}
+
+/** Pickup slot rules (20261022090000). Owners and managers, like every operational setting. */
+export async function updatePickupSettings(
+  restaurantId: string,
+  _prevState: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  const auth = await authorizeRestaurantAction(restaurantId, [
+    "owner",
+    "manager",
+  ]);
+  if (!auth.ok) return { error: auth.error };
+
+  const parsed = pickupSettingsSchema.safeParse({
+    slotMinutes: toNumber(formData.get("slotMinutes")),
+    slotCapacity: toNumber(formData.get("slotCapacity")),
+    leadMinutes: toNumber(formData.get("leadMinutes")),
+  });
+
+  if (!parsed.success)
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
+
+  // database.types.ts predates 20261022090000.
+  const { error } = await auth.context.supabase
+    .from("restaurant_settings")
+    .update({
+      pickup_slot_minutes: parsed.data.slotMinutes,
+      pickup_slot_capacity: parsed.data.slotCapacity,
+      pickup_lead_minutes: parsed.data.leadMinutes,
     } as never)
     .eq("restaurant_id", restaurantId);
 

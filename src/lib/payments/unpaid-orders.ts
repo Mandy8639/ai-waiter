@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { pickupLabel } from "@/lib/pickup/format-core";
 
 /**
  * What the settle-up screen needs: the orders at this restaurant that
@@ -37,6 +38,7 @@ export interface UnpaidOrder {
 }
 
 export interface UnpaidTable {
+  /** The table's id — or, at a pickup counter, the diner's session id, since strangers share a counter but never a bill. */
   tableId: string;
   tableLabel: string;
   orders: UnpaidOrder[];
@@ -54,7 +56,11 @@ export async function getUnpaidOrdersByTable(
 
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("id, order_number, status, total, currency, table_id, created_at")
+    // customer_session_id, pickup_*: grouping a pickup counter by diner
+    // (20261022090000, newer than database.types.ts).
+    .select(
+      "id, order_number, status, total, currency, table_id, created_at, customer_session_id, pickup_at, pickup_name" as "id, order_number, status, total, currency, table_id, created_at",
+    )
     .eq("restaurant_id", restaurantId)
     .neq("status", "cancelled")
     .gt("created_at", since)
@@ -70,6 +76,7 @@ export async function getUnpaidOrdersByTable(
   const [
     { data: settled, error: settledError },
     { data: tables, error: tablesError },
+    { data: restaurantRow },
   ] = await Promise.all([
     supabase
       .from("payment_orders")
@@ -80,7 +87,13 @@ export async function getUnpaidOrdersByTable(
       .from("tables")
       .select("id, table_number, display_name")
       .in("id", [...new Set(orders.map((o) => o.table_id))]),
+    supabase
+      .from("restaurants")
+      .select("timezone")
+      .eq("id", restaurantId)
+      .maybeSingle(),
   ]);
+  const timeZone = restaurantRow?.timezone ?? "UTC";
 
   if (settledError) throw settledError;
   if (tablesError) throw tablesError;
@@ -93,10 +106,24 @@ export async function getUnpaidOrdersByTable(
     if (paidOrderIds.has(order.id)) continue;
 
     const table = tableById.get(order.table_id);
-    const group = byTable.get(order.table_id) ?? {
-      tableId: order.table_id,
+    const pickup = order as unknown as {
+      customer_session_id: string;
+      pickup_at: string | null;
+      pickup_name: string | null;
+    };
+    // A pickup order is grouped by the diner who placed it, never with the
+    // other strangers at the same counter.
+    const key =
+      pickup.pickup_at && pickup.pickup_name
+        ? `pickup:${pickup.customer_session_id}`
+        : order.table_id;
+    const group = byTable.get(key) ?? {
+      tableId: key,
       tableLabel:
-        table?.display_name || (table ? `Table ${table.table_number}` : "—"),
+        pickup.pickup_at && pickup.pickup_name
+          ? pickupLabel(pickup.pickup_at, pickup.pickup_name, timeZone)
+          : table?.display_name ||
+            (table ? `Table ${table.table_number}` : "—"),
       orders: [],
       total: 0,
       currency: order.currency,
@@ -111,7 +138,7 @@ export async function getUnpaidOrdersByTable(
       createdAt: order.created_at,
     });
     group.total += order.total;
-    byTable.set(order.table_id, group);
+    byTable.set(key, group);
   }
 
   return [...byTable.values()].sort((a, b) =>

@@ -35,6 +35,11 @@ const SIGNED_IN_ONLY = [
   "set_kitchen_busy",
   // A restaurant's own billing state (20261018120000); checks membership.
   "get_restaurant_billing",
+  // Pickup ordering (20261022090000). The first two read and write the
+  // caller's own session's cart; the third checks restaurant membership.
+  "get_pickup_options",
+  "set_cart_pickup",
+  "change_pickup_time",
   // Reviewed 2026-10-17 and revoked from anon by
   // 20261017090000_revoke_anon_from_signed_in_functions.sql. Each checks
   // its caller inside or is a small helper; no signed-out page calls them.

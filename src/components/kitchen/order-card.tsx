@@ -30,6 +30,7 @@ import {
   type StationProgress,
 } from "@/lib/kitchen/stations-core";
 import { useElapsedLabel } from "./use-elapsed-label";
+import { startsLater } from "@/lib/pickup/board-core";
 
 const SPICE_WORDS: Record<string, string> = {
   none: "no spice",
@@ -162,8 +163,11 @@ export function OrderCard({
   orderNumberById,
   station,
   progress,
+  now,
 }: {
   order: KitchenOrder;
+  /** The board's clock (ms), for whether a pickup order is due to start. Without it, treated as due. */
+  now?: number;
   role: Role;
   isPending: boolean;
   onTransition: (orderId: string, target: OrderStatus) => void;
@@ -189,6 +193,13 @@ export function OrderCard({
   progress?: StationProgress[];
 }) {
   const elapsed = useElapsedLabel(order.createdAt);
+  // Dimmed and sorted down: accepted and not yet due (startsLater).
+  // The badge's wording only asks whether the start time has come.
+  const later = now !== undefined && startsLater(order, now);
+  const startDue =
+    order.pickup === null ||
+    now === undefined ||
+    new Date(order.pickup.startAt).getTime() <= now;
   const action = nextActionFor(role, order.status);
   const cancellable = canCancel(role, order.status);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -206,7 +217,7 @@ export function OrderCard({
       data-order-number={order.orderNumber}
       className={
         "bg-card flex flex-col gap-3 rounded-lg border p-3 shadow-sm" +
-        (station?.done ? " opacity-60" : "")
+        (station?.done || later ? " opacity-60" : "")
       }
     >
       <button
@@ -224,6 +235,17 @@ export function OrderCard({
           {order.status === "pending" && (
             <Badge variant="destructive">New</Badge>
           )}
+          {/*
+            In words, not only in the card's dimming: a pickup order's start
+            time is the one thing the cook needs from it before anything else
+            (SC 1.4.1), and it has to survive a greyscale printout.
+          */}
+          {order.pickup &&
+            (order.status === "pending" || order.status === "confirmed") && (
+              <Badge variant={startDue ? "default" : "outline"}>
+                {startDue ? "Start now" : `Start ${order.pickup.startTime}`}
+              </Badge>
+            )}
           <span
             className="text-muted-foreground text-xs"
             aria-label="Time since order was placed"

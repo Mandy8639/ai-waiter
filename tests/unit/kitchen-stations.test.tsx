@@ -54,6 +54,7 @@ function order(
     ticketGroups: [],
     mergedWithOrderIds: [],
     stationsDone: [],
+    pickup: null,
     ...over,
   };
 }

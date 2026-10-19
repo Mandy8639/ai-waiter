@@ -2,10 +2,11 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireActiveCustomerSession } from "@/lib/customer/session";
-import { submitOrderSchema } from "./schemas";
+import { pickupChoiceSchema, submitOrderSchema } from "./schemas";
 import { parseOrderError } from "./errors";
 import { isOrderSubmissionRateLimited } from "./rate-limit";
 import { scheduleOrderPush } from "@/lib/push/dispatch";
+import { pickupRpc } from "@/lib/pickup/queries";
 
 export interface SubmitOrderResult {
   error?: string;
@@ -26,10 +27,16 @@ export interface SubmitOrderResult {
  * derived entirely server-side from the caller's own active session, the
  * same guarantee requireActiveCustomerSession() already gives every other
  * cart mutation in this codebase.
+ *
+ * `pickup` is the diner's choice at a pickup counter. It is saved on the
+ * cart first (set_cart_pickup()), and the order trigger reads it from
+ * there, so a caller that passes none (the AI waiter) still places the
+ * time the diner picked in the cart.
  */
 export async function submitOrder(
   idempotencyKey: string,
   customerNote?: string,
+  pickup?: { at: string; name: string },
 ): Promise<SubmitOrderResult> {
   const sessionResult = await requireActiveCustomerSession();
   if (!sessionResult.ok) return { error: sessionResult.error };
@@ -55,6 +62,33 @@ export async function submitOrder(
   }
 
   const supabase = await createClient();
+
+  if (pickup) {
+    const choice = pickupChoiceSchema.safeParse(pickup);
+    if (!choice.success) {
+      return { error: choice.error.issues[0]?.message ?? "Invalid pickup." };
+    }
+    const rpc = await pickupRpc();
+    const { error: pickupError } = await rpc("set_cart_pickup", {
+      p_pickup_at: choice.data.at,
+      p_pickup_name: choice.data.name,
+    });
+    if (pickupError) {
+      // A retry of an order that already went through must still land on
+      // that order, even if its slot has filled since: submit_order()'s
+      // replay would return it, but it never gets the chance if this
+      // returns first. Anything else is the diner's to fix.
+      const { data: placed } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("customer_session_id", sessionResult.session.id)
+        .eq("idempotency_key", parsed.data.idempotencyKey)
+        .maybeSingle();
+      if (placed) return { orderId: placed.id };
+      return { error: parseOrderError(pickupError.message ?? "") };
+    }
+  }
+
   const { data, error } = await supabase.rpc("submit_order", {
     p_idempotency_key: parsed.data.idempotencyKey,
     p_customer_note: parsed.data.customerNote ?? null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Printer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,59 @@ import type { KitchenOrder } from "@/lib/orders/kitchen";
 import { fetchOrderStatusHistory } from "@/lib/orders/kitchen-actions";
 import type { OrderStatusHistoryEntry } from "@/lib/orders/kitchen";
 import { STATUS_LABELS } from "@/lib/orders/status";
+import { pushBackPickup } from "@/lib/pickup/actions";
+
+/**
+ * Moving a pickup order later: one slot, or two. Later only — moving an
+ * order EARLIER would promise a diner food sooner than they planned to
+ * come for it. The board picks up the new time from the order's own
+ * Realtime update, like any other change.
+ */
+function PickupPushBack({
+  order,
+}: {
+  order: KitchenOrder & { pickup: NonNullable<KitchenOrder["pickup"]> };
+}) {
+  const [moving, startMoving] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const step = order.pickup.slotMinutes;
+
+  function push(minutes: number) {
+    setMessage(null);
+    startMoving(async () => {
+      const result = await pushBackPickup(order.id, order.pickup.at, minutes);
+      setMessage(result.error ?? `Moved ${minutes} minutes later.`);
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border p-2">
+      <p className="text-xs font-medium">
+        Pickup {order.pickup.time} for {order.pickup.name} · start{" "}
+        {order.pickup.startTime}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {[step, step * 2].map((minutes) => (
+          <Button
+            key={minutes}
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={moving}
+            onClick={() => push(minutes)}
+          >
+            Push back {minutes} min
+          </Button>
+        ))}
+      </div>
+      {message && (
+        <p role="status" className="text-muted-foreground text-xs">
+          {message}
+        </p>
+      )}
+    </div>
+  );
+}
 
 const ACTOR_LABELS: Record<string, string> = {
   customer: "Customer",
@@ -43,16 +96,20 @@ export function OrderDetailDialog({
     entries: OrderStatusHistoryEntry[];
   } | null>(null);
 
+  // On the id, not the object: the board hands in its latest copy of the
+  // open order after every resync, and that alone is no reason to fetch
+  // the history again.
+  const orderId = order?.id;
   useEffect(() => {
-    if (!order) return;
+    if (!orderId) return;
     let cancelled = false;
-    fetchOrderStatusHistory(order.id).then((rows) => {
-      if (!cancelled) setHistory({ orderId: order.id, entries: rows });
+    fetchOrderStatusHistory(orderId).then((rows) => {
+      if (!cancelled) setHistory({ orderId, entries: rows });
     });
     return () => {
       cancelled = true;
     };
-  }, [order]);
+  }, [orderId]);
 
   const currentHistory =
     order && history?.orderId === order.id ? history.entries : null;
@@ -83,6 +140,16 @@ export function OrderDetailDialog({
                   </div>
                 ))}
               </div>
+
+              {order.pickup &&
+                ["pending", "confirmed", "preparing"].includes(
+                  order.status,
+                ) && (
+                  <PickupPushBack
+                    key={order.id}
+                    order={{ ...order, pickup: order.pickup }}
+                  />
+                )}
 
               {onPrint && (
                 <Button

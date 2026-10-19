@@ -4,8 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { NativeSelect } from "@/components/dashboard/native-select";
 import { submitOrder } from "@/lib/orders/submit-order";
+import { formatPickupTime, type PickupOptions } from "@/lib/pickup/format-core";
 
 /**
  * idempotencyKey is generated once, when this component mounts (a fresh
@@ -15,19 +18,33 @@ import { submitOrder } from "@/lib/orders/submit-order";
  * than creating a second one (docs/security.md#idempotency). Navigating
  * here again after a successful order (or a hard refresh) mounts a new
  * instance with a new key, which is correct: that's a new order attempt.
+ *
+ * At a pickup counter the form also asks when, and whose name to call.
+ * Full slots stay in the list, marked, so a diner can see why their usual
+ * time is missing; the database re-checks the time when the order is
+ * placed, because a slot can fill while this page is open.
  */
 export function PlaceOrderForm({
   restaurantSlug,
   disabled,
   allowCustomerNotes,
+  pickup,
 }: {
   restaurantSlug: string;
   disabled: boolean;
   allowCustomerNotes: boolean;
+  pickup?: Extract<PickupOptions, { isCounter: true }>;
 }) {
   const router = useRouter();
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [note, setNote] = useState("");
+  const [pickupAt, setPickupAt] = useState(() => {
+    const chosen = pickup?.slots.find(
+      (s) => s.at === pickup.chosenAt && s.placesLeft > 0,
+    );
+    return chosen?.at ?? pickup?.slots.find((s) => s.placesLeft > 0)?.at ?? "";
+  });
+  const [pickupName, setPickupName] = useState(pickup?.chosenName ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -37,6 +54,7 @@ export function PlaceOrderForm({
       const result = await submitOrder(
         idempotencyKey,
         note.trim() || undefined,
+        pickup ? { at: pickupAt, name: pickupName.trim() } : undefined,
       );
       if (result.error) {
         setError(result.error);
@@ -48,8 +66,63 @@ export function PlaceOrderForm({
     });
   }
 
+  const noSlots = pickup !== undefined && pickup.slots.length === 0;
+  const pickupIncomplete =
+    pickup !== undefined && (!pickupAt || !pickupName.trim());
+
   return (
     <div className="flex flex-col gap-3">
+      {pickup && (
+        <fieldset className="flex flex-col gap-3">
+          <legend className="sr-only">Pickup</legend>
+          {noSlots ? (
+            <p role="alert" className="type-body-sm text-muted-foreground">
+              There are no pickup times open right now. Please ask at the
+              counter.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="pickup-time" className="text-sm font-medium">
+                Pickup time
+              </label>
+              <NativeSelect
+                id="pickup-time"
+                value={pickupAt}
+                onChange={(e) => setPickupAt(e.target.value)}
+                disabled={isPending || disabled}
+                className="h-11 text-base"
+              >
+                {pickup.slots.map((slot) => (
+                  <option
+                    key={slot.at}
+                    value={slot.at}
+                    disabled={slot.placesLeft === 0}
+                  >
+                    {formatPickupTime(slot.at, pickup.timeZone)}
+                    {slot.placesLeft === 0 ? " (full)" : ""}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="pickup-name" className="text-sm font-medium">
+              Name for pickup
+            </label>
+            <Input
+              id="pickup-name"
+              value={pickupName}
+              onChange={(e) => setPickupName(e.target.value)}
+              maxLength={40}
+              autoComplete="given-name"
+              placeholder="We'll call this out when it's ready"
+              disabled={isPending || disabled}
+              className="h-11 text-base"
+            />
+          </div>
+        </fieldset>
+      )}
+
       {allowCustomerNotes && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor="customer-note" className="text-sm font-medium">
@@ -77,10 +150,14 @@ export function PlaceOrderForm({
         type="button"
         size="lg"
         className="w-full"
-        disabled={disabled || isPending}
+        disabled={disabled || isPending || noSlots || pickupIncomplete}
         onClick={handleSubmit}
       >
-        {isPending ? "Placing order…" : "Place order"}
+        {isPending
+          ? "Placing order…"
+          : pickup
+            ? "Place pickup order"
+            : "Place order"}
       </Button>
     </div>
   );

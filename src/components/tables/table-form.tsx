@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormField } from "@/components/dashboard/form-field";
+import { NativeSelect } from "@/components/dashboard/native-select";
 import type { TableFormState } from "@/lib/tables/actions";
 
 const initialState: TableFormState = {};
@@ -15,6 +16,7 @@ export interface TableFormValues {
   tableNumber: string;
   displayName: string | null;
   isActive: boolean;
+  kind: "table" | "counter";
 }
 
 export function TableForm({
@@ -69,6 +71,23 @@ export function TableForm({
           disabled={isPending}
           defaultValue={defaultValues?.displayName ?? undefined}
         />
+      </FormField>
+
+      <FormField
+        id="kind"
+        label="Kind"
+        errors={errors.kind}
+        hint="At a pickup counter, diners order ahead, choose a pickup time and give a name to call. Counters can't be reserved."
+      >
+        <NativeSelect
+          id="kind"
+          name="kind"
+          disabled={isPending}
+          defaultValue={defaultValues?.kind ?? "table"}
+        >
+          <option value="table">Table — diners sit here</option>
+          <option value="counter">Pickup counter — diners order ahead</option>
+        </NativeSelect>
       </FormField>
 
       <div className="flex items-center gap-2">
