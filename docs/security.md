@@ -1173,6 +1173,10 @@ rule.
   no insert or update policy, so nobody can write a row that is already confirmed.
 - **Changed numbers are not confirmed numbers.** Saving always clears `confirmed_at`, so whoever
   confirms is confirming what's there now.
+- **Reviewed, then confirmed together.** Each draft is marked **Reviewed** on its own, which locks
+  its numbers; "Confirm N reviewed" confirms only marked drafts, one `confirm_menu_item_nutrition()`
+  each, and skips any whose saved numbers no longer match what was reviewed
+  (`src/lib/review/actions.ts`). There is no way to confirm a dish nobody marked.
 - **Diners and the AI waiter see confirmed values only.** The public read policy requires
   `confirmed_at` and `is_menu_item_publicly_visible()`, the same rule allergens use. Restaurant
   members can also read drafts through the members' read policy, so every diner-side query (menu

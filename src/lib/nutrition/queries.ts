@@ -149,3 +149,24 @@ export async function countDraftNutrition(
     .is("confirmed_at", null);
   return (data ?? []).length;
 }
+
+/**
+ * The saved, unconfirmed numbers for these dishes — what "Confirm all
+ * reviewed" compares against what the reviewer saw, so it never publishes
+ * numbers that changed after they were marked.
+ */
+export async function getDraftNutrition(
+  restaurantId: string,
+  itemIds: string[],
+): Promise<Map<string, Nutrition>> {
+  if (itemIds.length === 0) return new Map();
+  const supabase = await createClient();
+  const { data } = await table(supabase)
+    .select(COLUMNS)
+    .eq("restaurant_id", restaurantId)
+    .in("menu_item_id", itemIds)
+    .is("confirmed_at", null);
+  return new Map(
+    (data ?? []).map((row) => [row.menu_item_id, toNutrition(row)]),
+  );
+}

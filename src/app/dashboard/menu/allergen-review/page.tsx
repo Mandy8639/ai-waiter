@@ -66,7 +66,8 @@ export default async function AllergenReviewPage() {
           Confirm allergens
         </h1>
         <p className="text-muted-foreground text-sm">
-          Nothing here is shown to a diner until you confirm it, dish by dish.
+          Nothing here is shown to a diner until you confirm it. Mark each dish
+          reviewed as you check it, then confirm the reviewed ones together.
         </p>
       </div>
 

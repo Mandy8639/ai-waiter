@@ -218,15 +218,27 @@ So the import pass suggests a level from the fixed ladder (`none / mild / medium
 
 Nor is it gated like allergens. An unconfirmed allergen is hidden from diners because acting on a wrong one is dangerous; a wrong heat level spoils a meal. The suggestion is visible immediately and the column exists to show the restaurant what still wants a glance.
 
-### Why there is no "confirm all"
+### Reviewed, then confirm all — never "confirm everything"
 
 The realistic failure is not the model. It is a tired owner clearing 150 items
 at 11pm. If confirming is one click for the whole menu, the confirmation
 records nothing except a wish for the banner to disappear — while a diner is
 told the restaurant checked.
 
-So confirmation is per dish, and unticked suggestions are **deleted** rather
-than left pending, so the same question is not asked forever.
+Confirming 183 dishes one click at a time was too slow in practice
+(2026-10-19), so the screen splits the look from the click:
+
+- Each dish has its own **Mark reviewed**. Marking it freezes its ticks.
+- **Confirm N reviewed** confirms only the marked dishes, each with the ticks
+  it was reviewed with, through the same `confirm_menu_item_allergens()` per
+  dish (`src/lib/review/actions.ts`). An unmarked dish stays waiting.
+- Marks are kept in the browser, so a long review survives a reload. They are
+  not a record; the confirmation is.
+
+There is still no button that confirms a dish nobody marked. Unticked
+suggestions are **deleted** rather than left pending, so the same question is
+not asked forever. The nutrition screen works the same way, and also checks
+that a dish's saved numbers still match the reviewed ones before confirming.
 
 ### Suggestions are constrained to a fixed vocabulary
 
@@ -246,7 +258,7 @@ Under-suggesting is recoverable; over-suggesting is what hurts someone.
 | Parser   | non-vocabulary allergens dropped                                |
 | Database | `confirmed_at` NULL, `confirmed_allergen_ids()` excludes it     |
 | Reads    | item page and `get_menu_item` filter `confirmed_at is not null` |
-| UI       | per-dish confirmation, no bulk accept                           |
+| UI       | each dish marked reviewed; only marked dishes are confirmed     |
 
 Staff ticking an allergen by hand in the dashboard **is** the confirmation —
 there is no weaker state to record, and those rows were backfilled as confirmed

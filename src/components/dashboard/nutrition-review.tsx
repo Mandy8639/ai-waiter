@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Sparkles, TriangleAlert } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { Check, Sparkles, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,16 @@ import {
   type Nutrition,
 } from "@/lib/nutrition/core";
 import type { NutritionReviewRow } from "@/lib/nutrition/queries";
+import { confirmReviewedNutrition } from "@/lib/review/actions";
+import {
+  nutritionSignature,
+  readStored,
+  restoreMarks,
+  storageKey,
+  writeStored,
+  type ReviewedMarks,
+} from "@/lib/review/reviewed-core";
+import { ConfirmReviewedBar } from "./allergen-confirm-list";
 
 const STATE_LABEL: Record<NutritionReviewRow["state"], string> = {
   missing: "No nutrition",
@@ -45,8 +55,11 @@ const FIELDS: Array<{ key: keyof Fields; label: string; unit: string }> = [
 
 /**
  * The owner's nutrition screen (phase M): every dish, its numbers per
- * serving, and whether diners see them. The AI only estimates; each dish
- * is confirmed on its own, because confirming is the check.
+ * serving, and whether diners see them. The AI only estimates; a person
+ * checks each dish and marks it **Reviewed**, which locks its numbers,
+ * then "Confirm all reviewed" confirms the marked dishes together. Only
+ * marked dishes are confirmed, and only if their saved numbers still match
+ * the reviewed ones (src/lib/review/reviewed-core.ts).
  */
 export function NutritionReview({
   restaurantId,
@@ -60,6 +73,73 @@ export function NutritionReview({
     text: string;
   } | null>(null);
   const [estimating, startEstimating] = useTransition();
+  const [confirming, startConfirming] = useTransition();
+  const [marks, setMarks] = useState<ReviewedMarks>({});
+  const key = storageKey("nutrition", restaurantId);
+
+  /** A draft's saved numbers, as reviewed — or null when it isn't a draft. */
+  const draftSignature = (row: NutritionReviewRow) =>
+    row.state === "draft" && row.values ? nutritionSignature(row.values) : null;
+
+  // Marks survive a reload, but only on drafts whose numbers are unchanged.
+  useEffect(() => {
+    const current = new Map(
+      rows.map((r) => [r.itemId, draftSignature(r)] as const),
+    );
+    const restored = restoreMarks(
+      readStored(key),
+      (id, signature) => current.get(id) === signature,
+    );
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMarks(restored);
+  }, [rows, key]);
+
+  function updateMarks(next: ReviewedMarks) {
+    setMarks(next);
+    writeStored(key, next);
+  }
+
+  function toggleReviewed(row: NutritionReviewRow) {
+    const signature = draftSignature(row);
+    if (!signature) return;
+    const next = { ...marks };
+    if (next[row.itemId] !== undefined) delete next[row.itemId];
+    else next[row.itemId] = signature;
+    updateMarks(next);
+  }
+
+  const reviewed = rows.filter(
+    (r) =>
+      marks[r.itemId] !== undefined && marks[r.itemId] === draftSignature(r),
+  );
+
+  function confirmReviewed() {
+    setNotice(null);
+    startConfirming(async () => {
+      const result = await confirmReviewedNutrition(
+        restaurantId,
+        reviewed.map((r) => ({ itemId: r.itemId, signature: marks[r.itemId] })),
+      );
+      const next = { ...marks };
+      for (const id of [...result.confirmedIds, ...result.changedIds]) {
+        delete next[id];
+      }
+      updateMarks(next);
+      if (result.error) {
+        setNotice({ kind: "error", text: result.error });
+      } else if (result.changedIds.length > 0) {
+        setNotice({
+          kind: "error",
+          text: `${result.changedIds.length} dish${result.changedIds.length === 1 ? "'s" : "es'"} numbers changed after you reviewed them, so they weren't confirmed. Please check them again.`,
+        });
+      } else {
+        setNotice({
+          kind: "info",
+          text: `Confirmed ${result.confirmedIds.length} dish${result.confirmedIds.length === 1 ? "" : "es"}. Diners can see their nutrition now.`,
+        });
+      }
+    });
+  }
 
   const counts = {
     shown: rows.filter((r) => r.state === "confirmed").length,
@@ -120,9 +200,23 @@ export function NutritionReview({
             key={`${row.itemId}:${row.state}:${row.values ? Object.values(row.values).join(",") : ""}`}
             row={row}
             restaurantId={restaurantId}
+            reviewed={
+              marks[row.itemId] !== undefined &&
+              marks[row.itemId] === draftSignature(row)
+            }
+            onToggleReviewed={() => toggleReviewed(row)}
           />
         ))}
       </ul>
+
+      {counts.toReview > 0 && (
+        <ConfirmReviewedBar
+          reviewed={reviewed.length}
+          total={counts.toReview}
+          busy={confirming}
+          onConfirm={confirmReviewed}
+        />
+      )}
     </div>
   );
 }
@@ -130,9 +224,14 @@ export function NutritionReview({
 function Row({
   row,
   restaurantId,
+  reviewed,
+  onToggleReviewed,
 }: {
   row: NutritionReviewRow;
   restaurantId: string;
+  /** Marked reviewed: its numbers are locked until the mark is taken off. */
+  reviewed: boolean;
+  onToggleReviewed: () => void;
 }) {
   const saved = toFields(row.values);
   const [fields, setFields] = useState<Fields>(saved);
@@ -155,7 +254,12 @@ function Row({
   }
 
   return (
-    <li className="flex flex-col gap-3 rounded-lg border p-3">
+    <li
+      className={
+        "flex flex-col gap-3 rounded-lg border p-3" +
+        (reviewed ? " border-primary/40 bg-primary/5" : "")
+      }
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-medium">{row.name}</p>
@@ -185,7 +289,7 @@ function Row({
               onChange={(e) =>
                 setFields((prev) => ({ ...prev, [f.key]: e.target.value }))
               }
-              disabled={pending}
+              disabled={pending || reviewed}
               aria-label={`${f.label} for ${row.name}, ${f.unit}`}
             />
           </label>
@@ -236,15 +340,29 @@ function Row({
           <Button
             type="button"
             size="sm"
+            variant={reviewed ? "default" : "outline"}
+            aria-pressed={reviewed}
+            disabled={pending}
+            onClick={onToggleReviewed}
+          >
+            {reviewed && <Check className="size-4" aria-hidden="true" />}
+            {reviewed ? "Reviewed" : "Mark reviewed"}
+          </Button>
+        )}
+        {!edited && row.state === "draft" && !reviewed && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
             disabled={pending}
             onClick={() =>
               run(() => confirmNutrition(restaurantId, row.itemId))
             }
           >
-            Confirm — show to diners
+            Confirm now
           </Button>
         )}
-        {row.state !== "missing" && (
+        {row.state !== "missing" && !reviewed && (
           <Button
             type="button"
             size="sm"
