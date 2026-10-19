@@ -36,6 +36,11 @@ const nextConfig: NextConfig = {
   // capacitor.config.ts). Dev only: production ignores this.
   allowedDevOrigins: ["127.0.0.1"],
   poweredByHeader: false,
+  // The Admin page's menu-reader Test reads this photo at run time
+  // (src/lib/admin/model-test.ts), so it ships with that page's function.
+  outputFileTracingIncludes: {
+    "/admin": ["./tests/fixtures/menu-board.jpg"],
+  },
   headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

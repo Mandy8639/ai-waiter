@@ -11,6 +11,9 @@ import {
 } from "@/components/ui/card";
 import { requirePlatformAdmin } from "@/lib/admin/access";
 import { aiConfig } from "@/lib/ai/config";
+import { ModelEditor } from "@/components/admin/model-editor";
+import { catalogueFor } from "@/lib/admin/model-catalogue";
+import { getOpenRouterModels } from "@/lib/admin/openrouter-models";
 import { getAllModelSettings } from "@/lib/ai/model-settings";
 import {
   jobInfo,
@@ -18,6 +21,10 @@ import {
   type ModelSource,
 } from "@/lib/ai/model-settings-core";
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
+
+// A Test runs inside this page's server action; the menu-photo reader's
+// takes up to 120 s (src/lib/admin/model-test.ts).
+export const maxDuration = 150;
 
 export const metadata = {
   title: "Admin — Tableside",
@@ -36,9 +43,9 @@ function sourceLabel(source: ModelSource, envVar: string): string {
 }
 
 /**
- * The platform owner's Admin page (docs/admin.md). Phase 1: read-only —
- * which models each AI job uses and where that choice came from. Changing
- * them (with a Test) is Phase 2; spending and history are Phase 3.
+ * The platform owner's Admin page (docs/admin.md): which models each AI
+ * job uses, where that choice came from, and (Phase 2) a Change → Test →
+ * Save editor for each. Spending and history are Phase 3.
  */
 export default async function AdminPage() {
   const access = await requirePlatformAdmin();
@@ -65,8 +72,12 @@ export default async function AdminPage() {
     );
   }
 
-  const settings = await getAllModelSettings();
+  const [settings, known] = await Promise.all([
+    getAllModelSettings(),
+    getOpenRouterModels(),
+  ]);
   const provider = aiConfig.provider;
+  const canTest = !!process.env.OPENROUTER_API_KEY;
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8">
@@ -93,11 +104,25 @@ export default async function AdminPage() {
           <CardTitle className="text-base">AI models</CardTitle>
           <CardDescription>
             Which models each AI job uses right now, main model first, then the
-            backups OpenRouter tries if it&apos;s busy. Changing them from here,
-            with a Test before saving, comes next.
+            backups OpenRouter tries if it&apos;s busy. To change one, press
+            Change, run Test, and Save once it passes. A Test on a paid model
+            spends a little credit and shows what it cost.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {!canTest && (
+            <p className="text-muted-foreground rounded-md border p-3 text-sm">
+              <code>OPENROUTER_API_KEY</code> isn&apos;t set, so models
+              can&apos;t be tested or changed here.
+            </p>
+          )}
+          {known === null && (
+            <p className="text-muted-foreground rounded-md border p-3 text-sm">
+              Couldn&apos;t load OpenRouter&apos;s model list just now, so
+              prices aren&apos;t shown and changes can&apos;t be saved. Reload
+              in a few minutes.
+            </p>
+          )}
           {provider === "anthropic" && (
             <p className="text-muted-foreground rounded-md border p-3 text-sm">
               The waiter runs on Anthropic directly (
@@ -157,6 +182,16 @@ export default async function AdminPage() {
                       ))}
                     </ol>
                   )}
+                  {canTest &&
+                    !(job === "waiter" && provider !== "openrouter") && (
+                      <ModelEditor
+                        job={job}
+                        label={info.label}
+                        freeOnly={info.freeOnly}
+                        current={resolved.models}
+                        options={catalogueFor(job, resolved.models, known)}
+                      />
+                    )}
                 </li>
               );
             })}
