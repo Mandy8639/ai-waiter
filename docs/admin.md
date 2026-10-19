@@ -77,28 +77,35 @@ A Test on a paid model spends real credit, typically under a cent for the text j
 
 ## Free safety net
 
-Only one free model has held a real conversation as the waiter, so a busy free tier could leave the
-waiter with nothing to answer with. The safety net covers that.
+The two jobs that run live during service, the **waiter** and the **staff assistant**, each have a
+free safety net: tested free models they try when their whole saved list is busy. Only one free
+model has held a real conversation as the waiter, so a busy free tier could otherwise leave it with
+nothing to answer with. The owner-side jobs (photo reader, suggestions, drafts) have none: they
+already have tested backups, a failure there is a retry rather than a diner waiting, and a wrong
+price or allergen from an unproven model costs more than a short delay.
 
 - **Daily check.** Once a day (Vercel Cron, 11:00 UTC, `/api/cron/free-model-check`, needs
-  `CRON_SECRET`), the waiter Test from the table above runs on every free (`:free`), tool-calling
-  model OpenRouter lists, up to 12, six at a time. Free models only, so it costs nothing. **Check
-  now** on `/admin` runs the same check.
-- **Who is in the net.** A model that passed in the last three days, and whose latest check didn't
-  fail. A model that was only busy keeps its last pass.
-- **Never used.** `NEVER_USE` in `src/lib/ai/safety-net-core.ts` lists models that pass the Test
-  but failed in real conversations here (no lookups, made-up recommendations, reading out their
-  instructions). They are never checked or used, and `/admin` says why. Add a model there when it
-  misbehaves live.
-- **Order.** Models vetted for the waiter in a real conversation (the waiter's catalogue list)
-  first, then the rest, fastest passing Test first. Speed only breaks ties among the unvetted,
-  because it favours small models, which hold a conversation worst.
+  `CRON_SECRET`), each job's Test from the table above runs on every free (`:free`) model
+  OpenRouter lists that could do the job (for the waiter, ones that call tools), up to 12 per job,
+  six at a time: the staff assistant first (one short message each), then the waiter. Free models
+  only, so it costs nothing. **Check now** on each job's card runs that job's check.
+- **Who is in the net.** A model that passed that job's Test in the last three days, and whose
+  latest check didn't fail. A model that was only busy keeps its last pass. Results are kept per
+  job (`free_model_checks` is keyed by job and model), since a good command reader can still be a
+  poor waiter.
+- **Never used.** `NEVER_USE` in `src/lib/ai/safety-net-core.ts` lists, per job, models that pass
+  the Test but failed in real use here (for the waiter: no lookups, made-up recommendations,
+  reading out their instructions). They are never checked or used for that job, and `/admin` says
+  why. Add a model there when it misbehaves live.
+- **Order.** Models vetted for the job (its catalogue list) first, then the rest, fastest passing
+  Test first. Speed only breaks ties among the unvetted, because it favours small models, which
+  hold a conversation worst.
 - **When it is used.** Only when OpenRouter answers busy (429), an HTTP error or a timeout for the
-  waiter's whole saved list. The waiter then makes one more try with the top three models in the
-  net, skipping any already in its own list. Each use is logged as `waiter_safety_net_used`, and
-  the turn's log names the model that answered.
-- **Switch.** "Use the safety net for the waiter" on `/admin`. On by default (no row in
-  `platform_switches` means on).
+  job's whole saved list. The job then makes one more try with the top three models in its net,
+  skipping any already in its own list. Logged as `waiter_safety_net_used` or
+  `staff_safety_net_used`. The staff assistant's answer is still only a proposal: staff confirm
+  every change before it happens.
+- **Switches.** One per job on `/admin`. On by default (no row in `platform_switches` means on).
 
 A Test pass is one good answer, not a track record, so the net only ever replaces "no answer at
 all". Code: `src/lib/ai/safety-net-core.ts` (rules), `src/lib/ai/safety-net.ts` (read, cached a
@@ -113,6 +120,8 @@ them. `20261024090000_admin_model_tests.sql` adds `platform_model_tests` (every 
 /admin, same protections) and `save_platform_models()`, the only way a list is saved.
 `20261025090000_waiter_safety_net.sql` adds `free_model_checks` (each free model's latest daily
 check; free models only) and `platform_switches` (on/off switches), both server-only.
+`20261026090000_staff_safety_net.sql` keys `free_model_checks` by job and model, and adds the staff
+assistant's switch.
 
 ## Still to come
 

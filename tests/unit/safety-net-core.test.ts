@@ -26,8 +26,10 @@ function check(
   status: FreeModelCheck["status"],
   passedHoursAgo: number | null,
   passMs: number | null = 5000,
+  job: FreeModelCheck["job"] = "waiter",
 ): FreeModelCheck {
   return {
+    job,
     model,
     status,
     lastPassedAt: passedHoursAgo === null ? null : hoursAgo(passedHoursAgo),
@@ -39,14 +41,29 @@ function check(
 describe("safetyNetCandidates", () => {
   it("keeps free, tool-calling chat models only", () => {
     expect(
-      safetyNetCandidates([
-        { id: "a/chat:free", tools: true },
-        { id: "b/paid", tools: true },
-        { id: "c/notools:free", tools: false },
-        { id: "openrouter/free", tools: true },
-        { id: "d/llama-guard:free", tools: true },
-      ]),
+      safetyNetCandidates(
+        [
+          { id: "a/chat:free", tools: true },
+          { id: "b/paid", tools: true },
+          { id: "c/notools:free", tools: false },
+          { id: "openrouter/free", tools: true },
+          { id: "d/llama-guard:free", tools: true },
+        ],
+        "waiter",
+      ),
     ).toEqual(["a/chat:free"]);
+  });
+
+  it("doesn't need tool calling for the staff assistant", () => {
+    expect(
+      safetyNetCandidates(
+        [
+          { id: "c/notools:free", tools: false },
+          { id: "b/paid", tools: false },
+        ],
+        "staff_assistant",
+      ),
+    ).toEqual(["c/notools:free"]);
   });
 
   it("checks at most a dozen a day", () => {
@@ -54,7 +71,7 @@ describe("safetyNetCandidates", () => {
       id: `m/${String(i).padStart(2, "0")}:free`,
       tools: true,
     }));
-    expect(safetyNetCandidates(many)).toHaveLength(MAX_CANDIDATES);
+    expect(safetyNetCandidates(many, "waiter")).toHaveLength(MAX_CANDIDATES);
   });
 });
 
@@ -87,7 +104,7 @@ describe("nextCheck", () => {
 
   it("records a pass with its time", () => {
     expect(
-      nextCheck(prev, "m:free", { status: "passed", ms: 2500 }, NOW),
+      nextCheck(prev, "waiter", "m:free", { status: "passed", ms: 2500 }, NOW),
     ).toMatchObject({
       status: "passed",
       lastPassedAt: NOW.toISOString(),
@@ -97,7 +114,7 @@ describe("nextCheck", () => {
 
   it("keeps the last pass when the model was only busy", () => {
     expect(
-      nextCheck(prev, "m:free", { status: "busy", ms: 100 }, NOW),
+      nextCheck(prev, "waiter", "m:free", { status: "busy", ms: 100 }, NOW),
     ).toMatchObject({
       status: "busy",
       lastPassedAt: prev.lastPassedAt,
@@ -106,7 +123,13 @@ describe("nextCheck", () => {
   });
 
   it("marks a failure, which takes the model out of the net", () => {
-    const next = nextCheck(prev, "m:free", { status: "failed", ms: 100 }, NOW);
+    const next = nextCheck(
+      prev,
+      "waiter",
+      "m:free",
+      { status: "failed", ms: 100 },
+      NOW,
+    );
     expect(isEligible(next, NOW)).toBe(false);
   });
 });
@@ -247,18 +270,32 @@ describe("the Admin page's list", () => {
 describe("models that failed in real conversations", () => {
   it("are never checked", () => {
     expect(
-      safetyNetCandidates([
-        { id: "poolside/laguna-s-2.1:free", tools: true },
-        { id: "nvidia/nemotron-3.5-lightning:free", tools: true },
-        { id: "fine/model:free", tools: true },
-      ]),
+      safetyNetCandidates(
+        [
+          { id: "poolside/laguna-s-2.1:free", tools: true },
+          { id: "nvidia/nemotron-3.5-lightning:free", tools: true },
+          { id: "fine/model:free", tools: true },
+        ],
+        "waiter",
+      ),
     ).toEqual(["fine/model:free"]);
   });
 
   it("are never used, even with a pass on record", () => {
-    for (const model of Object.keys(NEVER_USE)) {
+    for (const model of Object.keys(NEVER_USE.waiter)) {
       expect(isEligible(check(model, "passed", 1), NOW)).toBe(false);
     }
+  });
+
+  it("only for the job they failed at", () => {
+    // Waiter failures say nothing about reading one staff command.
+    const model = "nvidia/nemotron-3-super-120b-a12b:free";
+    expect(
+      isEligible(check(model, "passed", 1, 5000, "staff_assistant"), NOW),
+    ).toBe(true);
+    expect(
+      safetyNetCandidates([{ id: model, tools: true }], "staff_assistant"),
+    ).toEqual([model]);
   });
 
   it("say why on the Admin page", () => {
