@@ -1,4 +1,5 @@
 import "server-only";
+import { TESTED_MODELS } from "@/lib/admin/model-catalogue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   rankSafetyNet,
@@ -90,8 +91,13 @@ export async function getSafetyNetState(): Promise<SafetyNetState> {
   return cache.state;
 }
 
-/** The models the waiter falls back to, fastest first; empty when switched off. */
+/** The models vetted for the waiter in a real conversation, which the net tries first. */
+export const WAITER_PREFERRED = TESTED_MODELS.waiter.map((t) => t.model);
+
+/** The models the waiter falls back to, vetted ones first; empty when switched off. */
 export async function getSafetyNetModels(): Promise<string[]> {
   const state = await getSafetyNetState();
-  return state.enabled ? rankSafetyNet(state.checks, new Date()) : [];
+  return state.enabled
+    ? rankSafetyNet(state.checks, new Date(), WAITER_PREFERRED)
+    : [];
 }

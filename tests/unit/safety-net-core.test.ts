@@ -9,6 +9,7 @@ import {
   isEligible,
   lastCheckedAt,
   MAX_CANDIDATES,
+  NEVER_USE,
   nextCheck,
   rankSafetyNet,
   safetyNetCandidates,
@@ -240,5 +241,56 @@ describe("the Admin page's list", () => {
         { ...check("b:free", "passed", 1), checkedAt: hoursAgo(2) },
       ]),
     ).toBe(hoursAgo(2));
+  });
+});
+
+describe("models that failed in real conversations", () => {
+  it("are never checked", () => {
+    expect(
+      safetyNetCandidates([
+        { id: "poolside/laguna-s-2.1:free", tools: true },
+        { id: "nvidia/nemotron-3.5-lightning:free", tools: true },
+        { id: "fine/model:free", tools: true },
+      ]),
+    ).toEqual(["fine/model:free"]);
+  });
+
+  it("are never used, even with a pass on record", () => {
+    for (const model of Object.keys(NEVER_USE)) {
+      expect(isEligible(check(model, "passed", 1), NOW)).toBe(false);
+    }
+  });
+
+  it("say why on the Admin page", () => {
+    const [row] = safetyNetRows(
+      [check("poolside/laguna-s-2.1:free", "passed", 1)],
+      NOW,
+    );
+    expect(row).toMatchObject({ rank: null });
+    expect(row.detail).toMatch(/^never used: made up a recommendation/);
+  });
+});
+
+describe("ranking by quality before speed", () => {
+  it("puts the vetted models first, in their order, then the fastest", () => {
+    const checks = [
+      check("tiny:free", "passed", 1, 1000),
+      check("vetted-b:free", "passed", 1, 9000),
+      check("mid:free", "passed", 1, 4000),
+      check("vetted-a:free", "passed", 1, 16000),
+    ];
+    expect(
+      rankSafetyNet(checks, NOW, ["vetted-a:free", "vetted-b:free"]),
+    ).toEqual(["vetted-a:free", "vetted-b:free", "tiny:free", "mid:free"]);
+  });
+
+  it("still leaves out a vetted model that isn't eligible", () => {
+    expect(
+      rankSafetyNet(
+        [check("vetted:free", "failed", 1), check("other:free", "passed", 1)],
+        NOW,
+        ["vetted:free"],
+      ),
+    ).toEqual(["other:free"]);
   });
 });

@@ -16,7 +16,7 @@ import { SafetyNetCard } from "@/components/admin/safety-net-card";
 import { catalogueFor } from "@/lib/admin/model-catalogue";
 import { getOpenRouterModels } from "@/lib/admin/openrouter-models";
 import { getAllModelSettings } from "@/lib/ai/model-settings";
-import { getSafetyNetState } from "@/lib/ai/safety-net";
+import { getSafetyNetState, WAITER_PREFERRED } from "@/lib/ai/safety-net";
 import {
   formatAgo,
   lastCheckedAt,
@@ -213,7 +213,7 @@ export default async function AdminPage() {
       {provider === "openrouter" && (
         <SafetyNetCard
           enabled={safetyNet.enabled}
-          rows={safetyNetRows(safetyNet.checks, now)}
+          rows={safetyNetRows(safetyNet.checks, now, WAITER_PREFERRED)}
           lastChecked={lastCheck ? formatAgo(lastCheck, now) : null}
           canCheck={canTest}
         />

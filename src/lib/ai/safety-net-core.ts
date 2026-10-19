@@ -26,6 +26,23 @@ const NOT_A_MODEL = new Set(["openrouter/free"]);
 /** Music, audio, embedding and safety-classifier models list tool support but are not waiters. */
 const NOT_A_GENERAL_MODEL = /lyria|content-safety|guard|whisper|tts|embed/i;
 
+/**
+ * Models that pass the one-off Test but have failed in real conversations
+ * in this app (src/lib/ai/config.ts records each). A Test is one clean
+ * question; these went wrong over a real, messier conversation, so they
+ * are never checked and never used. Add to this list when another one
+ * does.
+ */
+export const NEVER_USE: Readonly<Record<string, string>> = {
+  "nvidia/nemotron-3.5-lightning:free":
+    "made no menu lookups and took 54 s in a real conversation",
+  "nvidia/nemotron-3-ultra-550b-a55b:free":
+    "answered menu questions without looking them up",
+  "nvidia/nemotron-3-super-120b-a12b:free":
+    "read its private reasoning and instructions out to a diner",
+  "poolside/laguna-s-2.1:free": "made up a recommendation",
+};
+
 export function isFreeName(model: string): boolean {
   return model.endsWith(":free");
 }
@@ -40,7 +57,8 @@ export function safetyNetCandidates(
         isFreeName(m.id) &&
         m.tools &&
         !NOT_A_MODEL.has(m.id) &&
-        !NOT_A_GENERAL_MODEL.test(m.id),
+        !NOT_A_GENERAL_MODEL.test(m.id) &&
+        !(m.id in NEVER_USE),
     )
     .map((m) => m.id)
     .sort()
@@ -60,21 +78,33 @@ export interface FreeModelCheck {
 /** Whether a model may be used: it passed within three days, and its latest check didn't fail. */
 export function isEligible(check: FreeModelCheck, now: Date): boolean {
   if (check.status === "failed" || !check.lastPassedAt) return false;
-  if (!isFreeName(check.model)) return false;
+  if (!isFreeName(check.model) || check.model in NEVER_USE) return false;
   return (
     now.getTime() - new Date(check.lastPassedAt).getTime() <= PASS_VALID_MS
   );
 }
 
-/** The eligible models, fastest passing Test first. */
+/**
+ * The eligible models: first the ones this app has vetted for the waiter
+ * (`preferred`, in its order), then the rest, fastest passing Test first.
+ * Speed alone favours small models, and small models are where
+ * conversation quality falls apart (src/lib/ai/config.ts), so it only
+ * breaks ties among the unvetted.
+ */
 export function rankSafetyNet(
   checks: readonly FreeModelCheck[],
   now: Date,
+  preferred: readonly string[] = [],
 ): string[] {
+  const order = (model: string) => {
+    const i = preferred.indexOf(model);
+    return i === -1 ? preferred.length : i;
+  };
   return checks
     .filter((c) => isEligible(c, now))
     .sort(
       (a, b) =>
+        order(a.model) - order(b.model) ||
         (a.passMs ?? Number.MAX_SAFE_INTEGER) -
           (b.passMs ?? Number.MAX_SAFE_INTEGER) ||
         a.model.localeCompare(b.model),
@@ -154,8 +184,12 @@ export function formatAgo(iso: string, now: Date): string {
 }
 
 /** The Admin page's safety net list: the net in the order it is tried, then everything else checked. */
-export function safetyNetRows(checks: readonly FreeModelCheck[], now: Date) {
-  const net = rankSafetyNet(checks, now);
+export function safetyNetRows(
+  checks: readonly FreeModelCheck[],
+  now: Date,
+  preferred: readonly string[] = [],
+) {
+  const net = rankSafetyNet(checks, now, preferred);
   const rank = new Map(net.map((m, i) => [m, i + 1]));
   const seconds = (ms: number | null) =>
     ms === null ? "" : ` · ${(ms / 1000).toFixed(1)} s`;
@@ -168,7 +202,9 @@ export function safetyNetRows(checks: readonly FreeModelCheck[], now: Date) {
     .map((c) => {
       const inNet = rank.has(c.model);
       let detail: string;
-      if (inNet && c.status === "passed") {
+      if (c.model in NEVER_USE) {
+        detail = `never used: ${NEVER_USE[c.model]}`;
+      } else if (inNet && c.status === "passed") {
         detail = `passed ${formatAgo(c.checkedAt, now)}${seconds(c.passMs)}`;
       } else if (inNet) {
         detail = `busy ${formatAgo(c.checkedAt, now)}, passed ${formatAgo(c.lastPassedAt!, now)}${seconds(c.passMs)}`;
