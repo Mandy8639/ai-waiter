@@ -123,7 +123,32 @@ check; free models only) and `platform_switches` (on/off switches), both server-
 `20261026090000_staff_safety_net.sql` keys `free_model_checks` by job and model, and adds the staff
 assistant's switch.
 
+## Spending, history, Undo and reset (Phase 3)
+
+- **Spending** (top of the page): credit left on the OpenRouter account, this month's and today's
+  spend on the app's key, and the key's limit with how much is used. Read live from OpenRouter
+  (`GET /api/v1/key` and `/api/v1/credits`) with the app's key on every view
+  (`src/lib/admin/openrouter-spend.ts`). A figure OpenRouter didn't send shows "not reported",
+  and if neither request works the card says it couldn't reach OpenRouter: never $0. The limit is
+  set on OpenRouter and only shown here, so nothing on this page can raise it.
+- **Change history**: the last 50 rows of `platform_settings_history`, newest first: when (UTC),
+  who ("you" or "another admin"), which job, from what to what, and the Test that allowed it.
+- **Undo** on a row puts back the list that change replaced, after one confirm. An earlier list
+  is tested again first, exactly as Save would, and only saved if it passes today
+  (`save_platform_models(..., 'undo')`). Going back to "nothing saved" needs no Test, because the
+  Vercel variables and defaults are what ran before (`clear_platform_models(job, user)`). Either
+  way it is recorded as an `undo` row. A row whose job is already back where it started has no
+  Undo.
+- **Emergency reset**: one confirm, then every saved list is cleared and every job is back on its
+  Vercel variable or built-in default within about a minute (`clear_platform_models(null, user)`).
+  Recorded as one `all`/`reset` row whose `test_result.cleared` keeps what was cleared, and who did
+  it. There is no "save without testing"; this is the escape hatch. A reset itself has no Undo: use
+  Change and Test to bring a list back.
+
+Both functions are service-role only and listed in `function-grants.test.ts`
+(`20261027090000_admin_undo_reset.sql`).
+
 ## Still to come
 
-- **Phase 3:** spending (OpenRouter balance and monthly spend), change history with Undo, and an
-  emergency reset.
+See the plan doc: per-restaurant AI cost and a weekly email (Phase 4), side-by-side Test (Phase 5),
+and the later phases.

@@ -23,10 +23,11 @@ const WEBHOOK_ONLY = [
 
 /**
  * Server-only, called with the secret key after the server's own checks.
- * save_platform_models (20261024090000) changes which AI models every
- * restaurant uses; /admin calls it only for the platform admin.
+ * save_platform_models (20261024090000, 20261027090000) and
+ * clear_platform_models (20261027090000) change which AI models every
+ * restaurant uses; /admin calls them only for the platform admin.
  */
-const SERVER_ONLY = ["save_platform_models"];
+const SERVER_ONLY = ["save_platform_models", "clear_platform_models"];
 
 /** Signed-in callers only; each checks its caller inside as well. */
 const SIGNED_IN_ONLY = [
