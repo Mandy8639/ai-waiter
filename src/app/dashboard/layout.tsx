@@ -11,6 +11,7 @@ import { ConciergeBell } from "lucide-react";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
 import { KitchenTabs } from "@/components/dashboard/kitchen-tabs";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
+import { isPlatformAdmin } from "@/lib/admin/access";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { NativeAppBridge } from "@/components/kitchen/native-app-bridge";
 import { RestaurantSwitcher } from "@/components/dashboard/restaurant-switcher";
@@ -37,6 +38,7 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { user, state } = await getDashboardContext();
+  const showAdmin = isPlatformAdmin(user);
 
   if (state.status === "none") {
     return (
@@ -198,6 +200,7 @@ export default async function DashboardLayout({
           role={restaurant.role}
           restaurantId={canSeeReservations ? restaurant.id : undefined}
           pendingRequestCount={pendingRequestCount}
+          showAdmin={showAdmin}
         />
       </aside>
 
@@ -208,6 +211,7 @@ export default async function DashboardLayout({
               role={restaurant.role}
               restaurantId={canSeeReservations ? restaurant.id : undefined}
               pendingRequestCount={pendingRequestCount}
+              showAdmin={showAdmin}
               restaurantName={restaurant.name}
             />
             <RestaurantSwitcher

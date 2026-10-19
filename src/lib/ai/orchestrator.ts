@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { getAiProvider, isAiConfigured } from "./providers";
 import { aiConfig } from "./config";
+import { getModelsFor } from "./model-settings";
 import { buildSystemPrompt } from "./system-prompt";
 import type { AiPersona } from "./persona";
 import { executeTool } from "./tools/index";
@@ -78,6 +79,9 @@ export async function sendAiMessage(
   params: SendAiMessageParams,
 ): Promise<SendAiMessageResult> {
   const start = Date.now();
+  // The primary the logs attribute a turn to when no model served it.
+  const configuredModel =
+    (await getModelsFor("waiter")).models[0] ?? aiConfig.model;
   const { restaurantId, restaurantSlug, restaurantName, customerSessionId } =
     params;
 
@@ -107,7 +111,7 @@ export async function sendAiMessage(
       customerSessionId,
       toolCallCount: 0,
       latencyMs: Date.now() - start,
-      model: aiConfig.model,
+      model: configuredModel,
       provider: aiConfig.provider,
       outcome: "rate_limited",
     });
@@ -186,7 +190,7 @@ export async function sendAiMessage(
         customerSessionId,
         toolCallCount: loopResult.toolCallCount,
         latencyMs: Date.now() - start,
-        model: loopResult.servedModel ?? aiConfig.model,
+        model: loopResult.servedModel ?? configuredModel,
         provider: aiConfig.provider,
         outcome: "refused",
       });
@@ -209,7 +213,7 @@ export async function sendAiMessage(
         customerSessionId,
         toolCallCount: loopResult.toolCallCount,
         latencyMs: Date.now() - start,
-        model: loopResult.servedModel ?? aiConfig.model,
+        model: loopResult.servedModel ?? configuredModel,
         provider: aiConfig.provider,
         outcome: "tool_limit_exceeded",
       });
@@ -234,7 +238,7 @@ export async function sendAiMessage(
         customerSessionId,
         toolCallCount: loopResult.toolCallCount,
         latencyMs: Date.now() - start,
-        model: loopResult.servedModel ?? aiConfig.model,
+        model: loopResult.servedModel ?? configuredModel,
         provider: aiConfig.provider,
         // Logged per guard even where the diner sees the same words: the
         // menu-claim guard (phase D) fires on a price or halal claim the
@@ -271,7 +275,7 @@ export async function sendAiMessage(
         customerSessionId,
         toolCallCount: loopResult.toolCallCount,
         latencyMs: Date.now() - start,
-        model: loopResult.servedModel ?? aiConfig.model,
+        model: loopResult.servedModel ?? configuredModel,
         provider: aiConfig.provider,
         outcome: "ok",
       });
@@ -304,7 +308,7 @@ export async function sendAiMessage(
       latencyMs: Date.now() - start,
       // The call threw, so no model served this turn — the configured
       // primary is the only meaningful thing to attribute it to.
-      model: aiConfig.model,
+      model: configuredModel,
       provider: aiConfig.provider,
       outcome: "provider_error",
     });

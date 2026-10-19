@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ShieldCheck } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, NAV_ITEMS } from "./nav-items";
@@ -14,8 +15,11 @@ export function DashboardNav({
   className,
   restaurantId,
   pendingRequestCount,
+  showAdmin = false,
 }: {
   role: RestaurantRole;
+  /** The platform owner's /admin link. Presentation only: the page checks for itself. */
+  showAdmin?: boolean;
   onNavigate?: () => void;
   className?: string;
   /** Present only when this viewer can see reservations at all — see the layout. */
@@ -86,6 +90,24 @@ export function DashboardNav({
           </div>
         );
       })}
+      {showAdmin && (
+        <div className="flex flex-col gap-0.5">
+          <p className="type-overline text-muted-foreground px-3 pb-1.5">
+            Platform
+          </p>
+          <Link
+            href="/admin"
+            onClick={onNavigate}
+            className="type-label text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground focus-visible:ring-ring/50 flex h-9 items-center gap-2.5 rounded-lg px-3 text-[0.875rem] transition-colors duration-150 focus-visible:ring-3 focus-visible:outline-none"
+          >
+            <ShieldCheck
+              className="text-muted-foreground size-4 shrink-0"
+              aria-hidden="true"
+            />
+            <span className="flex-1">Admin</span>
+          </Link>
+        </div>
+      )}
     </nav>
   );
 }

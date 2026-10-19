@@ -19,11 +19,13 @@ export function MobileNav({
   restaurantId,
   pendingRequestCount,
   restaurantName,
+  showAdmin = false,
 }: {
   role: RestaurantRole;
   restaurantId?: string;
   pendingRequestCount?: number;
   restaurantName: string;
+  showAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -53,6 +55,7 @@ export function MobileNav({
             role={role}
             restaurantId={restaurantId}
             pendingRequestCount={pendingRequestCount}
+            showAdmin={showAdmin}
             onNavigate={() => setOpen(false)}
           />
         </DialogPrimitive.Popup>

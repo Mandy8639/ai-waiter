@@ -233,6 +233,8 @@ More detail, including what's intentionally _not_ created yet and why, in
 - [`docs/architecture.md`](docs/architecture.md) — system design, customer/restaurant/kitchen flows
 - [`docs/database.md`](docs/database.md) — schema, constraints, indexes, RLS
 - [`docs/ai.md`](docs/ai.md) — AI waiter architecture, tools, prompt injection defense
+- [`docs/admin.md`](docs/admin.md) — the platform owner's Admin page: who can open it, AI model
+  settings
 - [`docs/pickup-ordering.md`](docs/pickup-ordering.md) — pickup counters, slots, when the kitchen
   starts
 - [`docs/security.md`](docs/security.md) — security model, implemented vs. planned

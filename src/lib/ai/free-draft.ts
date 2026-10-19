@@ -1,7 +1,7 @@
 import { openRouterModels } from "@/lib/ai/model-list";
 import "server-only";
 import { aiConfig } from "@/lib/ai/config";
-import { isFreeModel } from "@/lib/translations/core";
+import { getModelsFor } from "@/lib/ai/model-settings";
 import { retryDraft, type DraftAttempt } from "./free-draft-core";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
@@ -26,15 +26,14 @@ export async function freeModelDraft<T>(input: {
   /** Whether a parsed value has anything worth saving. */
   usable: (value: T) => boolean;
 }): Promise<FreeDraftResult<T>> {
-  if (!isFreeModel(aiConfig.provider, aiConfig.model)) {
+  // Drafts have their own list (saved on /admin, else AI_DRAFT_MODEL),
+  // already filtered to free models; empty means no free model is set.
+  const { models: draftModels } = await getModelsFor("drafts");
+  if (draftModels.length === 0) {
     return { ok: false, reason: "not_free" };
   }
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return { ok: false, reason: "not_configured" };
-
-  const freeFallbacks = aiConfig.modelFallbacks.filter((m) =>
-    isFreeModel(aiConfig.provider, m),
-  );
 
   const attempt = async (timeoutMs: number): Promise<DraftAttempt<T>> => {
     try {
@@ -49,9 +48,9 @@ export async function freeModelDraft<T>(input: {
         body: JSON.stringify({
           // Same rule as openrouter-model-call.ts: never send `model` and
           // `models` together.
-          ...(freeFallbacks.length > 0
-            ? { models: openRouterModels([aiConfig.model, ...freeFallbacks]) }
-            : { model: aiConfig.model }),
+          ...(draftModels.length > 1
+            ? { models: openRouterModels(draftModels) }
+            : { model: draftModels[0] }),
           max_tokens: input.maxTokens,
           // Thinking off: the free models think before answering, and the
           // thinking spends the same allowance. Found 2026-10-18 on a real
