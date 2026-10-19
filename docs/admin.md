@@ -12,6 +12,9 @@ later phases, is the "Tableside Admin Page — What We're Building" doc.
   it, the page asks you to turn it on in `/account`.
 - `src/lib/admin/access.ts` (`requirePlatformAdmin()`) checks both on the server for every page
   view. The sidebar's **Admin** link (`isPlatformAdmin()`) is presentation only.
+- An admin account needn't run a restaurant. With none, signing in (which lands on `/dashboard`)
+  goes straight to `/admin` instead of "Create your restaurant", and the Admin page shows Account
+  and Log out in place of its Dashboard link. To open a restaurant anyway, go to `/onboarding`.
 
 ## AI models
 

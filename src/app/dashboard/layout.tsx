@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -41,6 +42,9 @@ export default async function DashboardLayout({
   const showAdmin = isPlatformAdmin(user);
 
   if (state.status === "none") {
+    // A platform admin needn't run a restaurant: their home is the Admin
+    // page, which checks two-step verification itself.
+    if (showAdmin) redirect("/admin");
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-16">
         <Card className="w-full max-w-md text-center">
