@@ -2,6 +2,8 @@ import "server-only";
 import { aiConfig } from "../config";
 import { getModelsFor } from "../model-settings";
 import { runConversationLoop } from "../loop";
+import { callWithSafetyNet } from "../safety-net-core";
+import { getSafetyNetModels } from "../safety-net";
 import { getToolDefinitions } from "../tools/index";
 import { callOpenRouterModel } from "./openrouter-model-call";
 import {
@@ -59,16 +61,31 @@ export function createOpenRouterProvider(): AiProvider {
       return runConversationLoop<OpenRouterMessage[]>({
         initialMessages,
         maxToolCalls: turn.maxToolCalls,
+        // When every model in the list is busy, one more try on the free
+        // safety net (docs/admin.md) rather than no answer at all.
         callModel: (messages) =>
-          callOpenRouterModel({
-            endpoint: OPENROUTER_ENDPOINT,
-            apiKey,
-            model: models[0],
-            fallbackModels: models.slice(1),
-            maxOutputTokens: aiConfig.maxOutputTokens,
-            requestTimeoutMs: aiConfig.requestTimeoutMs,
-            messages,
-            tools,
+          callWithSafetyNet({
+            primary: models,
+            safetyNet: getSafetyNetModels,
+            onUsed: (net, error) =>
+              console.info(
+                JSON.stringify({
+                  event: "waiter_safety_net_used",
+                  models: net,
+                  reason: error.category,
+                }),
+              ),
+            call: (list) =>
+              callOpenRouterModel({
+                endpoint: OPENROUTER_ENDPOINT,
+                apiKey,
+                model: list[0],
+                fallbackModels: list.slice(1),
+                maxOutputTokens: aiConfig.maxOutputTokens,
+                requestTimeoutMs: aiConfig.requestTimeoutMs,
+                messages,
+                tools,
+              }),
           }),
         callTool: turn.callTool,
         appendAssistantMessage,

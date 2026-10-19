@@ -75,6 +75,28 @@ uses the new list at once; the others within a minute.
 
 A Test on a paid model spends real credit, typically under a cent for the text jobs.
 
+## Free safety net
+
+Only one free model has held a real conversation as the waiter, so a busy free tier could leave the
+waiter with nothing to answer with. The safety net covers that.
+
+- **Daily check.** Once a day (Vercel Cron, 11:00 UTC, `/api/cron/free-model-check`, needs
+  `CRON_SECRET`), the waiter Test from the table above runs on every free (`:free`), tool-calling
+  model OpenRouter lists, up to 12, six at a time. Free models only, so it costs nothing. **Check
+  now** on `/admin` runs the same check.
+- **Who is in the net.** A model that passed in the last three days, and whose latest check didn't
+  fail. A model that was only busy keeps its last pass. Fastest passing Test first.
+- **When it is used.** Only when OpenRouter answers busy (429), an HTTP error or a timeout for the
+  waiter's whole saved list. The waiter then makes one more try with the top three models in the
+  net, skipping any already in its own list. Each use is logged as `waiter_safety_net_used`, and
+  the turn's log names the model that answered.
+- **Switch.** "Use the safety net for the waiter" on `/admin`. On by default (no row in
+  `platform_switches` means on).
+
+A Test pass is one good answer, not a track record, so the net only ever replaces "no answer at
+all". Code: `src/lib/ai/safety-net-core.ts` (rules), `src/lib/ai/safety-net.ts` (read, cached a
+minute), `src/lib/admin/safety-net-check.ts` (the daily check).
+
 ## The store
 
 `20261023090000_platform_settings.sql`: `platform_settings` (one row per job, 1–3 models) and
@@ -82,6 +104,8 @@ A Test on a paid model spends real credit, typically under a cent for the text j
 the table privileges are revoked from `anon` and `authenticated`, so only the server reads or writes
 them. `20261024090000_admin_model_tests.sql` adds `platform_model_tests` (every Test run on
 /admin, same protections) and `save_platform_models()`, the only way a list is saved.
+`20261025090000_waiter_safety_net.sql` adds `free_model_checks` (each free model's latest daily
+check; free models only) and `platform_switches` (on/off switches), both server-only.
 
 ## Still to come
 

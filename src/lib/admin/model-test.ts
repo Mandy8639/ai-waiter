@@ -74,6 +74,8 @@ interface CallResult {
 class Meter {
   costUsd: number | null = 0;
   servedModel: string | undefined;
+  /** OpenRouter answered "busy" (rate limited or overloaded) at least once. */
+  busy = false;
 
   async call(
     models: string[],
@@ -122,6 +124,7 @@ class Meter {
       | null;
     if (json?.model) this.servedModel = json.model;
     if (!response.ok) {
+      if ([429, 502, 503].includes(response.status)) this.busy = true;
       // A refused request isn't billed, so it leaves the cost as it was.
       const message =
         typeof json?.error?.message === "string" ? json.error.message : "";
@@ -323,5 +326,6 @@ export async function runModelTest(
     ms: Date.now() - started,
     costUsd: meter.costUsd,
     ...(outcome.error ? { error: outcome.error } : {}),
+    ...(outcome.error && meter.busy ? { busy: true } : {}),
   };
 }

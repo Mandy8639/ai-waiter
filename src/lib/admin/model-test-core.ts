@@ -49,6 +49,8 @@ export interface ModelTestResult {
   costUsd: number | null;
   /** Why it couldn't run at all (busy, timed out, not configured). */
   error?: string;
+  /** It couldn't run because OpenRouter said the model was busy, which says nothing about the model. */
+  busy?: true;
 }
 
 export const REPLY_EXCERPT_LENGTH = 600;

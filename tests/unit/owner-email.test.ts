@@ -524,8 +524,14 @@ describe("the boundary around the service-role sender", () => {
     const config = JSON.parse(
       readFileSync(path.resolve("vercel.json"), "utf8"),
     );
-    expect(config.crons).toEqual([
-      { path: "/api/cron/daily-summary", schedule: "0 13 * * *" },
-    ]);
+    expect(config.crons).toContainEqual({
+      path: "/api/cron/daily-summary",
+      schedule: "0 13 * * *",
+    });
+    // Hobby runs a cron at most once a day: a fixed minute and hour, every
+    // day. The free-model check (docs/admin.md) is held to the same rule.
+    for (const cron of config.crons as { schedule: string }[]) {
+      expect(cron.schedule).toMatch(/^\d{1,2} \d{1,2} \* \* \*$/);
+    }
   });
 });
