@@ -30,8 +30,26 @@ export type PlatformAdminAccess =
  * session (aal2): the page changes what every restaurant's diners get.
  */
 export async function requirePlatformAdmin(): Promise<PlatformAdminAccess> {
+  const access = await platformAdminAccess();
+  if (access === "not_listed") notFound();
+  if (access === "needs_code") redirect(TWO_FACTOR_PATH);
+  return access;
+}
+
+/**
+ * The same checks for a server action, which returns an error instead of
+ * redirecting. Null unless every check passes, two-step code included.
+ */
+export async function platformAdminForAction(): Promise<User | null> {
+  const access = await platformAdminAccess();
+  return typeof access === "object" && access.ok ? access.user : null;
+}
+
+async function platformAdminAccess(): Promise<
+  PlatformAdminAccess | "not_listed" | "needs_code"
+> {
   const user = await requireUser();
-  if (!isPlatformAdmin(user)) notFound();
+  if (!isPlatformAdmin(user)) return "not_listed";
 
   if (!hasVerifiedTwoFactor(user.factors)) {
     return { ok: false, reason: "needs_two_factor", user };
@@ -40,7 +58,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminAccess> {
   const supabase = await createClient();
   const { data: aal } =
     await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (aal?.currentLevel !== "aal2") redirect(TWO_FACTOR_PATH);
+  if (aal?.currentLevel !== "aal2") return "needs_code";
 
   return { ok: true, user };
 }

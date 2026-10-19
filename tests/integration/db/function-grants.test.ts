@@ -21,6 +21,13 @@ const WEBHOOK_ONLY = [
   "record_restaurant_subscription",
 ];
 
+/**
+ * Server-only, called with the secret key after the server's own checks.
+ * save_platform_models (20261024090000) changes which AI models every
+ * restaurant uses; /admin calls it only for the platform admin.
+ */
+const SERVER_ONLY = ["save_platform_models"];
+
 /** Signed-in callers only; each checks its caller inside as well. */
 const SIGNED_IN_ONLY = [
   "count_recent_orders_for_session",
@@ -187,15 +194,18 @@ describe("function EXECUTE grants", () => {
     return rows;
   }
 
-  it.each(WEBHOOK_ONLY)("%s is callable by service_role only", async (name) => {
-    const row = (await grants()).find((r) => r.name === name);
-    expect(row).toBeDefined();
-    expect(row).toMatchObject({
-      anon: false,
-      authenticated: false,
-      service_role: true,
-    });
-  });
+  it.each([...WEBHOOK_ONLY, ...SERVER_ONLY])(
+    "%s is callable by service_role only",
+    async (name) => {
+      const row = (await grants()).find((r) => r.name === name);
+      expect(row).toBeDefined();
+      expect(row).toMatchObject({
+        anon: false,
+        authenticated: false,
+        service_role: true,
+      });
+    },
+  );
 
   it.each(SIGNED_IN_ONLY)(
     "%s is refused to anon and allowed to signed-in callers",

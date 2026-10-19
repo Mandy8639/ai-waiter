@@ -68,6 +68,23 @@ describe("getModelsFor", () => {
     expect(select).toHaveBeenCalledTimes(2);
   });
 
+  it("gives the waiter a newly saved list within a minute", async () => {
+    vi.useFakeTimers();
+    select.mockResolvedValue({ data: [], error: null });
+    expect((await getModelsFor("waiter")).source).toBe("env");
+
+    // Saved on /admin, served by another server instance: this one sees it
+    // once its cache runs out.
+    select.mockResolvedValue({
+      data: [{ job: "waiter", models: ["new/paid"] }],
+      error: null,
+    });
+    vi.advanceTimersByTime(30_000);
+    expect((await getModelsFor("waiter")).models).toEqual(["env/waiter:free"]);
+    vi.advanceTimersByTime(31_000);
+    expect((await getModelsFor("waiter")).models).toEqual(["new/paid"]);
+  });
+
   it("falls back to the Vercel variable when the store can't be read", async () => {
     select.mockResolvedValue({ data: null, error: { message: "down" } });
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
