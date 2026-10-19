@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { runSafetyNetCheck } from "@/lib/admin/safety-net-check";
+import { runAllSafetyNetChecks } from "@/lib/admin/safety-net-check";
 import { isAuthorizedCronRequest } from "@/lib/email/cron-auth";
 
 /**
- * The waiter's free safety net: once a day, the waiter Test on each free
- * tool-calling model (src/lib/admin/safety-net-check.ts). Run by Vercel
+ * The free safety net: once a day, each live job's Test (the staff
+ * assistant's, then the waiter's) on each free model that could do it
+ * (src/lib/admin/safety-net-check.ts). Run by Vercel
  * Cron (vercel.json), with the same CRON_SECRET check as the daily
  * summary: anything else is refused, and everything is when the secret
  * is unset. Free models only, so a stray run costs nothing.
@@ -23,8 +24,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const summary = await runSafetyNetCheck();
-    return NextResponse.json(summary, { status: summary.error ? 500 : 200 });
+    const summary = await runAllSafetyNetChecks();
+    const failed = Object.values(summary).some((s) => s.error);
+    return NextResponse.json(summary, { status: failed ? 500 : 200 });
   } catch (error) {
     console.error(
       JSON.stringify({

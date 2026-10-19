@@ -66,7 +66,7 @@ export function createOpenRouterProvider(): AiProvider {
         callModel: (messages) =>
           callWithSafetyNet({
             primary: models,
-            safetyNet: getSafetyNetModels,
+            safetyNet: () => getSafetyNetModels("waiter"),
             onUsed: (net, error) =>
               console.info(
                 JSON.stringify({

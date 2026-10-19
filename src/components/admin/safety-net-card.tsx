@@ -16,6 +16,7 @@ import {
   checkSafetyNetNow,
   setSafetyNetEnabled,
 } from "@/lib/admin/safety-net-actions";
+import type { SafetyNetJob } from "@/lib/ai/safety-net-core";
 
 export interface SafetyNetRow {
   model: string;
@@ -26,17 +27,39 @@ export interface SafetyNetRow {
   detail: string;
 }
 
+const COPY: Record<
+  SafetyNetJob,
+  { title: string; description: string; switchLabel: string; slow: string }
+> = {
+  waiter: {
+    title: "Free safety net: diner's AI waiter",
+    description:
+      "When every model in the waiter's list is busy, it tries these free models instead of telling the diner it can't answer. Each one passed the waiter Test in the last three days. They're checked again every day, at no cost.",
+    switchLabel: "Use the safety net for the waiter",
+    slow: "Testing each free model. This takes up to three minutes.",
+  },
+  staff_assistant: {
+    title: "Free safety net: staff assistant",
+    description:
+      "When every model in the staff assistant's list is busy, it tries these free models instead of saying it didn't catch the command. Each one passed the staff assistant Test in the last three days, and staff still confirm every change. Checked again every day, at no cost.",
+    switchLabel: "Use the safety net for the staff assistant",
+    slow: "Testing each free model. This takes about a minute.",
+  },
+};
+
 /**
- * The Admin page's "Free safety net" card (docs/admin.md): which free
- * models the waiter falls back to when its own list is busy, the on/off
- * switch, and "Check now" for the daily check.
+ * One job's "Free safety net" card on /admin (docs/admin.md): which free
+ * models it falls back to when its own list is busy, the on/off switch,
+ * and "Check now" for that job's daily check.
  */
 export function SafetyNetCard({
+  job,
   enabled,
   rows,
   lastChecked,
   canCheck,
 }: {
+  job: SafetyNetJob;
   enabled: boolean;
   rows: SafetyNetRow[];
   /** "3 h ago", or null when no check has run yet. */
@@ -49,6 +72,7 @@ export function SafetyNetCard({
   const [switching, startSwitch] = useTransition();
   const [checking, startCheck] = useTransition();
 
+  const copy = COPY[job];
   const inNet = rows.filter((r) => r.rank !== null);
   const others = rows.filter((r) => r.rank === null);
 
@@ -56,7 +80,7 @@ export function SafetyNetCard({
     setError(null);
     setOn(next);
     startSwitch(async () => {
-      const result = await setSafetyNetEnabled(next);
+      const result = await setSafetyNetEnabled(job, next);
       if (!result.ok) {
         setOn(!next);
         setError(result.error);
@@ -68,7 +92,7 @@ export function SafetyNetCard({
     setError(null);
     setMessage(null);
     startCheck(async () => {
-      const result = await checkSafetyNetNow();
+      const result = await checkSafetyNetNow(job);
       if ("checked" in result && !result.error) {
         setMessage(
           `Checked ${result.checked} free models: ${result.passed} passed, ${result.failed} failed, ${result.busy} busy.`,
@@ -82,24 +106,17 @@ export function SafetyNetCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Free safety net</CardTitle>
-        <CardDescription>
-          When every model in the waiter&apos;s list is busy, it tries these
-          free models instead of telling the diner it can&apos;t answer. Each
-          one passed the waiter Test in the last three days. They&apos;re
-          checked again every day, at no cost.
-        </CardDescription>
+        <CardTitle className="text-base">{copy.title}</CardTitle>
+        <CardDescription>{copy.description}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <label className="flex items-center justify-between gap-3 rounded-md border p-3">
-          <span className="text-sm font-medium">
-            Use the safety net for the waiter
-          </span>
+          <span className="text-sm font-medium">{copy.switchLabel}</span>
           <Switch
             checked={on}
             disabled={switching}
             onCheckedChange={(checked) => toggle(checked)}
-            aria-label="Use the safety net for the waiter"
+            aria-label={copy.switchLabel}
           />
         </label>
 
@@ -117,7 +134,7 @@ export function SafetyNetCard({
         {inNet.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             {lastChecked
-              ? "No free model passed the waiter Test in the last three days, so there's no safety net right now."
+              ? "No free model passed the Test in the last three days, so there's no safety net right now."
               : "No check has run yet. Press Check now, or wait for the daily check."}
           </p>
         ) : (
@@ -172,7 +189,7 @@ export function SafetyNetCard({
           </Button>
           <span className="text-muted-foreground text-xs" aria-live="polite">
             {checking
-              ? "Testing each free model. This takes up to three minutes."
+              ? copy.slow
               : lastChecked
                 ? `Last checked ${lastChecked}.`
                 : "Never checked."}

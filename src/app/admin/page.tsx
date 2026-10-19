@@ -16,10 +16,15 @@ import { SafetyNetCard } from "@/components/admin/safety-net-card";
 import { catalogueFor } from "@/lib/admin/model-catalogue";
 import { getOpenRouterModels } from "@/lib/admin/openrouter-models";
 import { getAllModelSettings } from "@/lib/ai/model-settings";
-import { getSafetyNetState, WAITER_PREFERRED } from "@/lib/ai/safety-net";
+import {
+  checksFor,
+  getSafetyNetState,
+  preferredFor,
+} from "@/lib/ai/safety-net";
 import {
   formatAgo,
   lastCheckedAt,
+  SAFETY_NET_JOBS,
   safetyNetRows,
 } from "@/lib/ai/safety-net-core";
 import {
@@ -86,7 +91,6 @@ export default async function AdminPage() {
     getSafetyNetState(),
   ]);
   const now = new Date();
-  const lastCheck = lastCheckedAt(safetyNet.checks);
   const provider = aiConfig.provider;
   const canTest = !!process.env.OPENROUTER_API_KEY;
 
@@ -210,14 +214,21 @@ export default async function AdminPage() {
         </CardContent>
       </Card>
 
-      {provider === "openrouter" && (
-        <SafetyNetCard
-          enabled={safetyNet.enabled}
-          rows={safetyNetRows(safetyNet.checks, now, WAITER_PREFERRED)}
-          lastChecked={lastCheck ? formatAgo(lastCheck, now) : null}
-          canCheck={canTest}
-        />
-      )}
+      {provider === "openrouter" &&
+        SAFETY_NET_JOBS.map((job) => {
+          const checks = checksFor(safetyNet, job);
+          const lastCheck = lastCheckedAt(checks);
+          return (
+            <SafetyNetCard
+              key={job}
+              job={job}
+              enabled={safetyNet.enabled[job]}
+              rows={safetyNetRows(checks, now, preferredFor(job))}
+              lastChecked={lastCheck ? formatAgo(lastCheck, now) : null}
+              canCheck={canTest}
+            />
+          );
+        })}
     </main>
   );
 }

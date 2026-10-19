@@ -3,28 +3,37 @@ import { TESTED_MODELS } from "@/lib/admin/model-catalogue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   rankSafetyNet,
+  SAFETY_NET_JOBS,
+  switchName,
   type CheckStatus,
   type FreeModelCheck,
+  type SafetyNetJob,
 } from "./safety-net-core";
 
 /**
- * The waiter's free safety net, read from the store (safety-net-core.ts
+ * The free safety net for each live job, read from the store (safety-net-core.ts
  * has the rules). Read with the service-role client, like
  * model-settings.ts, and kept for a minute per server instance: the net
- * is only needed when the waiter's own list is busy, and then it must not
- * add a slow database read. A failed read means "no safety net" for 15
- * seconds; the waiter then fails exactly as it would have without one.
+ * is only needed when a job's own list is busy, and then it must not add
+ * a slow database read. A failed read means "no safety net" for 15
+ * seconds; the job then fails exactly as it would have without one.
  */
 
 const CACHE_MS = 60_000;
 const ERROR_CACHE_MS = 15_000;
 
 export interface SafetyNetState {
-  enabled: boolean;
+  enabled: Record<SafetyNetJob, boolean>;
   checks: FreeModelCheck[];
 }
 
+const OFF: SafetyNetState = {
+  enabled: { waiter: false, staff_assistant: false },
+  checks: [],
+};
+
 interface CheckRow {
+  job: SafetyNetJob;
   model: string;
   status: CheckStatus;
   last_passed_at: string | null;
@@ -47,26 +56,28 @@ export function clearSafetyNetCache(): void {
 
 export async function getSafetyNetState(): Promise<SafetyNetState> {
   if (cache && Date.now() - cache.at < cache.ttl) return cache.state;
-  if (!process.env.SUPABASE_SECRET_KEY) {
-    return { enabled: false, checks: [] };
-  }
+  if (!process.env.SUPABASE_SECRET_KEY) return OFF;
   try {
     const store = createAdminClient() as unknown as Store;
     const [switches, checks] = await Promise.all([
       store.from("platform_switches").select("name, enabled"),
       store
         .from("free_model_checks")
-        .select("model, status, last_passed_at, pass_ms, checked_at"),
+        .select("job, model, status, last_passed_at, pass_ms, checked_at"),
     ]);
     if (switches.error) throw switches.error;
     if (checks.error) throw checks.error;
-    const row = (switches.data as { name: string; enabled: boolean }[]).find(
-      (s) => s.name === "waiter_safety_net",
-    );
+    const rows = switches.data as { name: string; enabled: boolean }[];
     const state: SafetyNetState = {
       // No row means on: the switch exists to turn it off.
-      enabled: row?.enabled ?? true,
+      enabled: Object.fromEntries(
+        SAFETY_NET_JOBS.map((job) => [
+          job,
+          rows.find((s) => s.name === switchName(job))?.enabled ?? true,
+        ]),
+      ) as Record<SafetyNetJob, boolean>,
       checks: (checks.data as CheckRow[]).map((r) => ({
+        job: r.job,
         model: r.model,
         status: r.status,
         lastPassedAt: r.last_passed_at,
@@ -82,22 +93,28 @@ export async function getSafetyNetState(): Promise<SafetyNetState> {
         error: error instanceof Error ? error.message : String(error),
       }),
     );
-    cache = {
-      at: Date.now(),
-      ttl: ERROR_CACHE_MS,
-      state: { enabled: false, checks: [] },
-    };
+    cache = { at: Date.now(), ttl: ERROR_CACHE_MS, state: OFF };
   }
   return cache.state;
 }
 
-/** The models vetted for the waiter in a real conversation, which the net tries first. */
-export const WAITER_PREFERRED = TESTED_MODELS.waiter.map((t) => t.model);
+/** The models vetted for a job (the Admin page's catalogue), which its net tries first. */
+export function preferredFor(job: SafetyNetJob): string[] {
+  return TESTED_MODELS[job].map((t) => t.model);
+}
 
-/** The models the waiter falls back to, vetted ones first; empty when switched off. */
-export async function getSafetyNetModels(): Promise<string[]> {
+/** One job's checks. */
+export function checksFor(
+  state: SafetyNetState,
+  job: SafetyNetJob,
+): FreeModelCheck[] {
+  return state.checks.filter((c) => c.job === job);
+}
+
+/** The models a job falls back to, vetted ones first; empty when switched off. */
+export async function getSafetyNetModels(job: SafetyNetJob): Promise<string[]> {
   const state = await getSafetyNetState();
-  return state.enabled
-    ? rankSafetyNet(state.checks, new Date(), WAITER_PREFERRED)
+  return state.enabled[job]
+    ? rankSafetyNet(checksFor(state, job), new Date(), preferredFor(job))
     : [];
 }
