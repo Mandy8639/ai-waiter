@@ -38,6 +38,21 @@ The rule is enforced in three places, not one:
 | Parser   | `menu_import_items.price` is nullable; the Zod schema accepts `number \| null` and rejects a string |
 | Database | `commit_menu_import()` raises `MENU_IMPORT_UNPRICED_ITEMS` rather than defaulting to 0              |
 
+### Two prices for one dish (2026-10-19)
+
+A board can disagree with itself: a real 249-dish import listed Chicken Tikka Masala at $18 and $19
+in the same section. The reader used to keep the first and drop the second, so nobody saw it. Now:
+
+- The parser drops a repeat only when the section, name **and** price all match.
+- The review screen marks both rows ("Also listed in this section at 19.00") and holds **Add**
+  until one is unticked, a price is fixed, or one is renamed.
+- `commit_menu_import()` raises `MENU_IMPORT_PRICE_CONFLICT` on the same rule
+  (`src/lib/menu-import/price-conflicts.ts` is the screen's copy), so a stale screen can't skip it.
+
+The same name in two _different_ sections (a $7 appetizer and a $17 entree) is two dishes, not a
+conflict, and is never flagged. Imports already sitting in review from before this change have
+lost their second price; re-import those photos to see both.
+
 `menu_import_items.price` being nullable where `menu_items.price` is `NOT NULL` is the whole point
 of a separate staging table: "the board gives no price" must be _representable_ before it can be
 resolved.
@@ -75,7 +90,8 @@ false }`). Asking for low effort wasn't enough. On DESI DHAMAKA's real 134-dish 
   matching the board, read the other photo's 121 dishes in 20 seconds, and still left the
   fixture's trap line unpriced on three runs out of three.
 - A failed photo is retried once, with a different model first.
-- Results are merged in photo order, and a dish read twice across overlapping photos is dropped.
+- Results are merged in photo order, and a dish read twice across overlapping photos at the same
+  price is dropped. At a different price both rows are kept and flagged (see below).
 - If any photo still fails, nothing is kept, and the message names the photo ("Couldn't read
   photo 2…"), says the reader is busy, or says it took too long.
 

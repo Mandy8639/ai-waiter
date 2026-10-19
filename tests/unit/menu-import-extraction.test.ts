@@ -93,6 +93,26 @@ describe("parseExtraction", () => {
     expect(out.drafts).toHaveLength(1);
   });
 
+  it("keeps the same dish twice in one category when the prices differ", () => {
+    // From a real 249-dish import (2026-10-18): Chicken Tikka Masala at $18
+    // and $19 in one section. Keeping the first silently hid the second
+    // price; both now reach review, where the pair is flagged.
+    const out = parseExtraction(
+      JSON.stringify({
+        categories: [
+          {
+            name: "Chicken Entrees",
+            items: [
+              { name: "Chicken Tikka Masala", price: 18 },
+              { name: "Chicken Tikka Masala", price: 19 },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(out.drafts.map((d) => d.price)).toEqual([18, 19]);
+  });
+
   it("keeps the same dish name under two different categories", () => {
     const out = parseExtraction(
       JSON.stringify({

@@ -172,6 +172,48 @@ describe("commit_menu_import", () => {
     expect(result.rows[0].items_created).toBe(1);
   });
 
+  it("refuses a dish listed twice in one section at two prices", async () => {
+    // From the same real import: Chicken Tikka Masala at $18 and $19 in
+    // one section. Someone has to choose; nothing is added until they do.
+    const importId = await newImport([
+      { category: "Chicken Entrees", name: "Chicken Tikka Masala", price: 18 },
+      { category: "chicken entrees", name: "chicken  tikka masala", price: 19 },
+    ]);
+
+    await expect(
+      db.asUser(ownerId, (client) =>
+        client.query("select * from public.commit_menu_import($1);", [
+          importId,
+        ]),
+      ),
+    ).rejects.toThrow(/MENU_IMPORT_PRICE_CONFLICT/);
+
+    const { rows } = await db.admin.query<{ count: string }>(
+      "select count(*)::text as count from public.menu_items where restaurant_id = $1 and name ilike 'chicken tikka masala';",
+      [restaurantId],
+    );
+    expect(Number(rows[0].count)).toBe(0);
+  });
+
+  it("adds the dish once the reviewer unticks one of the two prices", async () => {
+    const importId = await newImport([
+      { category: "Curries", name: "Natu Kodi Curry", price: 20 },
+      { category: "Curries", name: "Natu Kodi Curry", price: 21 },
+    ]);
+    await db.admin.query(
+      "update public.menu_import_items set include = false where import_id = $1 and price = 21;",
+      [importId],
+    );
+
+    const result = await db.asUser(ownerId, (client) =>
+      client.query<{ items_created: number }>(
+        "select * from public.commit_menu_import($1);",
+        [importId],
+      ),
+    );
+    expect(result.rows[0].items_created).toBe(1);
+  });
+
   it("never commits the same import twice", async () => {
     const importId = await newImport([
       { category: "Soups", name: "Tomato Soup", price: 6.99 },
