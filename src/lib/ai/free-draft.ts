@@ -1,3 +1,4 @@
+import { openRouterModels } from "@/lib/ai/model-list";
 import "server-only";
 import { aiConfig } from "@/lib/ai/config";
 import { isFreeModel } from "@/lib/translations/core";
@@ -49,7 +50,7 @@ export async function freeModelDraft<T>(input: {
           // Same rule as openrouter-model-call.ts: never send `model` and
           // `models` together.
           ...(freeFallbacks.length > 0
-            ? { models: [aiConfig.model, ...freeFallbacks] }
+            ? { models: openRouterModels([aiConfig.model, ...freeFallbacks]) }
             : { model: aiConfig.model }),
           max_tokens: input.maxTokens,
           // Thinking off: the free models think before answering, and the

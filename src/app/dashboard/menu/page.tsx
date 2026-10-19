@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DeleteButton } from "@/components/dashboard/delete-button";
+import { DishDetailsCard } from "@/components/dashboard/dish-details-card";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
@@ -82,6 +83,13 @@ export default async function MenuPage() {
     .eq("restaurant_id", restaurant.id)
     .is("active_image_id", null);
   const totalItems = (menuItems ?? []).length;
+
+  // Dishes nobody has described: what "Fill in dish details with AI" works on.
+  const { count: withoutDescription } = await supabase
+    .from("menu_items")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurant.id)
+    .is("description", null);
 
   // Phase M: nutrition waiting on a person. Drafts are invisible to
   // diners, so the count is the only way an owner learns they're there.
@@ -182,6 +190,13 @@ export default async function MenuPage() {
           </div>
         )}
       </div>
+
+      {canManage && totalItems > 0 && (
+        <DishDetailsCard
+          restaurantId={restaurant.id}
+          missing={withoutDescription ?? 0}
+        />
+      )}
 
       {!menuItems || menuItems.length === 0 ? (
         <EmptyState

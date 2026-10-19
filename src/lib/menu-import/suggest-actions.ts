@@ -1,5 +1,6 @@
 "use server";
 
+import { openRouterModels } from "@/lib/ai/model-list";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
@@ -33,6 +34,19 @@ export interface SuggestState {
   notice?: string;
 }
 
+/** One batch of the "Fill in dish details with AI" run (DishDetailsCard). */
+export interface DetailsBatchResult {
+  error?: string;
+  /** Bookmark for the next batch: the last dish looked at, by id. */
+  lastId?: string;
+  /** No dishes left without a description after this one. */
+  done: boolean;
+  dishes: number;
+  detailsWritten: number;
+  ingredientsAdded: number;
+  allergensSuggested: number;
+}
+
 async function askForSuggestions(
   names: string[],
 ): Promise<ReturnType<typeof parseSuggestions>> {
@@ -61,8 +75,12 @@ async function askForSuggestions(
         // no image, and the two jobs vet differently (a model that reads a
         // board perfectly can return malformed JSON from dish names).
         // `models` alone — never alongside `model`.
-        models: aiConfig.suggestionModels,
+        models: openRouterModels(aiConfig.suggestionModels),
         max_tokens: 6000,
+        // Thinking off, like the menu reader and the other drafts: these
+        // free models think until the allowance runs out and answer
+        // nothing (2026-10-18). Every suggestion is a draft or unconfirmed.
+        reasoning: { enabled: false },
         messages: [
           {
             role: "user",
@@ -89,30 +107,47 @@ async function askForSuggestions(
   return parseSuggestions(json?.choices?.[0]?.message?.content ?? "");
 }
 
-export async function suggestForMenu(
+/**
+ * One batch of dishes that have no description yet, after the bookmark
+ * `afterId` (ids ascend). The card on the Menu page calls this until
+ * `done`. A dish the model skips keeps its empty description and is not
+ * retried in the same run, because the bookmark has moved past it.
+ */
+export async function suggestDetailsBatch(
   restaurantId: string,
-  _prev: SuggestState,
-  _formData: FormData,
-): Promise<SuggestState> {
+  afterId: string | null,
+): Promise<DetailsBatchResult> {
+  const empty = {
+    done: false,
+    dishes: 0,
+    detailsWritten: 0,
+    ingredientsAdded: 0,
+    allergensSuggested: 0,
+  };
   const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
-  if (!auth.ok) return { error: auth.error };
+  if (!auth.ok) return { ...empty, error: auth.error };
 
   const supabase = await createClient();
 
-  // Only dishes with nothing recorded yet — re-running must never disturb
-  // an allergen a human already confirmed.
-  const { data: items, error: itemsError } = await supabase
+  // Only dishes nobody has described yet: text a person wrote is never
+  // replaced, and a confirmed allergen is never disturbed.
+  let query = supabase
     .from("menu_items")
     .select("id, name")
     .eq("restaurant_id", restaurantId)
+    .is("description", null)
+    .order("id", { ascending: true })
     .limit(BATCH_SIZE);
+  if (afterId) query = query.gt("id", afterId);
+  const { data: items, error: itemsError } = await query;
 
-  if (itemsError) return { error: toFriendlyError(itemsError, "menu items") };
-  if (!items || items.length === 0)
-    return { notice: "No dishes to suggest for." };
+  if (itemsError) {
+    return { ...empty, error: toFriendlyError(itemsError, "menu items") };
+  }
+  if (!items || items.length === 0) return { ...empty, done: true };
 
   const result = await askForSuggestions(items.map((i) => i.name));
-  if (!result.ok) return { error: result.error };
+  if (!result.ok) return { ...empty, error: result.error };
 
   const byName = new Map(items.map((i) => [i.name.toLowerCase(), i.id]));
   let ingredientsAdded = 0;
@@ -225,13 +260,14 @@ export async function suggestForMenu(
     }
   }
 
-  revalidatePath("/dashboard/menu/allergen-review");
-  revalidatePath("/dashboard/menu");
+  revalidatePath("/dashboard/menu", "layout");
   return {
-    notice:
-      `Added ${ingredientsAdded} ingredients and drafted details for ${detailsWritten} dishes — ` +
-      `check the ones marked “Draft text”. ` +
-      `${allergensSuggested} allergen suggestions need your confirmation before any diner sees them.`,
+    lastId: items[items.length - 1].id,
+    done: items.length < BATCH_SIZE,
+    dishes: items.length,
+    detailsWritten,
+    ingredientsAdded,
+    allergensSuggested,
   };
 }
 
