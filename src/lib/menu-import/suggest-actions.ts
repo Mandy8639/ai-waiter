@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { toFriendlyError } from "@/lib/errors/database-error";
 import { aiConfig } from "@/lib/ai/config";
+import { getModelsFor } from "@/lib/ai/model-settings";
 
 import {
   parseSuggestions,
@@ -75,7 +76,7 @@ async function askForSuggestions(
         // no image, and the two jobs vet differently (a model that reads a
         // board perfectly can return malformed JSON from dish names).
         // `models` alone — never alongside `model`.
-        models: openRouterModels(aiConfig.suggestionModels),
+        models: openRouterModels((await getModelsFor("suggestions")).models),
         max_tokens: 6000,
         // Thinking off, like the menu reader and the other drafts: these
         // free models think until the allowance runs out and answer

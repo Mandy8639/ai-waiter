@@ -13,6 +13,9 @@ export const PROTECTED_PREFIXES = [
   "/dashboard",
   "/onboarding",
   "/account",
+  // The platform owner's Admin page (src/lib/admin/access.ts adds the
+  // email list and two-step checks on top of being signed in).
+  "/admin",
   // Reached signed in, from a password-reset link (/auth/confirm).
   "/reset-password",
 ];

@@ -1,6 +1,7 @@
 import { openRouterModels } from "@/lib/ai/model-list";
 import "server-only";
 import { aiConfig } from "@/lib/ai/config";
+import { getModelsFor } from "@/lib/ai/model-settings";
 import type { StaffIntent } from "./intent";
 import { interpretMessages, parseInterpretation } from "./interpret-core";
 
@@ -43,7 +44,7 @@ export async function interpretWithModel(text: string): Promise<{
     },
     body: JSON.stringify({
       // `models` alone — never alongside `model` (docs/ai.md#model-fallback).
-      models: openRouterModels(aiConfig.staffAssistantModels),
+      models: openRouterModels((await getModelsFor("staff_assistant")).models),
       max_tokens: 300,
       messages: interpretMessages(text),
     }),

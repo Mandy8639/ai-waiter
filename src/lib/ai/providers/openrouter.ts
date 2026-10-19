@@ -1,5 +1,6 @@
 import "server-only";
 import { aiConfig } from "../config";
+import { getModelsFor } from "../model-settings";
 import { runConversationLoop } from "../loop";
 import { getToolDefinitions } from "../tools/index";
 import { callOpenRouterModel } from "./openrouter-model-call";
@@ -44,6 +45,10 @@ export function createOpenRouterProvider(): AiProvider {
         throw new Error("OpenRouter provider is not configured.");
       }
 
+      // Resolved once per turn, so every call in this turn's tool loop
+      // asks the same models (saved on /admin, else AI_MODEL, else default).
+      const { models } = await getModelsFor("waiter");
+
       const tools = toOpenRouterTools(getToolDefinitions());
       const initialMessages = toOpenRouterMessages(
         turn.system,
@@ -58,8 +63,8 @@ export function createOpenRouterProvider(): AiProvider {
           callOpenRouterModel({
             endpoint: OPENROUTER_ENDPOINT,
             apiKey,
-            model: aiConfig.model,
-            fallbackModels: aiConfig.modelFallbacks,
+            model: models[0],
+            fallbackModels: models.slice(1),
             maxOutputTokens: aiConfig.maxOutputTokens,
             requestTimeoutMs: aiConfig.requestTimeoutMs,
             messages,

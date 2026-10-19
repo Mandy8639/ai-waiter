@@ -166,6 +166,11 @@ export const DEFAULT_SUGGESTION_MODELS = [
   "nvidia/nemotron-3-super-120b-a12b:free",
 ];
 
+/** The waiter's built-in list for the configured provider, before AI_MODEL or /admin (src/lib/ai/model-settings.ts). */
+export function defaultWaiterModels(): string[] {
+  return defaultModelsByProvider[provider];
+}
+
 export const aiConfig = {
   provider,
 

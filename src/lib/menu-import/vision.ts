@@ -1,6 +1,7 @@
 import { openRouterModels } from "@/lib/ai/model-list";
 import "server-only";
 import { aiConfig } from "@/lib/ai/config";
+import { getModelsFor } from "@/lib/ai/model-settings";
 import { EXTRACTION_PROMPT, type ParseOutcome } from "./extraction";
 import { extractPages, type CallVisionModel } from "./vision-core";
 
@@ -51,13 +52,13 @@ const REQUEST_TIMEOUT_MS = 120_000;
  * aiConfig's DEFAULT_VISION_MODELS. "Supports image input" is not the
  * bar; "reads every price and invents none" is.
  */
-export function visionModels(): string[] {
-  return aiConfig.visionModels;
+export async function visionModels(): Promise<string[]> {
+  return (await getModelsFor("vision")).models;
 }
 
 /** The primary, for callers that only need to name one (logging, tests). */
-export function visionModel(): string {
-  return visionModels()[0];
+export async function visionModel(): Promise<string> {
+  return (await visionModels())[0];
 }
 
 export function isMenuImportConfigured(): boolean {
@@ -162,10 +163,11 @@ export async function extractMenuFromImages(
     };
   };
 
+  const models = await visionModels();
   const outcome = await extractPages(
     input.imageDataUrls,
-    openRouterModels(visionModels()),
+    openRouterModels(models),
     call,
   );
-  return { ...outcome, model: outcome.model ?? visionModel() };
+  return { ...outcome, model: outcome.model ?? models[0] };
 }
