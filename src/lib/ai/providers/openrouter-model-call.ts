@@ -1,6 +1,7 @@
 import { openRouterModels } from "../model-list";
 import type { LoopModelResponse } from "../loop";
 import { AiProviderError } from "../provider-error";
+import { USAGE_REQUEST } from "../usage-core";
 import {
   parseOpenRouterResponse,
   type OpenRouterChatResponse,
@@ -21,6 +22,8 @@ export interface OpenRouterModelCallParams {
   requestTimeoutMs: number;
   messages: OpenRouterMessage[];
   tools: OpenRouterTool[];
+  /** Sees each successful reply's body, for its usage and cost (src/lib/ai/usage-core.ts). */
+  onReply?: (body: OpenRouterChatResponse) => void;
 }
 
 /**
@@ -60,6 +63,7 @@ export async function callOpenRouterModel(
         max_tokens: params.maxOutputTokens,
         messages: params.messages,
         tools: params.tools,
+        ...USAGE_REQUEST,
       }),
       signal: AbortSignal.timeout(params.requestTimeoutMs),
     });
@@ -96,5 +100,6 @@ export async function callOpenRouterModel(
       "unknown",
     );
   }
+  params.onReply?.(json);
   return parseOpenRouterResponse(json);
 }

@@ -23,6 +23,8 @@ import {
   type OpenRouterMessage,
 } from "@/lib/ai/providers/openrouter-mapping";
 import { buildTextAcceptanceGuards } from "@/lib/ai/providers/text-acceptance-guards";
+import { recordAiUsage } from "@/lib/ai/usage";
+import { addCall, newTally } from "@/lib/ai/usage-core";
 import {
   EXTRACTION_PROMPT,
   parseExtraction,
@@ -82,6 +84,8 @@ class Meter {
   servedModel: string | undefined;
   /** OpenRouter answered "busy" (rate limited or overloaded) at least once. */
   busy = false;
+  /** Every answered call, for ai_usage. */
+  tally = newTally();
 
   async call(
     models: string[],
@@ -143,6 +147,7 @@ class Meter {
             : `OpenRouter answered ${response.status}${message ? `: ${message}` : ""}.`,
       };
     }
+    addCall(this.tally, json, json?.model);
     const cost = Number(json?.usage?.cost);
     this.costUsd =
       this.costUsd !== null &&
@@ -335,10 +340,13 @@ const RUNNERS: Record<
 export async function runModelTest(
   job: AiJob,
   models: string[],
+  /** Counted as platform use in ai_usage, never against a restaurant. */
+  source: "admin_test" | "safety_check" = "admin_test",
 ): Promise<ModelTestResult> {
   const meter = new Meter();
   const started = Date.now();
   const outcome = await RUNNERS[job](meter, models);
+  await recordAiUsage({ tally: meter.tally, job, source });
   return {
     job,
     models,

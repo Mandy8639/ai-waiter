@@ -2,6 +2,8 @@ import { openRouterModels } from "@/lib/ai/model-list";
 import "server-only";
 import { aiConfig } from "@/lib/ai/config";
 import { getModelsFor } from "@/lib/ai/model-settings";
+import { recordAiUsage } from "@/lib/ai/usage";
+import { addCall, newTally, USAGE_REQUEST } from "@/lib/ai/usage-core";
 import { EXTRACTION_PROMPT, type ParseOutcome } from "./extraction";
 import { extractPages, type CallVisionModel } from "./vision-core";
 
@@ -71,6 +73,8 @@ export function isMenuImportConfigured(): boolean {
 export interface ExtractionInput {
   /** Data URLs (`data:image/png;base64,...`), one per uploaded page. */
   imageDataUrls: string[];
+  /** Whose import this is, so its AI cost is counted against it (ai_usage). */
+  restaurantId?: string;
 }
 
 export interface ExtractionOutcome extends ParseOutcome {
@@ -99,6 +103,7 @@ export async function extractMenuFromImages(
     };
   }
 
+  const tally = newTally();
   const call: CallVisionModel = async (imageDataUrl, modelList) => {
     let response: Response;
     try {
@@ -124,6 +129,7 @@ export async function extractMenuFromImages(
           // in 27 s and every price matched the board, and the trap line
           // still came back unpriced. Reading print doesn't need deliberation.
           reasoning: { enabled: false },
+          ...USAGE_REQUEST,
           messages: [
             {
               role: "user",
@@ -154,6 +160,7 @@ export async function extractMenuFromImages(
         message?: { content?: string | null };
       }>;
     } | null;
+    if (response.ok) addCall(tally, json, json?.model);
     return {
       status: response.status,
       content: json?.choices?.[0]?.message?.content ?? "",
@@ -169,5 +176,10 @@ export async function extractMenuFromImages(
     openRouterModels(models),
     call,
   );
+  await recordAiUsage({
+    tally,
+    job: "vision",
+    restaurantId: input.restaurantId,
+  });
   return { ...outcome, model: outcome.model ?? models[0] };
 }

@@ -7,6 +7,8 @@ import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { toFriendlyError } from "@/lib/errors/database-error";
 import { aiConfig } from "@/lib/ai/config";
 import { getModelsFor } from "@/lib/ai/model-settings";
+import { recordAiUsage } from "@/lib/ai/usage";
+import { addCall, newTally, USAGE_REQUEST } from "@/lib/ai/usage-core";
 
 import {
   parseSuggestions,
@@ -50,6 +52,7 @@ export interface DetailsBatchResult {
 
 async function askForSuggestions(
   names: string[],
+  restaurantId: string,
 ): Promise<ReturnType<typeof parseSuggestions>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || aiConfig.provider !== "openrouter") {
@@ -82,6 +85,7 @@ async function askForSuggestions(
         // free models think until the allowance runs out and answer
         // nothing (2026-10-18). Every suggestion is a draft or unconfirmed.
         reasoning: { enabled: false },
+        ...USAGE_REQUEST,
         messages: [
           {
             role: "user",
@@ -102,8 +106,12 @@ async function askForSuggestions(
   }
 
   const json = (await response.json().catch(() => null)) as {
+    model?: string;
     choices?: Array<{ message?: { content?: string | null } }>;
   } | null;
+  const tally = newTally();
+  addCall(tally, json, json?.model);
+  await recordAiUsage({ tally, job: "suggestions", restaurantId });
 
   return parseSuggestions(json?.choices?.[0]?.message?.content ?? "");
 }
@@ -147,7 +155,10 @@ export async function suggestDetailsBatch(
   }
   if (!items || items.length === 0) return { ...empty, done: true };
 
-  const result = await askForSuggestions(items.map((i) => i.name));
+  const result = await askForSuggestions(
+    items.map((i) => i.name),
+    restaurantId,
+  );
   if (!result.ok) return { ...empty, error: result.error };
 
   const byName = new Map(items.map((i) => [i.name.toLowerCase(), i.id]));

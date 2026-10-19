@@ -19,6 +19,7 @@ export type EstimateResult =
  */
 export async function estimateNutrition(
   dishes: EstimateDish[],
+  restaurantId?: string,
 ): Promise<EstimateResult> {
   const { system, user } = estimatePrompt(dishes);
   const result = await freeModelDraft({
@@ -27,6 +28,7 @@ export async function estimateNutrition(
     maxTokens: 3000,
     parse: (reply) => parseEstimateReply(reply, dishes),
     usable: (estimates) => estimates.size > 0,
+    restaurantId,
   });
   return result.ok ? { ok: true, estimates: result.value } : result;
 }

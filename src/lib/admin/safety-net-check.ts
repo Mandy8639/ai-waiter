@@ -68,7 +68,7 @@ export async function runSafetyNetCheck(
   for (let i = 0; i < candidates.length; i += AT_ONCE) {
     const batch = candidates.slice(i, i + AT_ONCE);
     const results = await Promise.all(
-      batch.map((model) => runModelTest(job, [model])),
+      batch.map((model) => runModelTest(job, [model], "safety_check")),
     );
     for (const [j, result] of results.entries()) {
       const model = batch[j];

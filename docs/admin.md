@@ -148,7 +148,30 @@ assistant's switch.
 Both functions are service-role only and listed in `function-grants.test.ts`
 (`20261027090000_admin_undo_reset.sql`).
 
+## AI cost per restaurant and the Monday email (Phase 4)
+
+- **What is recorded.** `ai_usage` gets one row per AI use: a diner's waiter turn (all its
+  tool-calling rounds added up), a staff command, a menu photo, a suggestion or draft batch, an
+  Admin page Test or a safety-net check. Each row has the restaurant (null for platform use), job,
+  model, calls, tokens and cost. Every OpenRouter request asks for its cost
+  (`usage: { include: true }`, `USAGE_REQUEST` in `src/lib/ai/usage-core.ts`). A reply without one
+  is priced from the model's listed price and marked `cost_estimated`. With neither, the cost stays
+  null and is shown as "not counted", never as $0. Recording never fails the AI use
+  (`src/lib/ai/usage.ts`). The waiter on `AI_PROVIDER=anthropic` isn't recorded yet.
+- **On `/admin`.** The Spending card gains two tables, this week so far and last week (Monday to
+  Monday, UTC): restaurant, waiter chats (diner messages answered), AI cost (every job), and cost
+  per chat. Platform use (Tests and safety checks) is its own row. Data comes from
+  `ai_cost_summary(from, to)`, which is service-role only.
+- **The Monday email.** Vercel Cron, Mondays 12:00 UTC, `/api/cron/admin-weekly` (needs
+  `CRON_SECRET` and `RESEND_API_KEY`). It goes to every address in `PLATFORM_ADMIN_EMAILS` with
+  last week's totals; the subject carries the answer ("Tableside AI last week: $3.40 across 4
+  restaurants, 0.4¢ per chat"), followed by the per-restaurant table. Each admin gets one per week:
+  it is claimed in `platform_email_dispatches` before sending, and the same key goes to Resend as
+  its Idempotency-Key.
+
+`20261028090000_ai_usage.sql` adds `ai_usage`, `ai_cost_summary()` and `platform_email_dispatches`,
+all server-only.
+
 ## Still to come
 
-See the plan doc: per-restaurant AI cost and a weekly email (Phase 4), side-by-side Test (Phase 5),
-and the later phases.
+See the plan doc: side-by-side Test (Phase 5) and the later phases.

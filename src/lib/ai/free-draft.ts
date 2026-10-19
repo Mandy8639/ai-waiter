@@ -2,6 +2,8 @@ import { openRouterModels } from "@/lib/ai/model-list";
 import "server-only";
 import { aiConfig } from "@/lib/ai/config";
 import { getModelsFor } from "@/lib/ai/model-settings";
+import { recordAiUsage } from "@/lib/ai/usage";
+import { addCall, newTally, USAGE_REQUEST } from "@/lib/ai/usage-core";
 import { retryDraft, type DraftAttempt } from "./free-draft-core";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
@@ -25,6 +27,8 @@ export async function freeModelDraft<T>(input: {
   parse: (reply: string) => T;
   /** Whether a parsed value has anything worth saving. */
   usable: (value: T) => boolean;
+  /** Whose draft this is, so its AI cost is counted against it (ai_usage). */
+  restaurantId?: string;
 }): Promise<FreeDraftResult<T>> {
   // Drafts have their own list (saved on /admin, else AI_DRAFT_MODEL),
   // already filtered to free models; empty means no free model is set.
@@ -35,6 +39,7 @@ export async function freeModelDraft<T>(input: {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return { ok: false, reason: "not_configured" };
 
+  const tally = newTally();
   const attempt = async (timeoutMs: number): Promise<DraftAttempt<T>> => {
     try {
       const response = await fetch(OPENROUTER_ENDPOINT, {
@@ -59,6 +64,7 @@ export async function freeModelDraft<T>(input: {
           // answer"); with thinking off, all 15 in 7 s. Drafts are reviewed
           // by a person anyway. Ignored by models that don't think.
           reasoning: { enabled: false },
+          ...USAGE_REQUEST,
           messages: [
             { role: "system", content: input.system },
             { role: "user", content: input.user },
@@ -68,8 +74,10 @@ export async function freeModelDraft<T>(input: {
       });
       if (!response.ok) return { ok: false, reason: "failed" };
       const body = (await response.json()) as {
+        model?: string;
         choices?: Array<{ message?: { content?: unknown } }>;
       };
+      addCall(tally, body, body.model);
       const content = body.choices?.[0]?.message?.content;
       if (typeof content !== "string") return { ok: false, reason: "failed" };
       return { ok: true, value: input.parse(content) };
@@ -78,8 +86,16 @@ export async function freeModelDraft<T>(input: {
     }
   };
 
-  return retryDraft(attempt, {
-    usable: input.usable,
-    perAttemptMs: Math.max(aiConfig.requestTimeoutMs, 30_000),
-  });
+  try {
+    return await retryDraft(attempt, {
+      usable: input.usable,
+      perAttemptMs: Math.max(aiConfig.requestTimeoutMs, 30_000),
+    });
+  } finally {
+    await recordAiUsage({
+      tally,
+      job: "drafts",
+      restaurantId: input.restaurantId,
+    });
+  }
 }

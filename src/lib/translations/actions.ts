@@ -193,7 +193,7 @@ export async function draftMissingTranslations(
             : "dish description",
       text: row.source,
     }));
-    const result = await draftTranslations(language, fields);
+    const result = await draftTranslations(language, fields, restaurantId);
     if (!result.ok) {
       if (result.reason === "not_free") {
         return {

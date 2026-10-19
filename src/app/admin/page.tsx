@@ -15,7 +15,10 @@ import { ModelEditor } from "@/components/admin/model-editor";
 import { HistoryCard } from "@/components/admin/history-card";
 import { ResetCard } from "@/components/admin/reset-card";
 import { SafetyNetCard } from "@/components/admin/safety-net-card";
+import { CostTable } from "@/components/admin/cost-table";
 import { SpendingCard } from "@/components/admin/spending-card";
+import { getCostReport } from "@/lib/admin/cost-report";
+import { weekBounds, weekLabel } from "@/lib/admin/cost-report-core";
 import { getHistory, getSavedLists } from "@/lib/admin/history";
 import { historyRows } from "@/lib/admin/history-core";
 import { getSpending } from "@/lib/admin/openrouter-spend";
@@ -91,15 +94,26 @@ export default async function AdminPage() {
     );
   }
 
-  const [settings, known, safetyNet, spending, history, saved] =
-    await Promise.all([
-      getAllModelSettings(),
-      getOpenRouterModels(),
-      getSafetyNetState(),
-      getSpending(),
-      getHistory(),
-      getSavedLists().catch(() => new Map<string, string[]>()),
-    ]);
+  const weeks = weekBounds(new Date());
+  const [
+    settings,
+    known,
+    safetyNet,
+    spending,
+    history,
+    saved,
+    thisWeekCost,
+    lastWeekCost,
+  ] = await Promise.all([
+    getAllModelSettings(),
+    getOpenRouterModels(),
+    getSafetyNetState(),
+    getSpending(),
+    getHistory(),
+    getSavedLists().catch(() => new Map<string, string[]>()),
+    getCostReport(weeks.thisWeek),
+    getCostReport(weeks.lastWeek),
+  ]);
   const now = new Date();
   const provider = aiConfig.provider;
   const canTest = !!process.env.OPENROUTER_API_KEY;
@@ -124,7 +138,16 @@ export default async function AdminPage() {
         </p>
       </div>
 
-      <SpendingCard spending={spending} />
+      <SpendingCard spending={spending}>
+        <CostTable
+          title={`This week so far (${weekLabel(weeks.thisWeek)}, UTC)`}
+          rows={thisWeekCost}
+        />
+        <CostTable
+          title={`Last week (${weekLabel(weeks.lastWeek)})`}
+          rows={lastWeekCost}
+        />
+      </SpendingCard>
 
       <Card>
         <CardHeader>

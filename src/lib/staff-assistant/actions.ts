@@ -135,7 +135,7 @@ export async function sendStaffCommand(
     let intent: StaffIntent = parseStaffCommand(command);
     let interpretedBy: "rules" | "ai" = "rules";
     if (intent.kind === "unknown" && isStaffInterpreterConfigured()) {
-      const read = await interpretWithModel(command);
+      const read = await interpretWithModel(command, restaurantId);
       if (read.intent.kind !== "unknown") {
         intent = read.intent;
         interpretedBy = "ai";

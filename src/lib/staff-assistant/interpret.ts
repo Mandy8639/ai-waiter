@@ -5,6 +5,8 @@ import { getModelsFor } from "@/lib/ai/model-settings";
 import { AiProviderError } from "@/lib/ai/provider-error";
 import { getSafetyNetModels } from "@/lib/ai/safety-net";
 import { callWithSafetyNet } from "@/lib/ai/safety-net-core";
+import { recordAiUsage } from "@/lib/ai/usage";
+import { addCall, newTally, USAGE_REQUEST } from "@/lib/ai/usage-core";
 import type { StaffIntent } from "./intent";
 import { interpretMessages, parseInterpretation } from "./interpret-core";
 
@@ -28,7 +30,10 @@ export function isStaffInterpreterConfigured(): boolean {
   return aiConfig.provider === "openrouter" && !!process.env.OPENROUTER_API_KEY;
 }
 
-export async function interpretWithModel(text: string): Promise<{
+export async function interpretWithModel(
+  text: string,
+  restaurantId?: string,
+): Promise<{
   intent: StaffIntent;
   model?: string;
 }> {
@@ -42,6 +47,7 @@ export async function interpretWithModel(text: string): Promise<{
     choices?: Array<{ message?: { content?: string | null } }>;
   } | null;
 
+  const tally = newTally();
   const ask = async (models: string[]): Promise<Reply> => {
     let response: Response;
     try {
@@ -58,6 +64,7 @@ export async function interpretWithModel(text: string): Promise<{
           models: openRouterModels(models),
           max_tokens: 300,
           messages: interpretMessages(text),
+          ...USAGE_REQUEST,
         }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
@@ -75,7 +82,9 @@ export async function interpretWithModel(text: string): Promise<{
         response.status === 429 ? "rate_limited" : "http_error",
       );
     }
-    return (await response.json().catch(() => null)) as Reply;
+    const body = (await response.json().catch(() => null)) as Reply;
+    addCall(tally, body, body?.model);
+    return body;
   };
 
   // When the whole list is busy, one more try on the free safety net
@@ -97,6 +106,8 @@ export async function interpretWithModel(text: string): Promise<{
     });
   } catch {
     return { intent: { kind: "unknown" } };
+  } finally {
+    await recordAiUsage({ tally, job: "staff_assistant", restaurantId });
   }
 
   return {

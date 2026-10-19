@@ -239,3 +239,76 @@ export function renderDinerPaymentFailed(
     settingsUrl: data.settingsUrl,
   });
 }
+
+// The platform admin's weekly AI cost (Admin Phase 4) -------------------------
+
+export interface WeeklyAiCostData {
+  subject: string;
+  /** "12–18 Oct". */
+  weekLabel: string;
+  /** Already worded: "$3.40", "0.4¢". */
+  totalCost: string;
+  waiterChats: number;
+  restaurants: number;
+  perChat: string | null;
+  /** The costliest restaurants first, already worded. */
+  rows: Array<{ name: string; chats: number; cost: string }>;
+  unpriced: number;
+  adminUrl: string;
+}
+
+export function renderWeeklyAiCost(data: WeeklyAiCostData): EmailMessage {
+  const lines = [
+    `The AI cost ${data.totalCost} in the week of ${data.weekLabel} (UTC), across ${plural(data.restaurants, "restaurant", "restaurants")}.`,
+    data.waiterChats > 0
+      ? `Diners sent the AI waiter ${plural(data.waiterChats, "message", "messages")}${data.perChat ? `, ${data.perChat} each on average` : ""}.`
+      : "No diner used the AI waiter.",
+    data.unpriced > 0
+      ? `${plural(data.unpriced, "use", "uses")} came back without a cost and aren't counted here; OpenRouter's own total on the Admin page includes them.`
+      : "",
+  ].filter(Boolean);
+
+  const rows = data.rows.slice(0, 10);
+  const tableHtml = rows.length
+    ? `<table style="width:100%;border-collapse:collapse;margin:8px 0 0;font-size:14px;">
+         <tr style="color:#7a716a;font-size:12px;text-align:left;">
+           <th style="padding:6px 0;">Restaurant</th>
+           <th style="padding:6px 0;text-align:right;">Chats</th>
+           <th style="padding:6px 0;text-align:right;">AI cost</th>
+         </tr>
+         ${rows
+           .map(
+             (r) =>
+               `<tr style="border-top:1px solid #ece6df;"><td style="padding:6px 0;">${escapeHtml(r.name)}</td><td style="padding:6px 0;text-align:right;">${r.chats}</td><td style="padding:6px 0;text-align:right;">${escapeHtml(r.cost)}</td></tr>`,
+           )
+           .join("")}
+       </table>`
+    : "";
+  const tableText = rows.length
+    ? `\n${rows.map((r) => `${r.name}: ${r.chats} chats, ${r.cost}`).join("\n")}\n`
+    : "";
+
+  const reason =
+    "You're getting this because your email is in PLATFORM_ADMIN_EMAILS for Tableside.";
+
+  return {
+    subject: data.subject,
+    html: layout({
+      heading: `AI cost, ${data.weekLabel}`,
+      bodyHtml:
+        lines.map(paragraph).join("") +
+        tableHtml +
+        button(data.adminUrl, "Open Admin"),
+      settingsUrl: data.adminUrl,
+      reason,
+    }),
+    text: `AI cost, ${data.weekLabel}
+
+${lines.join("\n")}
+${tableText}
+Open Admin: ${data.adminUrl}
+
+${reason}
+`,
+  };
+}

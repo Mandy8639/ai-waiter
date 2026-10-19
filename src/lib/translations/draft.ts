@@ -16,6 +16,7 @@ export type DraftResult =
 export async function draftTranslations(
   language: MenuLanguage,
   fields: DraftField[],
+  restaurantId?: string,
 ): Promise<DraftResult> {
   const { system, user } = draftPrompt(language, fields);
   const result = await freeModelDraft({
@@ -24,6 +25,7 @@ export async function draftTranslations(
     maxTokens: 4000,
     parse: (reply) => parseDraftReply(reply, fields, language),
     usable: (translations) => translations.size > 0,
+    restaurantId,
   });
   return result.ok ? { ok: true, translations: result.value } : result;
 }
