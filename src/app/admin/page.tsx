@@ -12,9 +12,16 @@ import {
 import { requirePlatformAdmin } from "@/lib/admin/access";
 import { aiConfig } from "@/lib/ai/config";
 import { ModelEditor } from "@/components/admin/model-editor";
+import { SafetyNetCard } from "@/components/admin/safety-net-card";
 import { catalogueFor } from "@/lib/admin/model-catalogue";
 import { getOpenRouterModels } from "@/lib/admin/openrouter-models";
 import { getAllModelSettings } from "@/lib/ai/model-settings";
+import { getSafetyNetState } from "@/lib/ai/safety-net";
+import {
+  formatAgo,
+  lastCheckedAt,
+  safetyNetRows,
+} from "@/lib/ai/safety-net-core";
 import {
   jobInfo,
   isPaidModel,
@@ -23,8 +30,9 @@ import {
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 // A Test runs inside this page's server action; the menu-photo reader's
-// takes up to 120 s (src/lib/admin/model-test.ts).
-export const maxDuration = 150;
+// takes up to 120 s (src/lib/admin/model-test.ts), and the safety net's
+// "Check now" up to about three minutes (safety-net-check.ts).
+export const maxDuration = 300;
 
 export const metadata = {
   title: "Admin — Tableside",
@@ -72,10 +80,13 @@ export default async function AdminPage() {
     );
   }
 
-  const [settings, known] = await Promise.all([
+  const [settings, known, safetyNet] = await Promise.all([
     getAllModelSettings(),
     getOpenRouterModels(),
+    getSafetyNetState(),
   ]);
+  const now = new Date();
+  const lastCheck = lastCheckedAt(safetyNet.checks);
   const provider = aiConfig.provider;
   const canTest = !!process.env.OPENROUTER_API_KEY;
 
@@ -198,6 +209,15 @@ export default async function AdminPage() {
           </ul>
         </CardContent>
       </Card>
+
+      {provider === "openrouter" && (
+        <SafetyNetCard
+          enabled={safetyNet.enabled}
+          rows={safetyNetRows(safetyNet.checks, now)}
+          lastChecked={lastCheck ? formatAgo(lastCheck, now) : null}
+          canCheck={canTest}
+        />
+      )}
     </main>
   );
 }

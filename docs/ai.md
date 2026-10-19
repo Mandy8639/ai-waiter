@@ -323,6 +323,12 @@ With one model configured, that is a total outage of the AI waiter. With a list,
 the first entry that can answer, so there is no retry loop, no partial-turn recovery, and no extra
 latency on the happy path.
 
+**One exception: the free safety net.** When OpenRouter answers busy, an HTTP error or a timeout
+for the whole list, the waiter makes one more try with up to three free models that passed the
+Admin page's waiter Test in the last three days (`src/lib/ai/safety-net-core.ts`, docs/admin.md).
+Only that call is retried, not the turn, and only on those errors. It can be switched off on
+`/admin`.
+
 > ⚠️ **`model` and `models` must never both be sent.** The singular field wins and the fallback
 > list is silently ignored — no error, no warning, the fallback simply never happens. This was
 > confirmed live against the real API: a dead primary plus a healthy fallback returned `429` with
