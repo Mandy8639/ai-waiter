@@ -200,3 +200,162 @@ describe("saving a model list from /admin", () => {
     ).rejects.toThrow(/row-level security|permission denied/);
   });
 });
+
+describe("Undo and Emergency reset (20261027090000)", () => {
+  let db: TestDb;
+  let adminId: string;
+  let ownerId: string;
+
+  beforeAll(async () => {
+    db = await createTestDb();
+    adminId = await db.createAuthUser();
+    ownerId = await db.createAuthUser();
+    await addMember(db, await createRestaurant(db), ownerId, "owner");
+  });
+
+  afterAll(async () => {
+    await db.close();
+  });
+
+  async function passingTest(job: string, models: string[]) {
+    const { rows } = await db.admin.query<{ id: string }>(
+      `insert into public.platform_model_tests (job, models, passed, result, tested_by)
+       values ($1, $2, true, '{"ms": 1000, "costUsd": 0}', $3) returning id;`,
+      [job, models, adminId],
+    );
+    return rows[0].id;
+  }
+
+  function lastHistory() {
+    return db.admin
+      .query<{
+        job: string;
+        action: string;
+        old_models: string[] | null;
+        new_models: string[] | null;
+        test_result: { cleared?: Record<string, string[]> } | null;
+        changed_by: string;
+      }>(
+        "select job, action, old_models, new_models, test_result, changed_by from public.platform_settings_history order by changed_at desc, id desc limit 1;",
+      )
+      .then((r) => r.rows[0]);
+  }
+
+  it("records a restore by Undo as an undo, still needing a passing test", async () => {
+    const first = await passingTest("vision", ["a:free"]);
+    await db.asServiceRole((c) =>
+      c.query("select public.save_platform_models($1, $2, $3, $4);", [
+        "vision",
+        ["a:free"],
+        first,
+        adminId,
+      ]),
+    );
+    const again = await passingTest("vision", ["b:free"]);
+    await db.asServiceRole((c) =>
+      c.query("select public.save_platform_models($1, $2, $3, $4, 'undo');", [
+        "vision",
+        ["b:free"],
+        again,
+        adminId,
+      ]),
+    );
+    expect(await lastHistory()).toMatchObject({
+      action: "undo",
+      old_models: ["a:free"],
+      new_models: ["b:free"],
+    });
+    await expect(
+      db.asServiceRole((c) =>
+        c.query(
+          "select public.save_platform_models($1, $2, $3, $4, 'delete');",
+          ["vision", ["b:free"], again, adminId],
+        ),
+      ),
+    ).rejects.toThrow(/MODEL_ACTION_INVALID/);
+  });
+
+  it("clears one job back to its default, recorded as an undo", async () => {
+    await expect(
+      db.asServiceRole((c) =>
+        c.query("select public.clear_platform_models('vision', $1) as n;", [
+          adminId,
+        ]),
+      ),
+    ).resolves.toMatchObject({ rows: [{ n: 1 }] });
+    const { rows } = await db.admin.query(
+      "select 1 from public.platform_settings where job = 'vision';",
+    );
+    expect(rows).toEqual([]);
+    expect(await lastHistory()).toMatchObject({
+      job: "vision",
+      action: "undo",
+      old_models: ["b:free"],
+      new_models: null,
+    });
+  });
+
+  it("does nothing, and records nothing, when the job had nothing saved", async () => {
+    const before = await lastHistory();
+    await expect(
+      db.asServiceRole((c) =>
+        c.query("select public.clear_platform_models('vision', $1) as n;", [
+          adminId,
+        ]),
+      ),
+    ).resolves.toMatchObject({ rows: [{ n: 0 }] });
+    expect(await lastHistory()).toEqual(before);
+  });
+
+  it("resets every job at once, and records what it cleared and who", async () => {
+    for (const [job, models] of [
+      ["waiter", ["w/paid"]],
+      ["drafts", ["d:free"]],
+    ] as const) {
+      const id = await passingTest(job, [...models]);
+      await db.asServiceRole((c) =>
+        c.query("select public.save_platform_models($1, $2, $3, $4);", [
+          job,
+          [...models],
+          id,
+          adminId,
+        ]),
+      );
+    }
+    await expect(
+      db.asServiceRole((c) =>
+        c.query("select public.clear_platform_models(null, $1) as n;", [
+          adminId,
+        ]),
+      ),
+    ).resolves.toMatchObject({ rows: [{ n: 2 }] });
+    const { rows } = await db.admin.query(
+      "select 1 from public.platform_settings;",
+    );
+    expect(rows).toEqual([]);
+    expect(await lastHistory()).toMatchObject({
+      job: "all",
+      action: "reset",
+      changed_by: adminId,
+      test_result: { cleared: { waiter: ["w/paid"], drafts: ["d:free"] } },
+    });
+  });
+
+  it("refuses an unknown job", async () => {
+    await expect(
+      db.asServiceRole((c) =>
+        c.query("select public.clear_platform_models('billing', $1);", [
+          adminId,
+        ]),
+      ),
+    ).rejects.toThrow(/MODEL_JOB_INVALID/);
+  });
+
+  it("can't be called by a signed-in restaurant owner", async () => {
+    await expect(
+      db.asUser(ownerId, (c) =>
+        c.query("select public.clear_platform_models(null, $1);", [ownerId]),
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
+});
