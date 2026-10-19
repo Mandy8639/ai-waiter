@@ -529,9 +529,10 @@ describe("the boundary around the service-role sender", () => {
       schedule: "0 13 * * *",
     });
     // Hobby runs a cron at most once a day: a fixed minute and hour, every
-    // day. The free-model check (docs/admin.md) is held to the same rule.
+    // day or on one weekday. The free-model check and the admins' Monday
+    // email (docs/admin.md) are held to the same rule.
     for (const cron of config.crons as { schedule: string }[]) {
-      expect(cron.schedule).toMatch(/^\d{1,2} \d{1,2} \* \* \*$/);
+      expect(cron.schedule).toMatch(/^\d{1,2} \d{1,2} \* \* (\*|[0-6])$/);
     }
   });
 });

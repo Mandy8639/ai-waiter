@@ -215,7 +215,7 @@ export async function estimateMissingNutrition(
       description: row.description,
       category: row.category,
     }));
-    const result = await estimateNutrition(dishes);
+    const result = await estimateNutrition(dishes, restaurantId);
     if (!result.ok) {
       if (result.reason === "not_free") {
         return {

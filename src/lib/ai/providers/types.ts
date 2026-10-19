@@ -25,6 +25,8 @@ export interface AiConversationTurn {
   callTool: (name: string, args: unknown) => Promise<LoopToolOutcome>;
   /** True when the customer's current message asks about restaurant-specific facts (menu/price/dietary/availability) — see tools/menu-fact-detection.ts. When true, each provider wires loop.ts's textAcceptanceGuard so a text-only reply is rejected (with one bounded corrective retry) unless an authoritative menu tool succeeded this turn. */
   requiresAuthoritativeMenuSource?: boolean;
+  /** The restaurant this turn is for, so its AI cost is counted against it (ai_usage). */
+  restaurantId?: string;
   /** Phase E: the customer asked about allergens or ingredients, which only get_menu_item can answer — see tools/menu-fact-detection.ts#hasAllergenSource. */
   requiresAllergenSource?: boolean;
 }

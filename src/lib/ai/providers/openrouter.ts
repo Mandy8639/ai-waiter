@@ -4,6 +4,8 @@ import { getModelsFor } from "../model-settings";
 import { runConversationLoop } from "../loop";
 import { callWithSafetyNet } from "../safety-net-core";
 import { getSafetyNetModels } from "../safety-net";
+import { recordAiUsage } from "../usage";
+import { addCall, newTally } from "../usage-core";
 import { getToolDefinitions } from "../tools/index";
 import { callOpenRouterModel } from "./openrouter-model-call";
 import {
@@ -52,50 +54,62 @@ export function createOpenRouterProvider(): AiProvider {
       const { models } = await getModelsFor("waiter");
 
       const tools = toOpenRouterTools(getToolDefinitions());
+      // Every model call this turn makes, added up into one ai_usage row.
+      const tally = newTally();
       const initialMessages = toOpenRouterMessages(
         turn.system,
         turn.history,
         turn.userMessage,
       );
 
-      return runConversationLoop<OpenRouterMessage[]>({
-        initialMessages,
-        maxToolCalls: turn.maxToolCalls,
-        // When every model in the list is busy, one more try on the free
-        // safety net (docs/admin.md) rather than no answer at all.
-        callModel: (messages) =>
-          callWithSafetyNet({
-            primary: models,
-            safetyNet: () => getSafetyNetModels("waiter"),
-            onUsed: (net, error) =>
-              console.info(
-                JSON.stringify({
-                  event: "waiter_safety_net_used",
-                  models: net,
-                  reason: error.category,
+      try {
+        return await runConversationLoop<OpenRouterMessage[]>({
+          initialMessages,
+          maxToolCalls: turn.maxToolCalls,
+          // When every model in the list is busy, one more try on the free
+          // safety net (docs/admin.md) rather than no answer at all.
+          callModel: (messages) =>
+            callWithSafetyNet({
+              primary: models,
+              safetyNet: () => getSafetyNetModels("waiter"),
+              onUsed: (net, error) =>
+                console.info(
+                  JSON.stringify({
+                    event: "waiter_safety_net_used",
+                    models: net,
+                    reason: error.category,
+                  }),
+                ),
+              call: (list) =>
+                callOpenRouterModel({
+                  endpoint: OPENROUTER_ENDPOINT,
+                  apiKey,
+                  model: list[0],
+                  fallbackModels: list.slice(1),
+                  maxOutputTokens: aiConfig.maxOutputTokens,
+                  requestTimeoutMs: aiConfig.requestTimeoutMs,
+                  messages,
+                  tools,
+                  onReply: (body) => addCall(tally, body, body.model),
                 }),
-              ),
-            call: (list) =>
-              callOpenRouterModel({
-                endpoint: OPENROUTER_ENDPOINT,
-                apiKey,
-                model: list[0],
-                fallbackModels: list.slice(1),
-                maxOutputTokens: aiConfig.maxOutputTokens,
-                requestTimeoutMs: aiConfig.requestTimeoutMs,
-                messages,
-                tools,
-              }),
+            }),
+          callTool: turn.callTool,
+          appendAssistantMessage,
+          appendToolResultMessage,
+          textAcceptanceGuards: buildTextAcceptanceGuards({
+            requiresAuthoritativeMenuSource:
+              turn.requiresAuthoritativeMenuSource,
+            requiresAllergenSource: turn.requiresAllergenSource,
+            appendUserMessage,
           }),
-        callTool: turn.callTool,
-        appendAssistantMessage,
-        appendToolResultMessage,
-        textAcceptanceGuards: buildTextAcceptanceGuards({
-          requiresAuthoritativeMenuSource: turn.requiresAuthoritativeMenuSource,
-          requiresAllergenSource: turn.requiresAllergenSource,
-          appendUserMessage,
-        }),
-      });
+        });
+      } finally {
+        await recordAiUsage({
+          tally,
+          job: "waiter",
+          restaurantId: turn.restaurantId,
+        });
+      }
     },
   };
 }

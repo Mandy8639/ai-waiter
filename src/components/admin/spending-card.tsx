@@ -5,6 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { ReactNode } from "react";
 import {
   formatUsd,
   limitUsedPercent,
@@ -19,7 +20,14 @@ import {
  * set on OpenRouter and only shown here: a bug in this page can't raise
  * it, which is the point of keeping it there.
  */
-export function SpendingCard({ spending }: { spending: Spending }) {
+export function SpendingCard({
+  spending,
+  children,
+}: {
+  spending: Spending;
+  /** The per-restaurant cost tables, under OpenRouter's figures. */
+  children?: ReactNode;
+}) {
   const percent = limitUsedPercent(spending);
   return (
     <Card>
@@ -92,6 +100,7 @@ export function SpendingCard({ spending }: { spending: Spending }) {
             )}
           </>
         )}
+        {children}
       </CardContent>
     </Card>
   );

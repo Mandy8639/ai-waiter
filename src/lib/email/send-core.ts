@@ -23,7 +23,8 @@ export type EmailKind =
   | "daily_summary"
   | "subscription_past_due"
   | "card_payments_disabled"
-  | "diner_payment_failed";
+  | "diner_payment_failed"
+  | "weekly_ai_cost";
 
 export interface Recipient {
   userId: string;

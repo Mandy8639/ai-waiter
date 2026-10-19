@@ -179,7 +179,7 @@ export async function extractUploadedImport(
     .eq("id", importId)
     .eq("restaurant_id", restaurantId);
 
-  const result = await extractMenuFromImages({ imageDataUrls });
+  const result = await extractMenuFromImages({ imageDataUrls, restaurantId });
 
   if (!result.ok) {
     // Recorded on the row rather than only shown once, so a failed import

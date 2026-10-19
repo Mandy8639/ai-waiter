@@ -161,6 +161,7 @@ export async function sendAiMessage(
       history: historyMessages,
       userMessage: trimmed,
       maxToolCalls: aiConfig.maxToolCallsPerTurn,
+      restaurantId,
       requiresAuthoritativeMenuSource: looksLikeMenuFactQuestion(trimmed),
       requiresAllergenSource: looksLikeAllergenQuestion(trimmed),
       callTool: async (name, args) => {
