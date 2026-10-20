@@ -22,6 +22,17 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Spice level");
   });
 
+  it("takes a compliment instead of selling more food", () => {
+    // 2026-10-20: "I like the food here" after an order got the menu again.
+    const prompt = buildSystemPrompt({
+      restaurantName: "Test Kitchen",
+      allowUpselling: true,
+    });
+    expect(prompt).toContain("When the customer isn't asking for anything");
+    expect(prompt).toContain("a compliment is not an opening for a sale");
+    expect(prompt).toContain("Do not say you will pass the compliment on");
+  });
+
   it("lets the waiter talk about how a dish is made, from stored data only", () => {
     // The point of the product: a waiter who cannot answer "what's in it?"
     // or "how long does it take?" is not doing the job. The prompt has to

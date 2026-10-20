@@ -34,6 +34,7 @@ import { MergeOrderDialog } from "./merge-order-dialog";
 import { useNotificationSound } from "./use-notification-sound";
 import { useWakeLock } from "./use-wake-lock";
 import { UNDO_WINDOW_MS, offersUndo, undoMessage } from "./undo-core";
+import { withOverrides } from "./optimistic-core";
 import { printTicket, usePrinterSettings } from "./ticket-printer";
 import { PrinterSettingsButton } from "./printer-settings";
 import {
@@ -184,8 +185,20 @@ export function KitchenBoard({
   const undoRef = useRef<{
     orderId: string;
     target: OrderStatus;
+    /** Where the card was before the tap, for Undo. */
+    from: OrderStatus;
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
+  /** Taps shown on the board but not yet saved; see optimistic-core.ts. */
+  const overridesRef = useRef(new Map<string, OrderStatus>());
+
+  /** Moves a card on this screen now, ahead of the server. */
+  function showStatus(orderId: string, status: OrderStatus) {
+    overridesRef.current.set(orderId, status);
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status } : o)),
+    );
+  }
 
   // Each tablet is one station, so the choice is remembered per device.
   // Read after mount, like the mute preference, to avoid a hydration
@@ -262,7 +275,7 @@ export function KitchenBoard({
         }
       }
       knownIdsRef.current = new Set(fresh.map((o) => o.id));
-      setOrders(fresh);
+      setOrders(withOverrides(fresh, overridesRef.current));
     },
     [restaurantId, play],
   );
@@ -347,18 +360,20 @@ export function KitchenBoard({
   function handleTransition(orderId: string, target: OrderStatus) {
     // Only one tap waits at a time: a second one sends the first now.
     flushUndo();
-    if (!offersUndo(target)) {
+    const from = orders.find((o) => o.id === orderId)?.status;
+    setActionError(null);
+    // The card moves now; the server is told after the undo window.
+    showStatus(orderId, target);
+    if (!offersUndo(target) || !from) {
       sendTransition(orderId, target);
       return;
     }
-    setActionError(null);
-    setPendingIds((prev) => new Set(prev).add(orderId));
     const timer = setTimeout(() => {
       undoRef.current = null;
       setUndo(null);
       sendTransition(orderId, target);
     }, UNDO_WINDOW_MS);
-    undoRef.current = { orderId, target, timer };
+    undoRef.current = { orderId, target, from, timer };
     setUndo({ orderId, target });
   }
 
@@ -368,11 +383,13 @@ export function KitchenBoard({
     clearTimeout(waiting.timer);
     undoRef.current = null;
     setUndo(null);
-    setPendingIds((prev) => {
-      const next = new Set(prev);
-      next.delete(waiting.orderId);
-      return next;
-    });
+    // Nothing was sent: put the card back where it was.
+    overridesRef.current.delete(waiting.orderId);
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === waiting.orderId ? { ...o, status: waiting.from } : o,
+      ),
+    );
   }
 
   /** Sends the waiting tap now rather than losing it. */
@@ -406,20 +423,16 @@ export function KitchenBoard({
   }, []);
 
   function sendTransition(orderId: string, target: OrderStatus) {
-    setActionError(null);
-    setPendingIds((prev) => new Set(prev).add(orderId));
     startTransitionAction(async () => {
       const result = await transitionOrderStatus(orderId, target);
-      setPendingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(orderId);
-        return next;
-      });
-      if (result.error) {
-        setActionError(result.error);
-      } else {
-        void resync(false);
+      // Saved or refused, this tap no longer needs holding on screen —
+      // unless a newer tap on the same card has replaced it.
+      if (overridesRef.current.get(orderId) === target) {
+        overridesRef.current.delete(orderId);
       }
+      if (result.error) setActionError(result.error);
+      // On an error this puts the card back where the server has it.
+      void resync(false);
     });
   }
 

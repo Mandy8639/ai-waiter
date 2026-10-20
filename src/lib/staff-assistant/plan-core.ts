@@ -65,18 +65,51 @@ export type Plan =
 export const PAUSE_MINUTES = { min: 5, max: 720 } as const;
 export const BUSY_MINUTES = { min: 5, max: 120 } as const;
 
-export const HELP_TEXT = [
-  "Try one of these:",
-  "• 86 the salmon — sold out until you next open",
-  "• The oat milk is out",
-  "• The salmon is back",
-  "• Pause ordering for an hour / Resume ordering",
-  "• We're slammed, add 15 minutes / Back to normal",
-  "• Make the mango lassi $5.50 (owners and managers; asks first)",
-  "• What's sold out?",
-].join("\n");
+/**
+ * Up to `count` dish names to use in examples, from the restaurant's own
+ * menu: short ones first (a 40-character name makes a clumsy example),
+ * then in menu order. Empty for a menu with no dishes yet.
+ */
+export function pickExampleDishes(names: string[], count = 2): string[] {
+  const usable = names.map((n) => n.trim()).filter((n) => n.length > 0);
+  const short = usable.filter((n) => n.length <= 24);
+  return [...short, ...usable.filter((n) => n.length > 24)].slice(0, count);
+}
 
-const NOT_UNDERSTOOD = `Sorry, I didn't catch that, and I haven't changed anything.\n\n${HELP_TEXT}`;
+/**
+ * The help list, worded with this restaurant's own dishes and add-ons, so
+ * the examples are things the staff could actually say ("86 the Chilli
+ * Baby Corn", not a salmon the restaurant has never served).
+ */
+export function helpText(catalog?: Catalog): string {
+  const dishes = catalog?.dishes ?? [];
+  const [a, b] = pickExampleDishes(dishes.map((d) => d.name));
+  const option = catalog?.options.find((o) => o.name.trim().length <= 24);
+  const priced = dishes.find((d) => d.name === (b ?? a));
+  const lines = ["Try one of these:"];
+  lines.push(
+    a
+      ? `• 86 the ${a} — sold out until you next open`
+      : "• 86 the [dish] — sold out until you next open",
+  );
+  if (option) lines.push(`• The ${option.name} is out`);
+  lines.push(a ? `• The ${a} is back` : "• The [dish] is back");
+  lines.push("• Pause ordering for an hour / Resume ordering");
+  lines.push("• We're slammed, add 15 minutes / Back to normal");
+  lines.push(
+    priced
+      ? `• Make the ${priced.name} $${(priced.price + 0.5).toFixed(2)} (owners and managers; asks first)`
+      : "• Make the [dish] $12.50 (owners and managers; asks first)",
+  );
+  lines.push("• What's sold out?");
+  return lines.join("\n");
+}
+
+/** For when the menu isn't loaded (an empty command). */
+export const HELP_TEXT = helpText();
+
+const notUnderstood = (catalog: Catalog) =>
+  `Sorry, I didn't catch that, and I haven't changed anything.\n\n${helpText(catalog)}`;
 
 export function money(price: number): string {
   return `$${price.toFixed(2)}`;
@@ -279,9 +312,9 @@ function actionForMatch(
 export function planIntent(intent: StaffIntent, ctx: PlanContext): Plan {
   switch (intent.kind) {
     case "unknown":
-      return { type: "not_understood", text: NOT_UNDERSTOOD };
+      return { type: "not_understood", text: notUnderstood(ctx.catalog) };
     case "help":
-      return { type: "answered", text: HELP_TEXT };
+      return { type: "answered", text: helpText(ctx.catalog) };
     case "status":
       return { type: "answered", text: statusText(ctx) };
     case "pause":

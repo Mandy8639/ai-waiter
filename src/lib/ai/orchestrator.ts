@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { getAiProvider, isAiConfigured } from "./providers";
 import { aiConfig } from "./config";
+import { complimentReply, isOnlyCompliment } from "./compliment-core";
 import { getWaiterModels } from "./waiter-models";
 import { buildSystemPrompt } from "./system-prompt";
 import type { AiPersona } from "./persona";
@@ -147,6 +148,23 @@ export async function sendAiMessage(
   // Which language the fixed replies below are in, if one is needed. From
   // the diner's own message — see fallback-text.ts.
   const replyLanguage = fallbackLanguage(trimmed);
+
+  // A message that is only a thank-you or a compliment gets a fixed, warm
+  // reply: the free model kept pitching the menu back (compliment-core.ts).
+  if (isOnlyCompliment(trimmed)) {
+    const reply = complimentReply(replyLanguage);
+    await insertMessage(restaurantId, customerSessionId, "assistant", reply);
+    logAiTurn({
+      restaurantId,
+      customerSessionId,
+      toolCallCount: 0,
+      latencyMs: Date.now() - start,
+      model: "fixed-reply",
+      provider: aiConfig.provider,
+      outcome: "ok",
+    });
+    return { ok: true, reply, mentionedItems: [] };
+  }
 
   const system = buildSystemPrompt({
     restaurantName,

@@ -62,6 +62,7 @@ interface StaffAssistantValue {
   messages: Message[];
   pending: boolean;
   canChangePrices: boolean;
+  exampleDish: string | null;
   send: (text: string) => void;
   press: (button: ReplyButton) => void;
   cancel: () => void;
@@ -69,12 +70,15 @@ interface StaffAssistantValue {
 
 const StaffAssistantContext = createContext<StaffAssistantValue | null>(null);
 
-const EXAMPLES = [
-  "86 the salmon",
-  "Pause ordering for an hour",
-  "We're slammed, add 15 minutes",
-  "What's sold out?",
-];
+/** Example commands, with one of the restaurant's own dishes when it has any. */
+function examplesFor(dish: string | null): string[] {
+  return [
+    ...(dish ? [`86 the ${dish}`] : []),
+    "Pause ordering for an hour",
+    "We're slammed, add 15 minutes",
+    "What's sold out?",
+  ];
+}
 
 const YES = /^(y|yes|yep|yeah|yup|sure|ok|okay|do it|go ahead|confirm)$/i;
 const NO = /^(n|no|nope|cancel|stop|never ?mind)$/i;
@@ -85,10 +89,13 @@ export const ASSISTANT_PATH = "/dashboard/assistant";
 export function StaffAssistantProvider({
   restaurantId,
   canChangePrices,
+  exampleDish = null,
   children,
 }: {
   restaurantId: string;
   canChangePrices: boolean;
+  /** A dish from this menu for the examples; see getExampleDish(). */
+  exampleDish?: string | null;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -181,6 +188,7 @@ export function StaffAssistantProvider({
         messages,
         pending,
         canChangePrices,
+        exampleDish,
         send,
         press,
         cancel,
@@ -316,7 +324,7 @@ function StaffChefConversation({
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {EXAMPLES.map((e) => (
+              {examplesFor(ctx.exampleDish).map((e) => (
                 <button
                   key={e}
                   type="button"
@@ -437,7 +445,11 @@ function StaffChefConversation({
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={MAX_COMMAND_LENGTH}
-            placeholder="e.g. 86 the salmon"
+            placeholder={
+              ctx.exampleDish
+                ? `e.g. 86 the ${ctx.exampleDish}`
+                : "e.g. pause ordering for an hour"
+            }
             aria-label="Message the Waiter"
             autoComplete="off"
             enterKeyHint="send"
