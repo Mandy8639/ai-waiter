@@ -133,6 +133,31 @@ export function configuredModel(env: EnvLike = process.env): string | null {
   return raw ? raw : null;
 }
 
+export const IMAGE_QUALITIES = ["low", "medium", "high"] as const;
+export type ImageQuality = (typeof IMAGE_QUALITIES)[number];
+
+/**
+ * The quality level sent with each request, or null to send none.
+ *
+ * OpenAI's image models take `quality`, and left alone they choose it per
+ * image: measured 2026-10-19, gpt-image-2 cost 0.6¢ at low and 21¢ at high
+ * (and high took 125 s, past the timeout below). So for an openai/ model
+ * the level is always fixed: MENU_IMAGE_QUALITY if valid, else "low",
+ * which is what "auto" chose for gpt-image-2.5-flare and looked as good as
+ * medium. Other models are sent nothing unless it is set, because a model
+ * that doesn't take a parameter rejects the request (FLUX 3 did, with
+ * output_format).
+ */
+export function configuredQuality(
+  model: string,
+  env: EnvLike = process.env,
+): ImageQuality | null {
+  const raw = env.MENU_IMAGE_QUALITY?.trim().toLowerCase();
+  const set = IMAGE_QUALITIES.find((q) => q === raw) ?? null;
+  if (set) return set;
+  return model.startsWith("openai/") ? "low" : null;
+}
+
 /** How long a single generation request may take before it is abandoned. */
 export function generationTimeoutMs(env: EnvLike = process.env): number {
   const raw = Number.parseInt(env.MENU_IMAGE_TIMEOUT_MS ?? "", 10);

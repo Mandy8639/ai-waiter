@@ -23,6 +23,7 @@ import {
   GenerationFailed,
   GenerationUnavailable,
   configuredModel,
+  configuredQuality,
   generationConfigured,
   generationTimeoutMs,
   unavailableMessage,
@@ -565,7 +566,11 @@ export async function generateMenuPhoto(
   try {
     const result = await generateImage(menuItemId, {
       provider: recordingCost(
-        new OpenRouterImageGenerationProvider({ apiKey, model }),
+        new OpenRouterImageGenerationProvider({
+          apiKey,
+          model,
+          quality: configuredQuality(model),
+        }),
         restaurantId,
       ),
       records: generationRecords(auth.context.supabase),
