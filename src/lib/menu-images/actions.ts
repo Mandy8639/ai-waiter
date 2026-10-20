@@ -28,6 +28,11 @@ import {
   unavailableMessage,
 } from "./generation-provider";
 import { OpenRouterImageGenerationProvider } from "./openrouter-image-provider";
+import type { ImageGenerationProvider } from "./generation-provider";
+import { switchedOffMessage } from "@/lib/admin/restaurant-switches-core";
+import { isAiFeatureAllowed } from "@/lib/admin/restaurant-switches";
+import { recordAiUsage } from "@/lib/ai/usage";
+import { addCall, newTally } from "@/lib/ai/usage-core";
 
 /**
  * Server actions for the phase 2 upload pipeline.
@@ -544,6 +549,10 @@ export async function generateMenuPhoto(
 
   const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
   if (!auth.ok) return { ok: false, error: auth.error };
+  // Admin Phase 6: dish images are one of the AI menu tools.
+  if (!(await isAiFeatureAllowed(restaurantId, "owner_tools"))) {
+    return { ok: false, error: switchedOffMessage("owner_tools") };
+  }
 
   const model = configuredModel();
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -555,7 +564,10 @@ export async function generateMenuPhoto(
 
   try {
     const result = await generateImage(menuItemId, {
-      provider: new OpenRouterImageGenerationProvider({ apiKey, model }),
+      provider: recordingCost(
+        new OpenRouterImageGenerationProvider({ apiKey, model }),
+        restaurantId,
+      ),
       records: generationRecords(auth.context.supabase),
       storage: storageGateway(),
       timeoutMs: generationTimeoutMs(),
@@ -578,4 +590,27 @@ export async function generateMenuPhoto(
     }
     return { ok: false, error: "The image could not be generated." };
   }
+}
+
+/**
+ * Writes each generated image's cost to ai_usage (job "images"), so paid
+ * image generation shows on the Admin page's Spending card like every
+ * other AI use. A failed generation writes nothing: there is no usage
+ * block to read, and the attempt is already counted by the database.
+ */
+function recordingCost(
+  inner: ImageGenerationProvider,
+  restaurantId: string,
+): ImageGenerationProvider {
+  return {
+    name: inner.name,
+    preflight: () => inner.preflight(),
+    async generate(request) {
+      const image = await inner.generate(request);
+      const tally = newTally();
+      addCall(tally, { usage: image.usage }, image.model);
+      await recordAiUsage({ tally, job: "images", restaurantId });
+      return image;
+    },
+  };
 }

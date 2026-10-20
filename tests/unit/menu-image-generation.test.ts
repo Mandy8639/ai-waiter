@@ -35,6 +35,7 @@ import {
 } from "@/lib/menu-images/generation-core";
 import { PRIVATE_BUCKET, PUBLISHED_BUCKET } from "@/lib/menu-images/paths";
 import { ImageRejected } from "@/lib/menu-images/processing";
+import { readUsage } from "@/lib/ai/usage-core";
 import type { StorageGateway } from "@/lib/menu-images/upload-core";
 
 const RESTAURANT = "11111111-1111-4111-8111-111111111111";
@@ -309,6 +310,8 @@ describe("OpenRouterImageGenerationProvider.generate", () => {
           data: [
             { b64_json: image.toString("base64"), media_type: "image/webp" },
           ],
+          // The real shape, seen 2026-10-19 on seedream-5-0-flash.
+          usage: { prompt_tokens: 131, completion_tokens: 16384, cost: 0.018 },
         }),
       );
     });
@@ -320,9 +323,15 @@ describe("OpenRouterImageGenerationProvider.generate", () => {
     expect(result.bytes.equals(image)).toBe(true);
     expect(result.provider).toBe("openrouter");
     expect(result.model).toBe("test/model");
+    // Passed through for ai_usage, so /admin shows what each image cost.
+    expect(readUsage({ usage: result.usage })).toEqual({
+      tokensIn: 131,
+      tokensOut: 16384,
+      costUsd: 0.018,
+    });
   });
 
-  it("sends exactly one square WebP request for the given model and prompt", async () => {
+  it("sends exactly one square request for the given model and prompt", async () => {
     let body = "";
     const image = await picture(64, 64);
     const base = await listen((req, res) => {
