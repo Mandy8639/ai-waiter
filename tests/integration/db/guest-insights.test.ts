@@ -217,8 +217,14 @@ describe("guest insights", () => {
       guests: 2,
       returningGuests: 1,
     });
-    expect(regulars).toEqual([
-      { name: "Sam", visits: 3, lastVisit: "2026-10-16T19:00:00+00:00" },
+    // Compared as a moment, not as text: Postgres writes the timestamp in
+    // the session's timezone, which is UTC in CI but not on a laptop.
+    expect(
+      (
+        regulars as Array<{ name: string; visits: number; lastVisit: string }>
+      ).map((r) => ({ ...r, lastVisit: new Date(r.lastVisit).toISOString() })),
+    ).toEqual([
+      { name: "Sam", visits: 3, lastVisit: "2026-10-16T19:00:00.000Z" },
     ]);
   });
 

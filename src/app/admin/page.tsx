@@ -18,6 +18,11 @@ import { HistoryCard } from "@/components/admin/history-card";
 import { ResetCard } from "@/components/admin/reset-card";
 import { SafetyNetCard } from "@/components/admin/safety-net-card";
 import { CompareCard } from "@/components/admin/compare-card";
+import { RestaurantsCard } from "@/components/admin/restaurants-card";
+import {
+  getSwitchHistory,
+  listRestaurantsForAdmin,
+} from "@/lib/admin/restaurant-switch-queries";
 import { CostTable } from "@/components/admin/cost-table";
 import { SpendingCard } from "@/components/admin/spending-card";
 import { getCostReport } from "@/lib/admin/cost-report";
@@ -107,6 +112,7 @@ export default async function AdminPage() {
     saved,
     thisWeekCost,
     lastWeekCost,
+    restaurants,
   ] = await Promise.all([
     getAllModelSettings(),
     getOpenRouterModels(),
@@ -116,7 +122,11 @@ export default async function AdminPage() {
     getSavedLists().catch(() => new Map<string, string[]>()),
     getCostReport(weeks.thisWeek),
     getCostReport(weeks.lastWeek),
+    listRestaurantsForAdmin(),
   ]);
+  const switchHistory = await getSwitchHistory(
+    new Map((restaurants ?? []).map((r) => [r.id, r.name])),
+  );
   // An admin with no restaurant is sent here from /dashboard, so a link
   // back there would only bounce; they get Account and Log out instead.
   const { state } = await getDashboardContext();
@@ -169,6 +179,8 @@ export default async function AdminPage() {
           rows={lastWeekCost}
         />
       </SpendingCard>
+
+      <RestaurantsCard restaurants={restaurants} history={switchHistory} />
 
       <Card>
         <CardHeader>

@@ -192,6 +192,36 @@ to you.
   `compareWaiterAnswer()` in `model-test.ts`, `compareModels()` in `actions.ts`,
   `src/components/admin/compare-card.tsx`.
 
+## Restaurant switches (Phase 6)
+
+The **Restaurants** card on `/admin` lists every restaurant (newest first, up to 300, with a search
+box and a "Switched off" filter). Each has three switches:
+
+| Switch              | What it stops                                                                      |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| **AI waiter**       | The diners' AI waiter ("Ask the waiter" / "Ask the Chef")                          |
+| **Staff assistant** | The dashboard's "Waiter" button commands                                           |
+| **AI menu tools**   | Reading menu photos, Fill in dish details, nutrition estimates, translation drafts |
+
+- **Off overrides the restaurant's own settings.** It takes effect within a minute (each server
+  caches a restaurant's switches for 60 seconds). Turning one off asks for a short reason, kept for
+  the admin only.
+- **What people see.** Diners see the menu without the waiter, and are never told why. The
+  restaurant's dashboard shows a **Switched off by Tableside** banner naming the feature and the
+  support address. Staff commands and owner AI tools answer with the same message instead of running.
+- **Store.** `20261030090000_restaurant_ai_switches.sql` adds `restaurant_ai_switches` (a row = off;
+  no row = on) and `restaurant_ai_switch_history` (who, when, which feature, off or on, and why).
+  Both are server-only, like `platform_settings`. The app reads switches with the service role
+  (`src/lib/admin/restaurant-switches.ts`); a failed read counts as "nothing off" for 15 seconds, so
+  an outage of the store never takes every restaurant's AI down.
+- **Where it's enforced.** On the server, at every entry point:
+  - `sendChatMessage` and `isAiWaiterAvailable` (waiter);
+  - `sendStaffCommand` and `applyStaffAction` (staff assistant);
+  - `startMenuImport`, `extractUploadedImport`, `suggestDetailsBatch`, `estimateMissingNutrition`
+    and `draftMissingTranslations` (AI menu tools).
+
+  `tests/unit/restaurant-switches.test.ts` pins every one.
+
 ## Still to come
 
 See the plan doc for the later phases.

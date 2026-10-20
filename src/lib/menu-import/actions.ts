@@ -1,5 +1,8 @@
 "use server";
 
+import { switchedOffMessage } from "@/lib/admin/restaurant-switches-core";
+import { isAiFeatureAllowed } from "@/lib/admin/restaurant-switches";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -121,6 +124,9 @@ export async function startMenuImport(
 ): Promise<StartImportResult> {
   const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
   if (!auth.ok) return { ok: false, error: auth.error };
+  if (!(await isAiFeatureAllowed(restaurantId, "owner_tools"))) {
+    return { ok: false, error: switchedOffMessage("owner_tools") };
+  }
 
   try {
     const result = await authorizeImportUpload(
@@ -151,6 +157,9 @@ export async function extractUploadedImport(
 ): Promise<MenuImportState> {
   const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
   if (!auth.ok) return { error: auth.error };
+  if (!(await isAiFeatureAllowed(restaurantId, "owner_tools"))) {
+    return { error: switchedOffMessage("owner_tools") };
+  }
 
   const supabase = auth.context.supabase;
   const records = importRecords(supabase);

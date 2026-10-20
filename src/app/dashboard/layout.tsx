@@ -18,6 +18,8 @@ import { NativeAppBridge } from "@/components/kitchen/native-app-bridge";
 import { RestaurantSwitcher } from "@/components/dashboard/restaurant-switcher";
 import { TwoFactorReminder } from "@/components/dashboard/two-factor-reminder";
 import { BillingBanner } from "@/components/dashboard/billing-banner";
+import { getSwitchedOffFeatures } from "@/lib/admin/restaurant-switches";
+import { switchedOffNotice } from "@/lib/admin/restaurant-switches-core";
 import { StaffAssistantProvider } from "@/components/dashboard/staff-assistant";
 import { billingNotice } from "@/lib/billing/trial-core";
 import { getRestaurantBilling } from "@/lib/billing/trial-queries";
@@ -117,6 +119,11 @@ export default async function DashboardLayout({
     timeZone: restaurant.timezone,
   });
 
+  // Admin Phase 6: what Tableside has switched off for this restaurant.
+  const aiOffNotice = switchedOffNotice(
+    await getSwitchedOffFeatures(restaurant.id),
+  );
+
   // The Waiter (staff assistant) floats on every page for the roles that
   // can use it; see src/components/dashboard/staff-assistant.tsx.
   const hasChef = ["owner", "manager", "kitchen"].includes(restaurant.role);
@@ -164,6 +171,7 @@ export default async function DashboardLayout({
         {/* Bottom padding keeps the last ticket clear of the "Waiter" button. */}
         <main className="w-full flex-1 px-3 pt-4 pb-24 sm:px-4">
           {notice && <BillingBanner notice={notice} />}
+          {aiOffNotice && <BillingBanner notice={aiOffNotice} />}
           {withChef(children)}
         </main>
         <NativeAppBridge />
@@ -251,6 +259,7 @@ export default async function DashboardLayout({
           }
         >
           {notice && <BillingBanner notice={notice} />}
+          {aiOffNotice && <BillingBanner notice={aiOffNotice} />}
           {["owner", "manager"].includes(restaurant.role) &&
             !hasVerifiedTwoFactor(user.factors) && <TwoFactorReminder />}
           {withChef(children)}
