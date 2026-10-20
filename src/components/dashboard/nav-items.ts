@@ -6,6 +6,7 @@ import {
   CircleSlash,
   CreditCard,
   HandCoins,
+  HeartHandshake,
   LayoutDashboard,
   LayoutList,
   MessageSquare,
@@ -173,6 +174,15 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/dashboard/reports",
     group: "Business",
     icon: ChartColumn,
+    roles: MANAGERS,
+  },
+  // Who comes, when, and how they use the AI waiter
+  // (docs/guest-insights.md). Counts only, owners and managers.
+  {
+    label: "Guests",
+    href: "/dashboard/guests",
+    group: "Business",
+    icon: HeartHandshake,
     roles: MANAGERS,
   },
   // Phase N: private diner feedback. Owners and managers only, matching
