@@ -10,7 +10,8 @@ import { platformAdminForAction } from "./access";
 import { getHistoryEntry, getSavedLists } from "./history";
 import { undoPlan } from "./history-core";
 import { listProblem, type ModelTestResult } from "./model-test-core";
-import { runModelTest } from "./model-test";
+import { compareWaiterAnswer, runModelTest } from "./model-test";
+import { compareProblem, type CompareAnswer } from "./compare-core";
 import { getOpenRouterModels } from "./openrouter-models";
 
 /**
@@ -277,4 +278,49 @@ export async function resetAllModels(): Promise<
   clearModelSettingsCache();
   revalidatePath("/admin");
   return { ok: true };
+}
+
+/**
+ * The side-by-side test (docs/admin.md, Phase 5): the same diner question
+ * to two waiter models at once. Changes nothing; a paid model spends a
+ * little credit, as a Test does.
+ */
+export async function compareModels(
+  models: string[],
+  question: string,
+): Promise<{ error: string } | { answers: [CompareAnswer, CompareAnswer] }> {
+  const parsed = z
+    .object({
+      models: z.array(z.string().max(200)).length(2),
+      question: z.string().max(1000),
+    })
+    .safeParse({ models, question });
+  if (!parsed.success) return { error: "Choose two models and a question." };
+  const user = await platformAdminForAction();
+  if (!user) return { error: NOT_ALLOWED };
+
+  const known = await getOpenRouterModels();
+  const problem = compareProblem({
+    models: parsed.data.models,
+    question: parsed.data.question,
+    provider: aiConfig.provider,
+    known: known ? new Set(known.keys()) : null,
+  });
+  if (problem) return { error: problem };
+
+  const [a, b] = parsed.data.models.map((m) => m.trim());
+  const q = parsed.data.question.trim();
+  const answers = await Promise.all([
+    compareWaiterAnswer(a, q),
+    compareWaiterAnswer(b, q),
+  ]);
+  console.info(
+    JSON.stringify({
+      event: "admin_model_compare",
+      models: [a, b],
+      ms: answers.map((x) => x.ms),
+      costUsd: answers.map((x) => x.costUsd),
+    }),
+  );
+  return { answers: [answers[0], answers[1]] };
 }

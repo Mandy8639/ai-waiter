@@ -38,6 +38,7 @@ import {
   parseInterpretation,
 } from "@/lib/staff-assistant/interpret-core";
 import { draftPrompt, parseDraftReply } from "@/lib/translations/core";
+import type { CompareAnswer } from "./compare-core";
 import {
   allPassed,
   DRAFT_TEST_FIELD,
@@ -358,5 +359,48 @@ export async function runModelTest(
     costUsd: meter.costUsd,
     ...(outcome.error ? { error: outcome.error } : {}),
     ...(outcome.error && meter.busy ? { busy: true } : {}),
+  };
+}
+
+/**
+ * The side-by-side test (compare-core.ts): one diner question to one
+ * model alone, with no backups, on the sample menu. Counted as platform
+ * use in ai_usage, like a Test.
+ */
+export async function compareWaiterAnswer(
+  model: string,
+  question: string,
+): Promise<CompareAnswer> {
+  const meter = new Meter();
+  const started = Date.now();
+  let answer: Omit<CompareAnswer, "ms" | "costUsd" | "servedModel">;
+  try {
+    const turn = await waiterTurn(meter, [model], question);
+    answer = {
+      model,
+      reply: excerpt(turn.finalText),
+      tools: [...new Set(turn.toolOutcomes.map((o) => o.toolName))],
+      declined: turn.refused || turn.guardCorrectionExhausted,
+    };
+  } catch (error) {
+    answer = {
+      model,
+      reply: "",
+      tools: [],
+      declined: false,
+      error: error instanceof Error ? error.message : "It didn't answer.",
+      ...(meter.busy ? { busy: true } : {}),
+    };
+  }
+  await recordAiUsage({
+    tally: meter.tally,
+    job: "waiter",
+    source: "admin_test",
+  });
+  return {
+    ...answer,
+    servedModel: meter.servedModel,
+    ms: Date.now() - started,
+    costUsd: meter.costUsd,
   };
 }
