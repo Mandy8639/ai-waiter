@@ -565,6 +565,14 @@ These replace the open questions of the first draft. The overriding constraint f
 **AI image generation must cost $0**. There's no paid model, no paid fallback, no credits, no
 billing, and never an automatic switch to another model.
 
+> **Amended 2026-10-19:** the owner approved a **paid** model, because no image model on OpenRouter
+> is free. Everything else stands: one model, never an automatic switch, the same caps (at most
+> 10 attempts per restaurant per day). Trial on one dish: `bytedance-seed/seedream-5-0-flash` at
+> $0.018 an image was the only cheap model that was both clearly illustrated and framed the whole
+> dish (others measured in `src/lib/menu-images/openrouter-image-provider.ts`). Worst case, a
+> restaurant using every attempt every day costs about $5.40 a month; a 100-dish menu about $1.80
+> once.
+
 | #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | **Provider:** OpenRouter. **Initial model:** `recraft/recraft-v3:free`, set through configuration (an env var such as `MENU_IMAGE_MODEL`), never hard-coded in more than one place. The rest of the system depends on an `ImageGenerationProvider` interface. The first and only implementation is `OpenRouterImageGenerationProvider`. OpenAI and paid OpenRouter models are _future_ implementations, not built now. If the model is unavailable, rate-limited, deprecated or can't do the job, the feature **fails gracefully**: the owner sees "AI image generation is temporarily unavailable.", nothing switches model, and uploads and everything else keep working. |

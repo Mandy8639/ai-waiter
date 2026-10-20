@@ -350,8 +350,9 @@ describe("OpenRouterImageGenerationProvider.generate", () => {
       prompt: "a plate of dal",
       n: 1,
       aspect_ratio: "1:1",
-      output_format: "webp",
     });
+    // FLUX 3 400s on any request naming output_format (seen 2026-10-19).
+    expect(sent.output_format).toBeUndefined();
     // A preference list would be an automatic model switch. There is none.
     expect(sent.models).toBeUndefined();
   });

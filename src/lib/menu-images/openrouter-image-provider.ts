@@ -7,8 +7,7 @@
  * classification can be pointed at a local server in tests instead of
  * being mocked away.
  *
- * WRITTEN AGAINST THE DOCUMENTED API, NEVER EXERCISED AGAINST A REAL ONE.
- * Checked 2026-09-23 against OpenRouter's OpenAPI document
+ * Written 2026-09-23 against OpenRouter's documented API
  * (openrouter.ai/docs/api/api-reference/images/generate-an-image.md):
  *
  *   POST /api/v1/images
@@ -16,18 +15,23 @@
  *   200
  *     { created, data: [{ b64_json, media_type? }], usage?: { cost, ... } }
  *
- * The response parsing below matches that document. It has never seen a
- * real 200, because there is nothing to call: on the same day, the
- * dedicated image API listed 54 models and **not one of them was free**
- * (`:free` appears in zero ids; the cheapest observed was
- * recraft/recraft-v4.1-flash at $0.007 per image, and
- * google/gemini-3.1-flash-lite-image at $0.00003 per output token). The
- * approved model, recraft/recraft-v3:free, still reports `"endpoints": []`.
+ * FIRST RUN AGAINST THE REAL API 2026-10-19 (the owner approved a paid
+ * model; none is free). The response shape matched; one request field did
+ * not: `output_format` is optional per model, and FLUX 3 rejects any
+ * request that names it with a 400 ("does not support: output_format"),
+ * which would have counted as a failed attempt. So it is not sent; models
+ * return JPEG, PNG or WebP and processing.ts accepts all three. Measured
+ * for one dish (cost from the response's usage.cost):
  *
- * That is why this ships with no model configured. It is also why
+ *   bytedance-seed/seedream-5-0-flash   $0.018  16 s  2048px JPEG, clearly illustrated
+ *   recraft/recraft-v4.1-flash          $0.007   2 s  illustrated, plate cropped
+ *   black-forest-labs/flux-3-image-klein $0.009   7 s  illustrated, less faithful dish
+ *   qwen/qwen-image-2.1-turbo           $0.0184 17 s  close to photo-real: avoid (§18 decision 6)
+ *
  * `preflight()` is not an optimisation: it is the guard that turns "the
  * model you named cannot serve" into a clean, quota-free refusal instead
- * of a failed attempt the restaurant is charged for.
+ * of a failed attempt the restaurant is charged for. An empty `endpoints`
+ * array (recraft/recraft-v3:free's shape) means listed but unservable.
  */
 import {
   GenerationFailed,
@@ -52,16 +56,15 @@ export interface OpenRouterImageProviderOptions {
 }
 
 /**
- * One 1:1 image, WebP out. Square because every surface that draws a dish
- * photo crops with object-cover (menu card at 96-112px, dish page
- * full-bleed), so a square source wastes the fewest pixels across both.
- * WebP because processing.ts re-encodes to WebP anyway — asking for it
- * directly avoids a PNG round-trip through sharp for no gain.
+ * One 1:1 image. Square because every surface that draws a dish photo
+ * crops with object-cover (menu card at 96-112px, dish page full-bleed),
+ * so a square source wastes the fewest pixels across both. No
+ * `output_format`: not every model accepts it (see above), and
+ * processing.ts re-encodes to WebP whatever arrives.
  */
 const REQUEST_SHAPE = {
   n: 1,
   aspect_ratio: "1:1",
-  output_format: "webp",
 } as const;
 
 export class OpenRouterImageGenerationProvider implements ImageGenerationProvider {
