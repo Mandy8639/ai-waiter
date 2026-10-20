@@ -19,6 +19,8 @@ import { ResetCard } from "@/components/admin/reset-card";
 import { SafetyNetCard } from "@/components/admin/safety-net-card";
 import { CompareCard } from "@/components/admin/compare-card";
 import { RestaurantsCard } from "@/components/admin/restaurants-card";
+import { PlanWaiterCard } from "@/components/admin/plan-waiter-card";
+import { getWaiterOverridesForAdmin } from "@/lib/admin/waiter-override-queries";
 import {
   getSwitchHistory,
   listRestaurantsForAdmin,
@@ -113,6 +115,7 @@ export default async function AdminPage() {
     thisWeekCost,
     lastWeekCost,
     restaurants,
+    waiterOverrides,
   ] = await Promise.all([
     getAllModelSettings(),
     getOpenRouterModels(),
@@ -123,6 +126,7 @@ export default async function AdminPage() {
     getCostReport(weeks.thisWeek),
     getCostReport(weeks.lastWeek),
     listRestaurantsForAdmin(),
+    getWaiterOverridesForAdmin(),
   ]);
   const switchHistory = await getSwitchHistory(
     new Map((restaurants ?? []).map((r) => [r.id, r.name])),
@@ -135,6 +139,21 @@ export default async function AdminPage() {
     settings.find((s) => s.job === "waiter")?.resolved.models ?? [];
   const now = new Date();
   const provider = aiConfig.provider;
+  // Phase 7: per-restaurant and per-plan waiter models, on OpenRouter only
+  // (on Anthropic the waiter's model comes from Vercel).
+  const platformWaiter = settings.find((s) => s.job === "waiter")?.resolved;
+  const waiterPerRestaurant =
+    provider === "openrouter" &&
+    waiterOverrides &&
+    platformWaiter &&
+    process.env.OPENROUTER_API_KEY
+      ? {
+          platform: platformWaiter,
+          byRestaurant: Object.fromEntries(waiterOverrides.byRestaurant),
+          plans: waiterOverrides.plans,
+          options: catalogueFor("waiter", waiterModels, known),
+        }
+      : undefined;
   const canTest = !!process.env.OPENROUTER_API_KEY;
 
   return (
@@ -180,7 +199,19 @@ export default async function AdminPage() {
         />
       </SpendingCard>
 
-      <RestaurantsCard restaurants={restaurants} history={switchHistory} />
+      <RestaurantsCard
+        restaurants={restaurants}
+        history={switchHistory}
+        waiter={waiterPerRestaurant}
+      />
+
+      {waiterPerRestaurant && (
+        <PlanWaiterCard
+          plans={waiterPerRestaurant.plans}
+          platform={waiterPerRestaurant.platform}
+          options={waiterPerRestaurant.options}
+        />
+      )}
 
       <Card>
         <CardHeader>

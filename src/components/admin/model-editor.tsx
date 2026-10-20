@@ -64,12 +64,39 @@ export function ModelEditor({
   freeOnly,
   current,
   options,
+  testAction,
+  saveAction,
+  who: whoOverride,
+  idPrefix,
+  testingNote,
+  changeLabel = "Change",
 }: {
   job: AiJob;
   label: string;
   freeOnly: boolean;
   current: string[];
   options: CatalogueOption[];
+  /**
+   * Phase 7: Test and Save for one restaurant's or one plan's waiter list,
+   * as bound server actions. Without them the editor sets the job's
+   * platform-wide list, as before.
+   */
+  testAction?: (
+    models: string[],
+  ) => Promise<
+    | { error: string }
+    | { result: ModelTestResult; testId?: string; error?: string }
+  >;
+  saveAction?: (
+    models: string[],
+    testId: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Who the confirm says will start using the list. */
+  who?: string;
+  /** Keeps field ids unique when several editors for one job share a page. */
+  idPrefix?: string;
+  testingNote?: string;
+  changeLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [slots, setSlots] = useState<Slot[]>(() => slotsFrom(current, options));
@@ -102,7 +129,9 @@ export function ModelEditor({
   function runTest() {
     setError(null);
     startTest(async () => {
-      const outcome = await testModelList(job, list);
+      const outcome = testAction
+        ? await testAction(list)
+        : await testModelList(job, list);
       if ("result" in outcome) {
         setTest({ result: outcome.result, testId: outcome.testId });
       } else {
@@ -116,7 +145,9 @@ export function ModelEditor({
     if (!test?.testId) return;
     const testId = test.testId;
     startSave(async () => {
-      const outcome = await saveModelList(job, list, testId);
+      const outcome = saveAction
+        ? await saveAction(list, testId)
+        : await saveModelList(job, list, testId);
       setConfirming(false);
       if (!outcome.ok) {
         setError(outcome.error);
@@ -139,19 +170,20 @@ export function ModelEditor({
           setOpen(true);
         }}
       >
-        Change
+        {changeLabel}
       </Button>
     );
   }
 
-  const who = job === "waiter" ? "Diners" : label.split(" (")[0];
+  const who =
+    whoOverride ?? (job === "waiter" ? "Diners" : label.split(" (")[0]);
 
   return (
     <div className="bg-muted/30 flex flex-col gap-3 rounded-md border p-3">
       {SLOTS.map((slotLabel, i) => {
         const slot = slots[i];
         const option = options.find((o) => o.model === slot.choice);
-        const id = `${job}-model-${i}`;
+        const id = `${idPrefix ?? job}-model-${i}`;
         return (
           <div key={slotLabel} className="flex flex-col gap-1">
             <Label htmlFor={id}>{slotLabel}</Label>
@@ -243,9 +275,10 @@ export function ModelEditor({
       )}
       {testing && (
         <p className="text-muted-foreground text-xs" aria-live="polite">
-          {job === "vision"
-            ? "Reading the test menu photo. This can take up to two minutes."
-            : "Sending a sample request. This usually takes a few seconds."}
+          {testingNote ??
+            (job === "vision"
+              ? "Reading the test menu photo. This can take up to two minutes."
+              : "Sending a sample request. This usually takes a few seconds.")}
         </p>
       )}
 

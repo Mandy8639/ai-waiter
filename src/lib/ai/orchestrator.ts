@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { getAiProvider, isAiConfigured } from "./providers";
 import { aiConfig } from "./config";
-import { getModelsFor } from "./model-settings";
+import { getWaiterModels } from "./waiter-models";
 import { buildSystemPrompt } from "./system-prompt";
 import type { AiPersona } from "./persona";
 import { executeTool } from "./tools/index";
@@ -81,7 +81,7 @@ export async function sendAiMessage(
   const start = Date.now();
   // The primary the logs attribute a turn to when no model served it.
   const configuredModel =
-    (await getModelsFor("waiter")).models[0] ?? aiConfig.model;
+    (await getWaiterModels(params.restaurantId)).models[0] ?? aiConfig.model;
   const { restaurantId, restaurantSlug, restaurantName, customerSessionId } =
     params;
 

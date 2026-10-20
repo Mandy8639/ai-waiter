@@ -1,6 +1,6 @@
 import "server-only";
 import { aiConfig } from "../config";
-import { getModelsFor } from "../model-settings";
+import { getWaiterModels } from "../waiter-models";
 import { runConversationLoop } from "../loop";
 import { callWithSafetyNet } from "../safety-net-core";
 import { getSafetyNetModels } from "../safety-net";
@@ -51,7 +51,8 @@ export function createOpenRouterProvider(): AiProvider {
 
       // Resolved once per turn, so every call in this turn's tool loop
       // asks the same models (saved on /admin, else AI_MODEL, else default).
-      const { models } = await getModelsFor("waiter");
+      // Phase 7: this restaurant's list, else its plan's, else the platform's.
+      const { models } = await getWaiterModels(turn.restaurantId);
 
       const tools = toOpenRouterTools(getToolDefinitions());
       // Every model call this turn makes, added up into one ai_usage row.

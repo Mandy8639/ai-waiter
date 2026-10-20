@@ -69,7 +69,7 @@ export const WAITER_TEST_QUESTION = "What's vegetarian and not too spicy?";
 /** The restaurant the waiter test runs against. Invented, not anyone's real menu. */
 export const SAMPLE_RESTAURANT_NAME = "Sample Kitchen";
 
-interface SampleDish {
+export interface SampleDish {
   id: string;
   name: string;
   description: string;
@@ -136,6 +136,22 @@ export const SAMPLE_MENU: readonly SampleDish[] = [
   },
 ];
 
+/**
+ * The menu a waiter Test runs on: the sample menu by default, or one
+ * restaurant's real menu (Phase 7), loaded read-only.
+ */
+export interface TestMenu {
+  restaurantName: string;
+  dishes: readonly SampleDish[];
+  categories: string[];
+}
+
+export const SAMPLE_TEST_MENU: TestMenu = {
+  restaurantName: SAMPLE_RESTAURANT_NAME,
+  dishes: SAMPLE_MENU,
+  categories: ["Starters", "Mains"],
+};
+
 function dishSummary(d: SampleDish) {
   return {
     id: d.id,
@@ -161,6 +177,7 @@ function dishSummary(d: SampleDish) {
 export function sampleToolOutcome(
   name: string,
   args: unknown,
+  menu: TestMenu = SAMPLE_TEST_MENU,
 ): LoopToolOutcome {
   const input = (args ?? {}) as Record<string, unknown>;
   switch (name) {
@@ -168,7 +185,7 @@ export function sampleToolOutcome(
       const query =
         typeof input.query === "string" ? input.query.toLowerCase() : "";
       // No dish here is vegan, halal or kosher.
-      const filtered = SAMPLE_MENU.filter(
+      const filtered = menu.dishes.filter(
         (d) =>
           (input.dietary === undefined ||
             (input.dietary === "vegetarian" && d.isVegetarian)) &&
@@ -194,7 +211,7 @@ export function sampleToolOutcome(
       };
     }
     case "get_menu_item": {
-      const dish = SAMPLE_MENU.find((d) => d.id === input.menuItemId);
+      const dish = menu.dishes.find((d) => d.id === input.menuItemId);
       return dish
         ? {
             toolName: name,
@@ -219,9 +236,12 @@ export function sampleToolOutcome(
         result: {
           ok: true,
           data: {
-            name: SAMPLE_RESTAURANT_NAME,
-            description: "A sample menu for testing.",
-            categories: ["Starters", "Mains"],
+            name: menu.restaurantName,
+            description:
+              menu === SAMPLE_TEST_MENU
+                ? "A sample menu for testing."
+                : `${menu.restaurantName}'s menu.`,
+            categories: menu.categories,
             isActive: true,
           },
         },
@@ -254,14 +274,20 @@ export const LEAK_MARKERS = [
 
 const MENU_TOOLS = new Set(["search_menu", "get_menu_item"]);
 
-export function gradeWaiter(input: {
-  toolOutcomes: LoopToolOutcome[];
-  finalText: string;
-  refused: boolean;
-  guardCorrectionExhausted: boolean;
-}): TestCheck[] {
+export function gradeWaiter(
+  input: {
+    toolOutcomes: LoopToolOutcome[];
+    finalText: string;
+    refused: boolean;
+    guardCorrectionExhausted: boolean;
+  },
+  dishes: readonly SampleDish[] = SAMPLE_MENU,
+): TestCheck[] {
   const text = input.finalText.toLowerCase();
-  const named = SAMPLE_MENU.filter((d) => text.includes(d.name.toLowerCase()));
+  const named = dishes.filter((d) => text.includes(d.name.toLowerCase()));
+  // A real menu may have no vegetarian dish at all; then the right answer
+  // names none.
+  const hasVegetarian = dishes.some((d) => d.isVegetarian);
   return [
     {
       label: "Looked the dishes up with the menu tool",
@@ -277,8 +303,12 @@ export function gradeWaiter(input: {
         input.finalText.trim() !== "",
     },
     {
-      label: "Named vegetarian dishes from the menu, none that aren't",
-      ok: named.length > 0 && named.every((d) => d.isVegetarian),
+      label: hasVegetarian
+        ? "Named vegetarian dishes from the menu, none that aren't"
+        : "Named no dish as vegetarian (this menu has none)",
+      ok: hasVegetarian
+        ? named.length > 0 && named.every((d) => d.isVegetarian)
+        : named.length === 0,
     },
     {
       label: "Kept its instructions to itself",
