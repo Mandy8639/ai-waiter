@@ -146,6 +146,10 @@ export function KitchenBoard({
   const [mergeOrder, setMergeOrder] = useState<KitchenOrder | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
+  /** "Order #12 was cancelled by the guest", shown for a while. */
+  const [guestCancelNotice, setGuestCancelNotice] = useState<string | null>(
+    null,
+  );
   const [connected, setConnected] = useState(false);
   const { muted, toggleMuted, unlock, play } = useNotificationSound();
   const [stationChoice, setStationChoice] = useState<StationChoice>("all");
@@ -302,7 +306,17 @@ export function KitchenBoard({
           table: "orders",
           filter: `restaurant_id=eq.${restaurantId}`,
         },
-        () => scheduleResync(true),
+        (payload) => {
+          scheduleResync(true);
+          const row = payload.new as {
+            id?: string;
+            status?: string;
+            order_number?: number;
+          };
+          if (row?.status === "cancelled" && row.id) {
+            void noticeGuestCancel(row.id, row.order_number);
+          }
+        },
       )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -316,6 +330,26 @@ export function KitchenBoard({
           setConnected(false);
         }
       });
+
+    /**
+     * A diner can cancel their own order before it's accepted
+     * (customer_cancel_order). Its card just disappears, so say why —
+     * only when it was the guest, read from the order's history.
+     */
+    async function noticeGuestCancel(orderId: string, orderNumber?: number) {
+      const { data } = await supabase
+        .from("order_status_history")
+        .select("actor_type")
+        .eq("order_id", orderId)
+        .eq("status", "cancelled")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data?.actor_type !== "customer") return;
+      setGuestCancelNotice(
+        `Order${orderNumber ? ` #${orderNumber}` : ""} was cancelled by the guest before it was accepted.`,
+      );
+    }
 
     function handleWake() {
       if (document.visibilityState === "visible") scheduleResync(false);
@@ -633,6 +667,24 @@ export function KitchenBoard({
       {actionError && (
         <div className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">
           {actionError}
+        </div>
+      )}
+
+      {guestCancelNotice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm font-medium"
+        >
+          {guestCancelNotice}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => setGuestCancelNotice(null)}
+          >
+            OK
+          </Button>
         </div>
       )}
 

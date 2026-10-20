@@ -14,6 +14,7 @@ import { getOrderEta } from "@/lib/orders/order-eta";
 import { etaSentence } from "@/lib/orders/prep-estimate";
 import { getMyFeedbackState } from "@/lib/feedback/queries";
 import { OrderFeedbackPanel } from "@/components/customer/order-feedback-panel";
+import { OrderChangeControls } from "@/components/customer/order-change-controls";
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
 export async function generateMetadata({
@@ -126,6 +127,14 @@ export default async function OrderConfirmationPage({
               : `We'll have it ready for ${order.pickup.time}.`
             : etaSentence(eta)
         }
+      />
+
+      <OrderChangeControls
+        orderId={order.id}
+        orderNumber={order.orderNumber}
+        restaurantSlug={restaurantSlug}
+        status={order.status}
+        paid={Boolean(payment.paid)}
       />
 
       <div className="flex flex-col gap-4">

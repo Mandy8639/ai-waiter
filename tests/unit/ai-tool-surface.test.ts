@@ -70,6 +70,9 @@ describe("AI tool surface (spec section 4)", () => {
     expect([...names].sort()).toEqual(
       [
         "add_item_to_cart",
+        // Diner cancels/changes their own order before the kitchen accepts
+        // it (2026-10-20): ask first, then cancel after a separate yes.
+        "cancel_order",
         "clear_cart",
         "get_cart",
         "get_customer_order_history",
@@ -77,6 +80,7 @@ describe("AI tool surface (spec section 4)", () => {
         "get_order_status",
         "get_restaurant_info",
         "remove_cart_item",
+        "request_order_cancellation",
         "request_order_confirmation",
         "search_menu",
         "submit_order",
