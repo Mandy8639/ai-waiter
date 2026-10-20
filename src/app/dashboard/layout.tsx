@@ -23,6 +23,8 @@ import { switchedOffNotice } from "@/lib/admin/restaurant-switches-core";
 import { StaffAssistantProvider } from "@/components/dashboard/staff-assistant";
 import { billingNotice } from "@/lib/billing/trial-core";
 import { getRestaurantBilling } from "@/lib/billing/trial-queries";
+import { getPublicPricing } from "@/lib/billing/public-pricing";
+import { starterTermsLine } from "@/lib/admin/plan-admin-core";
 import { canSellPlans } from "@/lib/app-shell/core";
 import { getAppShell } from "@/lib/app-shell/server";
 import { hasVerifiedTwoFactor } from "@/lib/auth/two-factor-core";
@@ -113,10 +115,15 @@ export default async function DashboardLayout({
 
   // The free month / plan notice (20261018120000). Plans can't be offered
   // for purchase inside the store apps, so there it carries no price or link.
+  // What Starter costs, as set on /admin (Phase 8).
+  const starter = (await getPublicPricing()).plans.find(
+    (p) => p.slug === "starter",
+  );
   const notice = billingNotice(await getRestaurantBilling(restaurant.id), {
     canManage: ["owner", "manager"].includes(restaurant.role),
     canSell: canSellPlans(await getAppShell()),
     timeZone: restaurant.timezone,
+    ...(starter ? { starterTerms: starterTermsLine(starter) } : {}),
   });
 
   // Admin Phase 6: what Tableside has switched off for this restaurant.

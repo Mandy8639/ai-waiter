@@ -7,6 +7,13 @@ import { SUPPORT_PATH } from "@/lib/legal/support";
 import { publicPageMetadata } from "@/lib/seo/metadata";
 import { JsonLd } from "@/components/seo/json-ld";
 import { organizationJsonLd } from "@/lib/seo/structured-data";
+import { getPublicPricing } from "@/lib/billing/public-pricing";
+import { formatFeeBps, formatMonthlyPrice } from "@/lib/billing/format";
+import { freePeriodPhrase, planNote } from "@/lib/admin/plan-admin-core";
+
+// Prices and the free month are set on /admin (Phase 8); re-read every few
+// minutes so a change there reaches this page without a deploy.
+export const revalidate = 300;
 
 export const metadata = publicPageMetadata({
   title: "Tableside — an AI waiter for your restaurant",
@@ -55,28 +62,9 @@ const HOW_IT_WORKS = [
   },
 ];
 
-const PLANS = [
-  {
-    name: "Starter",
-    price: "$19/month",
-    fee: "1% of each card payment",
-    note: "Everything included. Cash payments are never charged.",
-  },
-  {
-    name: "Standard",
-    price: "$49/month",
-    fee: "0.5% of each card payment",
-    note: "Cheaper than Starter once cards pass roughly $6,000 a month.",
-  },
-  {
-    name: "Pro",
-    price: "$149/month",
-    fee: "0.25% of each card payment",
-    note: "For busy sites where the percentage matters more than the monthly fee.",
-  },
-];
-
-export default function Home() {
+export default async function Home() {
+  const pricing = await getPublicPricing();
+  const free = freePeriodPhrase(pricing.freeMonthDays);
   return (
     <div className="flex flex-1 flex-col">
       <JsonLd data={organizationJsonLd()} />
@@ -108,7 +96,7 @@ export default function Home() {
             </Link>
           </div>
           <p className="text-muted-foreground text-sm">
-            Your first month is free, with no fee on card payments. You review
+            {free ? `${free}, with no fee on card payments. ` : ""}You review
             and edit everything the AI knows about your menu before a single
             diner sees it.
           </p>
@@ -147,23 +135,32 @@ export default function Home() {
             What it costs
           </h2>
           <p className="text-muted-foreground text-sm">
-            Your first month is free: no monthly fee and no percentage on card
-            payments. After that, choose a plan below. Card payments go directly
-            to your own Stripe account — this platform never holds your money.
-            You pay Stripe&apos;s usual card fee, plus our percentage.
+            {free
+              ? `${free}: no monthly fee and no percentage on card payments. After that, choose a plan below. `
+              : "Choose a plan below. "}
+            Card payments go directly to your own Stripe account — this platform
+            never holds your money. You pay Stripe&apos;s usual card fee, plus
+            our percentage.
           </p>
           <ul className="flex flex-col gap-4">
-            {PLANS.map((plan) => (
-              <li key={plan.name}>
+            {pricing.plans.map((plan, index) => (
+              <li key={plan.slug}>
                 <Card>
                   <CardContent className="flex flex-col gap-1">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <h3 className="font-medium">{plan.name}</h3>
                       <span className="text-muted-foreground text-sm">
-                        {plan.price} · {plan.fee}
+                        {formatMonthlyPrice(
+                          plan.monthlyPriceCents,
+                          plan.currency,
+                        )}
+                        {plan.monthlyPriceCents > 0 ? "/month" : ""} ·{" "}
+                        {formatFeeBps(plan.feeBps)} of each card payment
                       </span>
                     </div>
-                    <p className="text-muted-foreground text-sm">{plan.note}</p>
+                    <p className="text-muted-foreground text-sm">
+                      {planNote(pricing.plans, index)}
+                    </p>
                   </CardContent>
                 </Card>
               </li>
