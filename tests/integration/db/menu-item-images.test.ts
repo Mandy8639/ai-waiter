@@ -24,6 +24,23 @@ describe("menu item images", () => {
 
   beforeAll(async () => {
     db = await createTestDb();
+    // Production allows 300 a day (20261103090000); the cap's behaviour is
+    // tested at 10 so the fixtures stay small.
+    await db.admin.query(
+      "update public.menu_image_generation_limits set attempts_per_restaurant_per_day = 10 where id;",
+    );
+  });
+
+  it("allows 300 generations per restaurant per day in production", async () => {
+    const fresh = await createTestDb();
+    try {
+      const { rows } = await fresh.admin.query<{ n: number }>(
+        "select attempts_per_restaurant_per_day as n from public.menu_image_generation_limits;",
+      );
+      expect(rows[0].n).toBe(300);
+    } finally {
+      await fresh.close();
+    }
   });
 
   afterAll(async () => {

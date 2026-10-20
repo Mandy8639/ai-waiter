@@ -7,10 +7,19 @@ import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { asRowsWithNewColumns } from "@/lib/menu-images/menu-item-rows";
 import type { ImageSource } from "@/lib/menu-images/resolve";
+import { BulkPhotoGenerator } from "@/components/dashboard/bulk-photo-generator";
+import { PhotoReviewList } from "@/components/dashboard/photo-review-list";
+import { generationAvailability } from "@/lib/menu-images/actions";
+import { pickBulkTargets } from "@/lib/menu-images/bulk-core";
+import { loadBulkPhotoState } from "@/lib/menu-images/bulk-queries";
 
 export const metadata = {
   title: "Menu photos — Tableside",
 };
+
+// "Generate for all dishes" runs as server actions from this page, five
+// illustrations at a time (about 10-20 s); room to spare for a slow batch.
+export const maxDuration = 300;
 
 interface PhotoRow {
   id: string;
@@ -23,11 +32,11 @@ interface PhotoRow {
  * Where a restaurant sees photo coverage across the whole menu, and gets
  * to the dishes that still need one.
  *
- * Deliberately not a media manager: no grid of thumbnails to browse, no
- * bulk actions, no library. The useful question for a restaurant with 150
- * dishes is "which ones are missing a photo, and let me do the next one",
- * so that is the entire page. Uploading still happens in the normal
- * per-dish flow, which is the only place the review step lives.
+ * Deliberately not a media manager: no library to browse. The useful
+ * question for a restaurant with 150 dishes is "which ones are missing a
+ * photo", so the page answers that, offers to generate an illustration for
+ * all of them at once (owners and managers), and lists the generated ones
+ * waiting for approval. Uploading a real photo stays in the per-dish flow.
  */
 export default async function MenuPhotosPage() {
   const { restaurant } = await requireCurrentRestaurant();
@@ -56,6 +65,25 @@ export default async function MenuPhotosPage() {
     .order("display_order", { ascending: true });
 
   const rows = asRowsWithNewColumns<PhotoRow>(data);
+  const canManage =
+    restaurant.role === "owner" || restaurant.role === "manager";
+  const [bulk, availability] = canManage
+    ? await Promise.all([
+        loadBulkPhotoState(supabase, restaurant.id),
+        generationAvailability(),
+      ])
+    : [null, null];
+  const names = new Map(rows.map((r) => [r.id, r.name]));
+  const targetIds = bulk
+    ? pickBulkTargets(
+        rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          activeImageId: r.active_image_id,
+          hasPendingImage: bulk.busyDishIds.has(r.id),
+        })),
+      )
+    : [];
 
   const missing = rows.filter((row) => !row.active_image_id);
   const aiGenerated = rows.filter(
@@ -76,11 +104,29 @@ export default async function MenuPhotosPage() {
 
       <dl className="grid grid-cols-3 gap-3">
         <Stat label="With your photos" value={restaurantPhotos} />
-        {/* Informational until generation exists; shown so the number is
-            never a surprise once it does. */}
         <Stat label="AI-generated" value={aiGenerated} />
         <Stat label="No photo yet" value={missing.length} />
       </dl>
+
+      {canManage && bulk && availability && (
+        <>
+          <BulkPhotoGenerator
+            restaurantId={restaurant.id}
+            targetIds={targetIds}
+            unavailable={
+              availability.available ? null : (availability.message ?? null)
+            }
+          />
+          <PhotoReviewList
+            restaurantId={restaurant.id}
+            items={bulk.pending.map((p) => ({
+              imageId: p.imageId,
+              dishName: names.get(p.menuItemId) ?? "A dish",
+              url: p.url,
+            }))}
+          />
+        </>
+      )}
 
       <Card>
         <CardHeader>

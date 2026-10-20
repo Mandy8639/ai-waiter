@@ -30,6 +30,14 @@ import {
 } from "./generation-provider";
 import { OpenRouterImageGenerationProvider } from "./openrouter-image-provider";
 import type { ImageGenerationProvider } from "./generation-provider";
+import {
+  BULK_BATCH_SIZE,
+  BULK_PUBLISH_SIZE,
+  runBatch,
+  type BatchResult,
+  type DishResult,
+} from "./bulk-core";
+import { z } from "zod";
 import { switchedOffMessage } from "@/lib/admin/restaurant-switches-core";
 import { isAiFeatureAllowed } from "@/lib/admin/restaurant-switches";
 import { recordAiUsage } from "@/lib/ai/usage";
@@ -551,6 +559,111 @@ export async function generateMenuPhoto(
   restaurantId: string,
   menuItemId: string,
 ): Promise<{ ok: boolean; error?: string; imageId?: string }> {
+  const ready = await readyToGenerate(restaurantId);
+  if (!ready.ok) return { ok: false, error: ready.error };
+
+  const result = await generateForDish(ready.deps, menuItemId);
+  if (!result.ok) return { ok: false, error: result.error };
+  revalidatePath("/dashboard/menu");
+  return { ok: true, imageId: result.imageId };
+}
+
+/**
+ * "Generate for all dishes": one batch of up to BULK_BATCH_SIZE dishes,
+ * in parallel. The browser sends batch after batch (see
+ * src/components/dashboard/bulk-photo-generator.tsx) until the list is
+ * done or `stop` says to. Same checks, caps and review step as one dish.
+ */
+export async function generateMenuPhotosBatch(
+  restaurantId: string,
+  menuItemIds: string[],
+): Promise<BatchResult> {
+  const ids = z
+    .array(z.string().uuid())
+    .max(BULK_BATCH_SIZE)
+    .safeParse(menuItemIds);
+  if (!ids.success) {
+    return {
+      generated: 0,
+      failed: 0,
+      stop: "unavailable",
+      message: "Those dishes could not be read.",
+    };
+  }
+
+  const ready = await readyToGenerate(restaurantId);
+  if (!ready.ok) {
+    return {
+      generated: 0,
+      failed: 0,
+      stop: "unavailable",
+      message: ready.error,
+    };
+  }
+
+  const result = await runBatch(ids.data, (id) =>
+    generateForDish(ready.deps, id),
+  );
+  revalidatePath("/dashboard/menu/photos");
+  return result;
+}
+
+/**
+ * "Approve all": publishes up to BULK_PUBLISH_SIZE reviewed images at once,
+ * each exactly as publishMenuPhoto does. Pressing it is the owner's review.
+ */
+export async function publishMenuPhotosBatch(
+  restaurantId: string,
+  imageIds: string[],
+): Promise<{ published: number; failed: number; error?: string }> {
+  const ids = z
+    .array(z.string().uuid())
+    .max(BULK_PUBLISH_SIZE)
+    .safeParse(imageIds);
+  if (!ids.success) {
+    return {
+      published: 0,
+      failed: 0,
+      error: "Those photos could not be read.",
+    };
+  }
+
+  const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
+  if (!auth.ok) return { published: 0, failed: 0, error: auth.error };
+
+  const records = imageRecords(auth.context.supabase);
+  const storage = storageGateway();
+  const results = await Promise.allSettled(
+    ids.data.map((imageId) => publishImage(imageId, { records, storage })),
+  );
+  const failures = results.filter(
+    (r): r is PromiseRejectedResult => r.status === "rejected",
+  );
+  revalidatePath("/dashboard/menu/photos");
+  revalidatePath("/dashboard/menu");
+  return {
+    published: results.length - failures.length,
+    failed: failures.length,
+    error: failures[0] ? friendly(failures[0].reason) : undefined,
+  };
+}
+
+type GenerationDeps = {
+  restaurantId: string;
+  provider: ImageGenerationProvider;
+  records: GenerationRecords;
+  storage: StorageGateway;
+  timeoutMs: number;
+};
+
+/**
+ * Everything that must hold before any dish is generated: a model is set,
+ * the person is an owner or manager, and Tableside hasn't switched the
+ * restaurant's AI menu tools off (Admin Phase 6).
+ */
+async function readyToGenerate(
+  restaurantId: string,
+): Promise<{ ok: true; deps: GenerationDeps } | { ok: false; error: string }> {
   // Checked before authorization so that, in the normal disabled state,
   // this costs one environment read and nothing else.
   const state = generationConfigured();
@@ -560,7 +673,6 @@ export async function generateMenuPhoto(
 
   const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
   if (!auth.ok) return { ok: false, error: auth.error };
-  // Admin Phase 6: dish images are one of the AI menu tools.
   if (!(await isAiFeatureAllowed(restaurantId, "owner_tools"))) {
     return { ok: false, error: switchedOffMessage("owner_tools") };
   }
@@ -573,8 +685,10 @@ export async function generateMenuPhoto(
     return { ok: false, error: unavailableMessage("UNCONFIGURED") };
   }
 
-  try {
-    const result = await generateImage(menuItemId, {
+  return {
+    ok: true,
+    deps: {
+      restaurantId,
       provider: recordingCost(
         new OpenRouterImageGenerationProvider({
           apiKey,
@@ -586,24 +700,50 @@ export async function generateMenuPhoto(
       records: generationRecords(auth.context.supabase),
       storage: storageGateway(),
       timeoutMs: generationTimeoutMs(),
-    });
-    revalidatePath("/dashboard/menu");
+    },
+  };
+}
+
+/** One dish, with every failure turned into a sentence and a kind. */
+async function generateForDish(
+  deps: GenerationDeps,
+  menuItemId: string,
+): Promise<DishResult> {
+  try {
+    const result = await generateImage(menuItemId, deps);
     return { ok: true, imageId: result.imageId };
   } catch (error) {
     // Quota answers first: they are the most actionable thing an owner can
     // be told, and they are not faults.
     const quota = quotaMessage(error);
-    if (quota) return { ok: false, error: quota };
+    if (quota) {
+      const text = error instanceof Error ? error.message : "";
+      return {
+        ok: false,
+        error: quota,
+        kind: text.includes("MENU_IMAGE_GENERATION_RESTAURANT_LIMIT")
+          ? "restaurant_limit"
+          : "dish",
+      };
+    }
     if (error instanceof GenerationUnavailable) {
-      return { ok: false, error: error.message };
+      return { ok: false, error: error.message, kind: "unavailable" };
     }
     if (error instanceof GenerationFailed) {
-      return { ok: false, error: error.message };
+      return { ok: false, error: error.message, kind: "dish" };
     }
     if (error instanceof ImageRejected) {
-      return { ok: false, error: "The generated image could not be used." };
+      return {
+        ok: false,
+        error: "The generated image could not be used.",
+        kind: "dish",
+      };
     }
-    return { ok: false, error: "The image could not be generated." };
+    return {
+      ok: false,
+      error: "The image could not be generated.",
+      kind: "dish",
+    };
   }
 }
 
