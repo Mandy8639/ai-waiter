@@ -222,6 +222,39 @@ box and a "Switched off" filter). Each has three switches:
 
   `tests/unit/restaurant-switches.test.ts` pins every one.
 
+## A waiter model per restaurant, or per plan (Phase 7)
+
+Each restaurant in the **Restaurants** card shows its waiter model and where it comes from: **Set
+for this restaurant**, **Its plan's default** or **Same as everyone**. A new **Waiter model per
+plan** card sets a default for every restaurant on Starter, Standard or Pro, for example a paid,
+smarter waiter on Pro.
+
+- **Order.** For each reply, the waiter uses the restaurant's own list, then its plan's, then the
+  platform list (saved here, else `AI_MODEL`, else the built-in default). Restaurants without a row
+  in `restaurant_plans` count as the default plan. `src/lib/ai/waiter-models.ts` reads overrides
+  with the service role and caches them for a minute. A failed read falls back to the platform
+  list, so a broken override never leaves a restaurant without a waiter. This applies on OpenRouter
+  only (on Anthropic, the model comes from Vercel).
+- **Testing.** Change → Test → Save, using the same editor as the platform lists:
+  - A restaurant's list is tested on **that restaurant's own menu**: its available dishes, read
+    only, with the cart and order tools refused.
+  - A plan's list is tested on the sample menu, since a plan also serves restaurants that haven't
+    signed up yet.
+  - On a menu with no vegetarian dish, the vegetarian check passes only when the waiter names none.
+- **Saving.** Allowed only after a passing Test of exactly that list, by you, in the last 15
+  minutes. For a restaurant, the Test must have been on its own menu
+  (`platform_model_tests.restaurant_id`). `save_waiter_model_override()` checks all of this again,
+  is `service_role` only, and records every save and clear. **Use the default** removes a choice, so
+  the next level applies again.
+- **Cost.** A Test on a restaurant's menu is counted against that restaurant in `ai_usage`. The
+  Cost table shows each restaurant's waiter spend, so you can see what a paid waiter on a plan costs.
+- **Store.** `20261031090000_waiter_model_per_restaurant.sql` adds:
+  - `waiter_model_overrides`: exactly one of `restaurant_id` / `plan_id` per row, with 1–3 models;
+  - `waiter_model_override_history`;
+  - the `restaurant_id` column on `platform_model_tests`.
+
+  All are server-only.
+
 ## Still to come
 
 See the plan doc for the later phases.

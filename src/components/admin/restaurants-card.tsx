@@ -25,6 +25,11 @@ import type {
   SwitchHistoryRow,
 } from "@/lib/admin/restaurant-switch-queries";
 import { cn } from "@/lib/utils";
+import { WaiterModelLine } from "@/components/admin/waiter-model-line";
+import type { CatalogueOption } from "@/lib/admin/model-catalogue";
+import type { PlanRow } from "@/lib/admin/waiter-override-queries";
+import { resolveWaiterModels } from "@/lib/ai/waiter-models-core";
+import type { ResolvedModels } from "@/lib/ai/model-settings-core";
 
 /**
  * Admin Phase 6 (docs/admin.md): every restaurant, with switches for its
@@ -36,9 +41,17 @@ import { cn } from "@/lib/utils";
 export function RestaurantsCard({
   restaurants,
   history,
+  waiter,
 }: {
   restaurants: AdminRestaurantRow[] | null;
   history: SwitchHistoryRow[];
+  /** Phase 7: per-restaurant waiter models. Absent when they can't apply (Anthropic) or couldn't load. */
+  waiter?: {
+    platform: ResolvedModels;
+    byRestaurant: Record<string, string[]>;
+    plans: PlanRow[];
+    options: CatalogueOption[];
+  };
 }) {
   const [query, setQuery] = useState("");
   const [onlyOff, setOnlyOff] = useState(false);
@@ -185,6 +198,34 @@ export function RestaurantsCard({
                       );
                     })}
                   </div>
+                  {waiter &&
+                    (() => {
+                      const plan =
+                        waiter.plans.find((p) => p.id === r.planId) ??
+                        waiter.plans.find((p) => p.isDefault);
+                      const own = waiter.byRestaurant[r.id] ?? null;
+                      const resolved = resolveWaiterModels({
+                        restaurant: own ?? undefined,
+                        plan: plan?.models ?? undefined,
+                        platform: waiter.platform,
+                        overridesApply: true,
+                      });
+                      return (
+                        <WaiterModelLine
+                          target={{ restaurantId: r.id }}
+                          name={r.name}
+                          models={resolved.models}
+                          source={resolved.source}
+                          own={own}
+                          options={waiter.options}
+                          defaultLabel={
+                            plan?.models
+                              ? `the ${plan.name} plan's model`
+                              : "the same as everyone"
+                          }
+                        />
+                      );
+                    })()}
                   {RESTAURANT_AI_FEATURES.map((feature) =>
                     r.off[feature]?.reason ? (
                       <p

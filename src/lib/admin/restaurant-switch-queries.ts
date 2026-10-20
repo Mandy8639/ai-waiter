@@ -13,6 +13,8 @@ export interface AdminRestaurantRow {
   slug: string;
   isActive: boolean;
   createdAt: string;
+  /** Its row in restaurant_plans, or null for the default plan. */
+  planId: string | null;
   off: Partial<
     Record<RestaurantAiFeature, { reason: string | null; at: string }>
   >;
@@ -44,7 +46,7 @@ export async function listRestaurantsForAdmin(): Promise<
 > {
   try {
     const store = createAdminClient() as unknown as Store;
-    const [restaurants, switches] = await Promise.all([
+    const [restaurants, switches, plans] = await Promise.all([
       store
         .from("restaurants")
         .select("id, name, slug, is_active, created_at")
@@ -55,7 +57,17 @@ export async function listRestaurantsForAdmin(): Promise<
         .select("restaurant_id, feature, reason, switched_off_at")
         .order("switched_off_at", { ascending: false })
         .limit(LIMIT * 3),
+      store
+        .from("restaurant_plans")
+        .select("restaurant_id, plan_id")
+        .order("updated_at", { ascending: false })
+        .limit(LIMIT * 3),
     ]);
+    const planOf = new Map(
+      (
+        (plans.data ?? []) as Array<{ restaurant_id: string; plan_id: string }>
+      ).map((p) => [p.restaurant_id, p.plan_id]),
+    );
     if (restaurants.error || switches.error) return null;
     const off = new Map<string, AdminRestaurantRow["off"]>();
     for (const s of switches.data as Array<{
@@ -83,6 +95,7 @@ export async function listRestaurantsForAdmin(): Promise<
       slug: r.slug,
       isActive: r.is_active,
       createdAt: r.created_at,
+      planId: planOf.get(r.id) ?? null,
       off: off.get(r.id) ?? {},
     }));
   } catch {

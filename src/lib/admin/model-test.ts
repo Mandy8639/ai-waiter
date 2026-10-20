@@ -50,7 +50,8 @@ import {
   gradeRecommendation,
   gradeWaiter,
   sampleToolOutcome,
-  SAMPLE_RESTAURANT_NAME,
+  SAMPLE_TEST_MENU,
+  type TestMenu,
   STAFF_TEST_COMMAND,
   SUGGESTION_TEST_DISHES,
   WAITER_RECOMMEND_QUESTION,
@@ -167,10 +168,15 @@ function content(json: CallResult["json"]): string {
 type JobOutcome = { checks: TestCheck[]; reply: string; error?: string };
 
 /** One waiter turn on the sample menu, guarded exactly as a real diner's turn would be. */
-async function waiterTurn(meter: Meter, models: string[], question: string) {
+async function waiterTurn(
+  meter: Meter,
+  models: string[],
+  question: string,
+  menu: TestMenu = SAMPLE_TEST_MENU,
+) {
   const tools = toOpenRouterTools(getToolDefinitions());
   const system = buildSystemPrompt({
-    restaurantName: SAMPLE_RESTAURANT_NAME,
+    restaurantName: menu.restaurantName,
     allowUpselling: false,
   });
   return runConversationLoop<OpenRouterMessage[]>({
@@ -185,7 +191,7 @@ async function waiterTurn(meter: Meter, models: string[], question: string) {
       if (!r.json) throw new AiProviderError(r.error ?? "failed", "unknown");
       return parseOpenRouterResponse(r.json);
     },
-    callTool: async (name, args) => sampleToolOutcome(name, args),
+    callTool: async (name, args) => sampleToolOutcome(name, args, menu),
     appendAssistantMessage,
     appendToolResultMessage,
     textAcceptanceGuards: buildTextAcceptanceGuards({
@@ -201,13 +207,22 @@ async function waiterTurn(meter: Meter, models: string[], question: string) {
  * looked up, then "What do you recommend?", which must be answered with a
  * question. The second is skipped when the first already failed.
  */
-async function testWaiter(meter: Meter, models: string[]): Promise<JobOutcome> {
+async function testWaiter(
+  meter: Meter,
+  models: string[],
+  menu: TestMenu = SAMPLE_TEST_MENU,
+): Promise<JobOutcome> {
   try {
-    const first = await waiterTurn(meter, models, WAITER_TEST_QUESTION);
-    const checks = gradeWaiter(first);
+    const first = await waiterTurn(meter, models, WAITER_TEST_QUESTION, menu);
+    const checks = gradeWaiter(first, menu.dishes);
     let reply = `${WAITER_TEST_QUESTION}\n${first.finalText}`;
     if (allPassed(checks)) {
-      const second = await waiterTurn(meter, models, WAITER_RECOMMEND_QUESTION);
+      const second = await waiterTurn(
+        meter,
+        models,
+        WAITER_RECOMMEND_QUESTION,
+        menu,
+      );
       checks.push(...gradeRecommendation(second));
       reply += `\n\n${WAITER_RECOMMEND_QUESTION}\n${second.finalText}`;
     }
@@ -331,7 +346,7 @@ const RUNNERS: Record<
   AiJob,
   (meter: Meter, models: string[]) => Promise<JobOutcome>
 > = {
-  waiter: testWaiter,
+  waiter: (meter, models) => testWaiter(meter, models),
   staff_assistant: testStaff,
   vision: testVision,
   suggestions: testSuggestions,
@@ -402,5 +417,38 @@ export async function compareWaiterAnswer(
     servedModel: meter.servedModel,
     ms: Date.now() - started,
     costUsd: meter.costUsd,
+  };
+}
+
+/**
+ * Phase 7: the waiter Test on one restaurant's real menu, read-only (the
+ * tools answer from the dishes loaded here; nothing can be ordered).
+ * Counted against that restaurant in ai_usage, as "admin_test".
+ */
+export async function runWaiterTestOnMenu(
+  models: string[],
+  menu: TestMenu,
+  restaurantId: string,
+): Promise<ModelTestResult> {
+  const meter = new Meter();
+  const started = Date.now();
+  const outcome = await testWaiter(meter, models, menu);
+  await recordAiUsage({
+    tally: meter.tally,
+    job: "waiter",
+    source: "admin_test",
+    restaurantId,
+  });
+  return {
+    job: "waiter",
+    models,
+    passed: !outcome.error && allPassed(outcome.checks),
+    checks: outcome.checks,
+    reply: excerpt(outcome.reply),
+    servedModel: meter.servedModel,
+    ms: Date.now() - started,
+    costUsd: meter.costUsd,
+    ...(outcome.error ? { error: outcome.error } : {}),
+    ...(outcome.error && meter.busy ? { busy: true } : {}),
   };
 }
