@@ -2,8 +2,14 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
-import { CircleCheck, Minus, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+  ChevronRight,
+  CircleCheck,
+  Minus,
+  Plus,
+  ShoppingBag,
+} from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { formatPrice } from "@/lib/format/price";
 import { cn } from "@/lib/utils";
 import type { CartActionState } from "@/lib/cart/actions";
@@ -315,11 +321,18 @@ export function ItemDetailForm({
                 <CircleCheck className="size-4" aria-hidden="true" />
                 Added to your order
               </span>
+              {/* A real button, not a text link: after adding, this is the
+                  step most diners want next (2026-10-20). */}
               <Link
                 href={`/r/${restaurantSlug}/cart`}
-                className="text-foreground font-semibold underline-offset-4 hover:underline"
+                className={buttonVariants({
+                  variant: "outline",
+                  className: "text-foreground h-10 gap-1.5",
+                })}
               >
+                <ShoppingBag className="size-4" aria-hidden="true" />
                 View order
+                <ChevronRight className="size-4" aria-hidden="true" />
               </Link>
             </p>
           )}
