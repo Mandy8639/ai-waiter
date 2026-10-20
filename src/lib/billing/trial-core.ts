@@ -26,6 +26,10 @@ export interface BillingNotice {
 
 export const PLANS_PATH = "/dashboard/payments";
 
+/** What Starter costs, when the real plan couldn't be read. */
+export const DEFAULT_STARTER_TERMS =
+  "Starter is $19/month plus 1% of card payments.";
+
 /** Within this many days of the free month ending, the reminder gets louder. */
 export const TRIAL_REMINDER_DAYS = 7;
 
@@ -57,7 +61,14 @@ export function billingNotice(
     canManage,
     canSell,
     timeZone,
-  }: { canManage: boolean; canSell: boolean; timeZone?: string },
+    starterTerms = DEFAULT_STARTER_TERMS,
+  }: {
+    canManage: boolean;
+    canSell: boolean;
+    timeZone?: string;
+    /** "Starter is $19/month plus 1% of card payments.", from the real plan (Phase 8). */
+    starterTerms?: string;
+  },
   now: Date = new Date(),
 ): BillingNotice | null {
   if (!billing) return null;
@@ -82,7 +93,7 @@ export function billingNotice(
             ? `Your free month ends in ${days} ${days === 1 ? "day" : "days"}`
             : "Your first month is free",
         body: canSell
-          ? `No fee on card payments until ${day}. After that, Starter is $19/month plus 1% of card payments.`
+          ? `No fee on card payments until ${day}. After that, ${starterTerms.charAt(0).toLowerCase()}${starterTerms.slice(1)}`
           : `Your free month ends on ${day}.`,
         action,
       };
@@ -116,7 +127,7 @@ export function billingNotice(
         tone: "warning",
         title: "Your free month has ended",
         body: canSell
-          ? `Choose a plan${day ? ` by ${day}` : ""} to keep QR ordering on. Starter is $19/month plus 1% of card payments.`
+          ? `Choose a plan${day ? ` by ${day}` : ""} to keep QR ordering on. ${starterTerms}`
           : `QR ordering pauses${day ? ` on ${day}` : " soon"} unless a plan is set up.`,
         action,
       };

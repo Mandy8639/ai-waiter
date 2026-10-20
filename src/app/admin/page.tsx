@@ -20,6 +20,8 @@ import { SafetyNetCard } from "@/components/admin/safety-net-card";
 import { CompareCard } from "@/components/admin/compare-card";
 import { RestaurantsCard } from "@/components/admin/restaurants-card";
 import { PlanWaiterCard } from "@/components/admin/plan-waiter-card";
+import { PlansCard } from "@/components/admin/plans-card";
+import { getPlansForAdmin } from "@/lib/admin/plan-queries";
 import { getWaiterOverridesForAdmin } from "@/lib/admin/waiter-override-queries";
 import {
   getSwitchHistory,
@@ -116,6 +118,7 @@ export default async function AdminPage() {
     lastWeekCost,
     restaurants,
     waiterOverrides,
+    plansData,
   ] = await Promise.all([
     getAllModelSettings(),
     getOpenRouterModels(),
@@ -127,6 +130,7 @@ export default async function AdminPage() {
     getCostReport(weeks.lastWeek),
     listRestaurantsForAdmin(),
     getWaiterOverridesForAdmin(),
+    getPlansForAdmin(),
   ]);
   const switchHistory = await getSwitchHistory(
     new Map((restaurants ?? []).map((r) => [r.id, r.name])),
@@ -204,6 +208,14 @@ export default async function AdminPage() {
         history={switchHistory}
         waiter={waiterPerRestaurant}
       />
+
+      {plansData ? (
+        <PlansCard data={plansData} />
+      ) : (
+        <p className="text-destructive text-sm">
+          Couldn&apos;t load the plans just now. Reload in a minute.
+        </p>
+      )}
 
       {waiterPerRestaurant && (
         <PlanWaiterCard

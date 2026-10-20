@@ -33,6 +33,8 @@ const SERVER_ONLY = [
   "save_platform_models",
   "clear_platform_models",
   "save_waiter_model_override",
+  "admin_update_plan",
+  "admin_set_free_month",
   "ai_cost_summary",
 ];
 

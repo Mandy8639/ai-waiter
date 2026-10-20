@@ -255,6 +255,40 @@ smarter waiter on Pro.
 
   All are server-only.
 
+## Plan prices and the free month (Phase 8)
+
+The **Plans and pricing** card shows each plan's monthly price, card fee and paying subscribers, plus
+the free month's length, with **Change price**, **Change fee** and **Change free month**. Each
+change opens a confirm that says what will happen and to whom, and lands in **Recent pricing
+changes**.
+
+| Change                 | Who it affects                                                                          | Touches Stripe?                        |
+| ---------------------- | --------------------------------------------------------------------------------------- | -------------------------------------- |
+| Monthly price          | New subscribers only: Stripe keeps current subscriptions on the price they signed up to | Yes: a new price on the plan's product |
+| Card fee               | Everyone on the plan, from their next card payment                                      | No                                     |
+| Free month (0–90 days) | Restaurants created after the change; existing free months keep their end date          | No                                     |
+
+- **The live-Stripe lock.** A price change creates a Stripe price, so it runs freely only on a
+  **test** key. On a **live** key it's refused until `ADMIN_LIVE_PRICE_CHANGES=1` is set in Vercel,
+  which is the owner's sign-off after trying it in test mode. The card's badge shows the mode and
+  whether live changes are on. Fee and free-month changes never touch Stripe.
+- **Stripe.** `src/lib/admin/plan-stripe.ts` adds a monthly price to the product of the plan's
+  current price, or creates a product if there's none usable in this mode. The old price stays
+  active, because current subscriptions keep billing on it. Moving existing subscribers to a new
+  price isn't built: do that in Stripe's dashboard, deliberately, per subscription.
+- **Store.** `20261101090000_plan_prices_admin.sql` adds:
+  - `platform_billing_settings`: one row holding `free_month_days`, which
+    `restaurants.trial_ends_at` now defaults from via `platform_free_month_days()`;
+  - `platform_plan_history`;
+  - `admin_update_plan()` and `admin_set_free_month()`, both `service_role` only and recording every
+    change.
+- **Everywhere else follows.**
+  - The landing page reads plans and the free month (re-read every 5 minutes) and works out the
+    "cheaper once card payments pass…" note from the real numbers.
+  - The dashboard's free-month banner quotes Starter's real price
+    (`src/lib/billing/public-pricing.ts`, cached a minute).
+  - The Payments page already read plans from the database.
+
 ## Still to come
 
 See the plan doc for the later phases.
