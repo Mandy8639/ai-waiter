@@ -7,7 +7,7 @@
  */
 export function customerCancelMessage(error: string): string {
   if (error.includes("ORDER_CANCEL_TOO_LATE")) {
-    return "The kitchen has already started your order, so it can't be cancelled here. Please ask a member of staff.";
+    return "The kitchen has already accepted your order, so it can't be cancelled here. Please ask a member of staff.";
   }
   if (error.includes("ORDER_CANCEL_ALREADY")) {
     return "This order is already cancelled.";
