@@ -567,11 +567,12 @@ billing, and never an automatic switch to another model.
 
 > **Amended 2026-10-19:** the owner approved a **paid** model, because no image model on OpenRouter
 > is free. Everything else stands: one model, never an automatic switch, the same caps (at most
-> 10 attempts per restaurant per day). Trial on one dish: `bytedance-seed/seedream-5-0-flash` at
-> $0.018 an image was the only cheap model that was both clearly illustrated and framed the whole
-> dish (others measured in `src/lib/menu-images/openrouter-image-provider.ts`). Worst case, a
-> restaurant using every attempt every day costs about $5.40 a month; a 100-dish menu about $1.80
-> once.
+> 10 attempts per restaurant per day). Chosen after a trial of 13 models on one dish:
+> `openai/gpt-image-2.5-flare` at **low** quality ($0.0065 an image, about 10 s), clearly painted
+> and accurate. OpenAI models pick their own quality unless told, up to $0.21 an image, so the
+> level is fixed (`MENU_IMAGE_QUALITY`, default low). Worst case, a restaurant using every attempt
+> every day costs about $2 a month; a 100-dish menu about $0.65 once. All measurements are in
+> `src/lib/menu-images/openrouter-image-provider.ts`.
 
 | #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

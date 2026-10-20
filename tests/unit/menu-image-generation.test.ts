@@ -21,6 +21,7 @@ import {
   GenerationFailed,
   GenerationUnavailable,
   configuredModel,
+  configuredQuality,
   generationConfigured,
   generationTimeoutMs,
   unavailableMessage,
@@ -131,6 +132,25 @@ describe("generation configuration", () => {
         MENU_IMAGE_MODEL: "a/one,b/two",
       }),
     ).toBe("a/one,b/two");
+  });
+
+  it("fixes OpenAI's quality at low unless set, and sends none to other models", () => {
+    // Left to "auto", OpenAI picks per image: 0.6¢ at low, 21¢ at high.
+    expect(configuredQuality("openai/gpt-image-2.5-flare", {})).toBe("low");
+    expect(
+      configuredQuality("openai/gpt-image-2", { MENU_IMAGE_QUALITY: "Medium" }),
+    ).toBe("medium");
+    // Unknown values fall back rather than reaching the API.
+    expect(
+      configuredQuality("openai/gpt-image-2", { MENU_IMAGE_QUALITY: "max" }),
+    ).toBe("low");
+    // A model that doesn't take the parameter would reject the request.
+    expect(
+      configuredQuality("bytedance-seed/seedream-5-0-flash", {}),
+    ).toBeNull();
+    expect(
+      configuredQuality("some/model", { MENU_IMAGE_QUALITY: "high" }),
+    ).toBe("high");
   });
 
   it("defaults the request timeout below the database's stale-generation timeout", () => {
@@ -362,8 +382,37 @@ describe("OpenRouterImageGenerationProvider.generate", () => {
     });
     // FLUX 3 400s on any request naming output_format (seen 2026-10-19).
     expect(sent.output_format).toBeUndefined();
+    // No quality configured, none sent.
+    expect(sent.quality).toBeUndefined();
     // A preference list would be an automatic model switch. There is none.
     expect(sent.models).toBeUndefined();
+  });
+
+  it("sends the quality level when one is configured", async () => {
+    let body = "";
+    const image = await picture(64, 64);
+    const base = await listen((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        body = Buffer.concat(chunks).toString();
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            created: 1,
+            data: [{ b64_json: image.toString("base64") }],
+          }),
+        );
+      });
+    });
+
+    await new OpenRouterImageGenerationProvider({
+      apiKey: "sk-test",
+      model: "openai/gpt-image-2.5-flare",
+      endpoint: `${base}/images`,
+      quality: "low",
+    }).generate({ prompt: "a plate of dal", timeoutMs: 5000 });
+    expect(JSON.parse(body).quality).toBe("low");
   });
 
   it("treats 429 as unavailable so a rate limit does not look like a bad prompt", async () => {

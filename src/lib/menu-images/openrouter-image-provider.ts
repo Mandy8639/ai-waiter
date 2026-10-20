@@ -27,6 +27,9 @@
  *   recraft/recraft-v4.1-flash          $0.007   2 s  illustrated, plate cropped
  *   black-forest-labs/flux-3-image-klein $0.009   7 s  illustrated, less faithful dish
  *   qwen/qwen-image-2.1-turbo           $0.0184 17 s  close to photo-real: avoid (§18 decision 6)
+ *   openai/gpt-image-2.5-flare (low)    $0.0065 10 s  clearly painted, accurate: CHOSEN
+ *   openai/gpt-image-2 (medium / high)  $0.053 / $0.21  36 s / 125 s
+ *   google/gemini-3-pro-image           $0.135  28 s  dish small inside a scene
  *
  * `preflight()` is not an optimisation: it is the guard that turns "the
  * model you named cannot serve" into a clean, quota-free refusal instead
@@ -53,6 +56,8 @@ export interface OpenRouterImageProviderOptions {
   modelsEndpoint?: string;
   /** Kept short: this is a metadata read, not the generation itself. */
   preflightTimeoutMs?: number;
+  /** Sent only when set: see configuredQuality(). */
+  quality?: string | null;
 }
 
 /**
@@ -131,6 +136,7 @@ export class OpenRouterImageGenerationProvider implements ImageGenerationProvide
             model: this.options.model,
             prompt: request.prompt,
             ...REQUEST_SHAPE,
+            ...(this.options.quality ? { quality: this.options.quality } : {}),
           }),
           signal: AbortSignal.timeout(request.timeoutMs),
         },
