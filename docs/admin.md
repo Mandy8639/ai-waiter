@@ -175,6 +175,23 @@ Both functions are service-role only and listed in `function-grants.test.ts`
 `20261028090000_ai_usage.sql` adds `ai_usage`, `ai_cost_summary()` and `platform_email_dispatches`,
 all server-only.
 
+## Side-by-side test (Phase 5)
+
+The **Side-by-side test** card asks two waiter models the same diner question on the sample menu
+(the one the Test uses) and shows both answers next to each other, with each one's time, cost and
+the menu tools it used. Under them go a few plain notes: who was faster, who cost less, and
+whether only one looked the menu up (the other may have guessed). Which answer is better is left
+to you.
+
+- Each model answers alone, with no backups, so the answer is that model's own. Both run at once.
+- Quick-pick questions: the Test's two, an allergen question and an open "what should we get"
+  one; or type your own (up to 300 characters).
+- Nothing is saved or changed. To use a model, Change → Test → Save it above. A paid model spends
+  a little credit, recorded in ai_usage as an admin Test.
+- Code: `src/lib/admin/compare-core.ts` (what can be compared, the notes),
+  `compareWaiterAnswer()` in `model-test.ts`, `compareModels()` in `actions.ts`,
+  `src/components/admin/compare-card.tsx`.
+
 ## Still to come
 
-See the plan doc: side-by-side Test (Phase 5) and the later phases.
+See the plan doc for the later phases.

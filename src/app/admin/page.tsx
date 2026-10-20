@@ -17,6 +17,7 @@ import { ModelEditor } from "@/components/admin/model-editor";
 import { HistoryCard } from "@/components/admin/history-card";
 import { ResetCard } from "@/components/admin/reset-card";
 import { SafetyNetCard } from "@/components/admin/safety-net-card";
+import { CompareCard } from "@/components/admin/compare-card";
 import { CostTable } from "@/components/admin/cost-table";
 import { SpendingCard } from "@/components/admin/spending-card";
 import { getCostReport } from "@/lib/admin/cost-report";
@@ -120,6 +121,8 @@ export default async function AdminPage() {
   // back there would only bounce; they get Account and Log out instead.
   const { state } = await getDashboardContext();
   const hasRestaurant = state.status !== "none";
+  const waiterModels =
+    settings.find((s) => s.job === "waiter")?.resolved.models ?? [];
   const now = new Date();
   const provider = aiConfig.provider;
   const canTest = !!process.env.OPENROUTER_API_KEY;
@@ -266,6 +269,13 @@ export default async function AdminPage() {
           </ul>
         </CardContent>
       </Card>
+
+      {canTest && provider === "openrouter" && (
+        <CompareCard
+          options={catalogueFor("waiter", waiterModels, known)}
+          current={waiterModels[0] ?? null}
+        />
+      )}
 
       {provider === "openrouter" &&
         SAFETY_NET_JOBS.map((job) => {
