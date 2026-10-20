@@ -503,28 +503,38 @@ function generationRecords(
       });
     },
     async loadDish(menuItemId) {
-      const from = supabase.from.bind(supabase) as unknown as (
-        table: string,
-      ) => {
-        select: (columns: string) => {
-          eq: (
-            column: string,
-            value: string,
-          ) => { maybeSingle: () => Promise<{ data: UntypedRow | null }> };
-        };
-      };
-      // Through RLS: a dish in another restaurant is simply absent.
-      const { data } = await from("menu_items")
-        .select("restaurant_id, name, description, ingredients, category")
+      // Through RLS: a dish in another restaurant is simply absent. The
+      // category and ingredients live in their own tables (an earlier
+      // version selected them as menu_items columns, which don't exist, so
+      // every dish came back "not found").
+      const { data, error } = await supabase
+        .from("menu_items")
+        .select("restaurant_id, name, description, category_id")
         .eq("id", menuItemId)
         .maybeSingle();
+      if (error) throw new Error(error.message);
       if (!data) return null;
+      const [{ data: category }, { data: links }] = await Promise.all([
+        supabase
+          .from("categories")
+          .select("name")
+          .eq("id", data.category_id)
+          .maybeSingle(),
+        supabase
+          .from("menu_item_ingredients")
+          .select("ingredient_id")
+          .eq("menu_item_id", menuItemId),
+      ]);
+      const ids = (links ?? []).map((l) => l.ingredient_id);
+      const { data: ingredients } = ids.length
+        ? await supabase.from("ingredients").select("name").in("id", ids)
+        : { data: [] as { name: string }[] };
       return {
-        restaurantId: data.restaurant_id as string,
-        name: (data.name as string) ?? "",
-        description: (data.description as string | null) ?? null,
-        ingredients: (data.ingredients as string[] | null) ?? null,
-        category: (data.category as string | null) ?? null,
+        restaurantId: data.restaurant_id,
+        name: data.name ?? "",
+        description: data.description ?? null,
+        ingredients: (ingredients ?? []).map((i) => i.name),
+        category: category?.name ?? null,
       };
     },
   };
