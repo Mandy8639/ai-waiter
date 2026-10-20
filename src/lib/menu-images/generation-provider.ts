@@ -50,6 +50,8 @@ export interface GeneratedImage {
   /** Recorded on the image row; the database refuses an AI image without both. */
   provider: string;
   model: string;
+  /** The response's `usage` block (tokens, cost) as sent, for ai_usage. */
+  usage?: unknown;
 }
 
 /**

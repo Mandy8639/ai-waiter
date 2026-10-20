@@ -29,7 +29,7 @@ export const FEATURE_LABELS: Record<
   owner_tools: {
     label: "AI menu tools",
     covers:
-      "Reading menu photos, filling in dish details, nutrition and translation drafts.",
+      "Reading menu photos, filling in dish details, nutrition and translation drafts, AI dish images.",
   },
 };
 

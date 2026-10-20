@@ -181,7 +181,12 @@ export class OpenRouterImageGenerationProvider implements ImageGenerationProvide
     // it properly and rejects what is not a usable image.
     if (bytes.byteLength === 0) throw new GenerationFailed();
 
-    return { bytes, provider: this.name, model: this.options.model };
+    return {
+      bytes,
+      provider: this.name,
+      model: this.options.model,
+      usage: (body as { usage?: unknown }).usage,
+    };
   }
 }
 
