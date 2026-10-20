@@ -30,6 +30,7 @@ import { getAppShell } from "@/lib/app-shell/server";
 import { hasVerifiedTwoFactor } from "@/lib/auth/two-factor-core";
 import { getDashboardContext } from "@/lib/restaurants/require-current-restaurant";
 import { countPendingReservationRequests } from "@/lib/notifications/pending-requests";
+import { getExampleDish } from "@/lib/staff-assistant/examples";
 import { selectRestaurant } from "@/lib/restaurants/actions";
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
@@ -113,32 +114,56 @@ export default async function DashboardLayout({
 
   const { restaurant } = state;
 
+  const hasChef = ["owner", "manager", "kitchen"].includes(restaurant.role);
+  // Reservations are front-of-house only — a kitchen viewer has no RLS
+  // visibility into the table at all, so counting for them would always
+  // return 0 and the query would be pure waste.
+  const canSeeReservations = ["owner", "manager", "staff"].includes(
+    restaurant.role,
+  );
+
+  // Loaded together, not one after another: every dashboard click re-renders
+  // this layout, so each sequential database trip adds to the wait.
+  const [
+    pricing,
+    billing,
+    appShell,
+    switchedOff,
+    exampleDish,
+    pendingRequestCount,
+  ] = await Promise.all([
+    getPublicPricing(),
+    getRestaurantBilling(restaurant.id),
+    getAppShell(),
+    getSwitchedOffFeatures(restaurant.id),
+    hasChef ? getExampleDish(restaurant.id) : Promise.resolve(null),
+    canSeeReservations
+      ? countPendingReservationRequests(restaurant.id)
+      : Promise.resolve(undefined),
+  ]);
+
   // The free month / plan notice (20261018120000). Plans can't be offered
   // for purchase inside the store apps, so there it carries no price or link.
   // What Starter costs, as set on /admin (Phase 8).
-  const starter = (await getPublicPricing()).plans.find(
-    (p) => p.slug === "starter",
-  );
-  const notice = billingNotice(await getRestaurantBilling(restaurant.id), {
+  const starter = pricing.plans.find((p) => p.slug === "starter");
+  const notice = billingNotice(billing, {
     canManage: ["owner", "manager"].includes(restaurant.role),
-    canSell: canSellPlans(await getAppShell()),
+    canSell: canSellPlans(appShell),
     timeZone: restaurant.timezone,
     ...(starter ? { starterTerms: starterTermsLine(starter) } : {}),
   });
 
   // Admin Phase 6: what Tableside has switched off for this restaurant.
-  const aiOffNotice = switchedOffNotice(
-    await getSwitchedOffFeatures(restaurant.id),
-  );
+  const aiOffNotice = switchedOffNotice(switchedOff);
 
   // The Waiter (staff assistant) floats on every page for the roles that
   // can use it; see src/components/dashboard/staff-assistant.tsx.
-  const hasChef = ["owner", "manager", "kitchen"].includes(restaurant.role);
   const withChef = (content: React.ReactNode) =>
     hasChef ? (
       <StaffAssistantProvider
         restaurantId={restaurant.id}
         canChangePrices={["owner", "manager"].includes(restaurant.role)}
+        exampleDish={exampleDish}
       >
         {content}
       </StaffAssistantProvider>
@@ -185,16 +210,6 @@ export default async function DashboardLayout({
       </div>
     );
   }
-
-  // Reservations are front-of-house only — a kitchen viewer has no RLS
-  // visibility into the table at all, so counting for them would always
-  // return 0 and the query would be pure waste.
-  const canSeeReservations = ["owner", "manager", "staff"].includes(
-    restaurant.role,
-  );
-  const pendingRequestCount = canSeeReservations
-    ? await countPendingReservationRequests(restaurant.id)
-    : undefined;
 
   return (
     <div className="flex flex-1">
