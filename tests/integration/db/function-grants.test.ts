@@ -41,6 +41,7 @@ const SERVER_ONLY = [
 /** Signed-in callers only; each checks its caller inside as well. */
 const SIGNED_IN_ONLY = [
   "count_recent_orders_for_session",
+  "customer_cancel_order",
   "transition_order_status",
   "get_restaurant_staff",
   "record_in_person_payment",

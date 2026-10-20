@@ -295,6 +295,9 @@ describe("the boundary around the service-role sender", () => {
       // ORDER_RING_SECRET (tests/unit/order-ring-route.test.ts).
       "src/app/api/cron/order-ring/route.ts",
       "src/lib/ai/tools/service.ts",
+      // A diner's own cancel: customer_cancel_order() just accepted this id
+      // as theirs; phones still ringing for it go quiet.
+      "src/lib/orders/customer-cancel.ts",
       "src/lib/orders/submit-order.ts",
       // Confirm/Cancel on the kitchen board: tells Android phones to stop
       // ringing for an order the database just let this member update.

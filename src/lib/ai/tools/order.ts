@@ -19,7 +19,16 @@ import {
   submitOrderSchema,
   getOrderStatusSchema,
   getCustomerOrderHistorySchema,
+  requestOrderCancellationSchema,
+  cancelOrderSchema,
 } from "./schemas";
+import {
+  checkCancelConfirmation,
+  parsePendingCancellation,
+} from "./cancel-confirmation";
+import { getOrderPaymentState } from "@/lib/payments/queries";
+import { cancelMyOrder } from "@/lib/orders/customer-cancel";
+import { reorderToCart } from "@/lib/cart/reorder-actions";
 
 const CONFIRMATION_TOOL_NAME = "request_order_confirmation";
 
@@ -235,6 +244,99 @@ async function getCustomerOrderHistory(
   };
 }
 
+const CANCELLATION_TOOL_NAME = "request_order_cancellation";
+
+/**
+ * Step one of cancelling: which order (the session's latest, never an id
+ * from the model) and whether it can still be cancelled by the diner —
+ * not yet accepted by the kitchen, not paid by card. Logging this call is
+ * what cancel_order later checks for.
+ */
+async function requestOrderCancellation(
+  _args: z.infer<typeof requestOrderCancellationSchema>,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const orders = await getOrdersForSession(context.customerSessionId);
+  const latest = orders[0] ? await getOrderById(orders[0].id) : null;
+  if (!latest) {
+    return { ok: false, error: "No orders have been placed in this visit." };
+  }
+  if (latest.status === "cancelled") {
+    return {
+      ok: false,
+      error: `Order #${latest.orderNumber} is already cancelled.`,
+    };
+  }
+  if (latest.status !== "pending") {
+    return {
+      ok: false,
+      error: `The kitchen has already accepted order #${latest.orderNumber}, so it can't be cancelled here — the customer should ask a member of staff (you can call one with request_service).`,
+    };
+  }
+  const payment = await getOrderPaymentState(latest.id, latest.restaurantId);
+  if (payment.paid) {
+    return {
+      ok: false,
+      error: `Order #${latest.orderNumber} has been paid by card, so a member of staff needs to cancel and refund it.`,
+    };
+  }
+  return {
+    ok: true,
+    data: {
+      orderId: latest.id,
+      orderNumber: latest.orderNumber,
+      items: latest.items.map((i) => `${i.quantity} × ${i.itemName}`),
+      total: latest.total,
+      currency: latest.currency,
+    },
+  };
+}
+
+/**
+ * Cancels the order request_order_cancellation showed, once the customer
+ * has said yes in a new message (cancel-confirmation.ts). Optionally puts
+ * the dishes back in the cart, for "change my order".
+ */
+async function cancelOrderTool(
+  args: z.infer<typeof cancelOrderSchema>,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const [orders, latestUserMessageAt] = await Promise.all([
+    getOrdersForSession(context.customerSessionId),
+    getLatestUserMessageTimestamp(context.customerSessionId),
+  ]);
+  const pendingCall = latestUserMessageAt
+    ? await getLatestSuccessfulToolCall(
+        context.customerSessionId,
+        CANCELLATION_TOOL_NAME,
+        latestUserMessageAt,
+      )
+    : null;
+  const currentOrderId = orders[0]?.id ?? null;
+  const decision = checkCancelConfirmation({
+    pending: parsePendingCancellation(pendingCall),
+    currentOrderId,
+    currentTurnUserMessageAt: latestUserMessageAt,
+  });
+  if (!decision.confirmed || !currentOrderId) {
+    return { ok: false, error: decision.reason };
+  }
+
+  const cancelled = await cancelMyOrder(currentOrderId);
+  if (!cancelled.ok) return { ok: false, error: cancelled.error };
+
+  if (!args.putBackInCart) return { ok: true, data: { cancelled: true } };
+  const back = await reorderToCart(currentOrderId);
+  return {
+    ok: true,
+    data: {
+      cancelled: true,
+      backInCart: back.added ?? null,
+      couldNotPutBack: back.notAdded ?? back.error ?? null,
+    },
+  };
+}
+
 export const orderTools: ToolDefinition[] = [
   {
     name: "request_order_confirmation",
@@ -256,6 +358,20 @@ export const orderTools: ToolDefinition[] = [
       "Get the status and details of the customer's most recent order in this visit, including how long the whole order takes and how many minutes are left. Use this — never get_menu_item — when the customer asks how long their ORDER will be; get_menu_item answers how long one DISH takes, which is a different question.",
     schema: getOrderStatusSchema,
     execute: getOrderStatus as ToolDefinition["execute"],
+  },
+  {
+    name: "request_order_cancellation",
+    description:
+      'When the customer wants to cancel or change an order they placed ("cancel my order", "I ordered by mistake", "can I change my order?"): checks their latest order can still be cancelled (the kitchen hasn\'t accepted it and it isn\'t paid) and shows what it contains. Show them the order and ask them to confirm; do not cancel in the same turn.',
+    schema: requestOrderCancellationSchema,
+    execute: requestOrderCancellation as ToolDefinition["execute"],
+  },
+  {
+    name: "cancel_order",
+    description:
+      "Cancel the order request_order_cancellation showed. REJECTED unless that tool was called in an earlier message and the customer then clearly said yes in a new message. Set putBackInCart to true when they want to change the order (the dishes go back in their cart to edit and send again), false to just cancel.",
+    schema: cancelOrderSchema,
+    execute: cancelOrderTool as ToolDefinition["execute"],
   },
   {
     name: "get_customer_order_history",

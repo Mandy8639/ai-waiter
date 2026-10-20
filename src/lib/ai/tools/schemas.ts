@@ -115,6 +115,19 @@ export const getOrderStatusSchema = z.object({}).strict();
 
 export const getCustomerOrderHistorySchema = z.object({}).strict();
 
+/** Shows which order would be cancelled and whether it still can be. */
+export const requestOrderCancellationSchema = z.object({}).strict();
+
+export const cancelOrderSchema = z
+  .object({
+    /**
+     * true when the customer wants to CHANGE the order rather than drop
+     * it: the same dishes go back in their cart to edit and send again.
+     */
+    putBackInCart: z.boolean(),
+  })
+  .strict();
+
 /**
  * The only two things a table can ask a person for. An enum, not free
  * text: the staff-facing surface is a queue somebody glances at during
