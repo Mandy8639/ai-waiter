@@ -16,7 +16,7 @@ import {
 describe("customer cancel messages", () => {
   it("explains each refusal in the diner's terms", () => {
     expect(customerCancelMessage("ORDER_CANCEL_TOO_LATE: ...")).toMatch(
-      /kitchen has already started/,
+      /kitchen has already accepted/,
     );
     expect(customerCancelMessage("ORDER_CANCEL_PAID: ...")).toMatch(/refund/);
     expect(customerCancelMessage("ORDER_IN_SPLIT: ...")).toMatch(/split/);

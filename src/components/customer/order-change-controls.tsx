@@ -62,8 +62,8 @@ export function OrderChangeControls({
   if (status !== "pending") {
     return (
       <p className="text-muted-foreground text-center text-sm">
-        The kitchen has started your order. To change or cancel it, please ask a
-        member of staff.
+        The kitchen has accepted your order. To change or cancel it now, please
+        ask a member of staff.
       </p>
     );
   }
