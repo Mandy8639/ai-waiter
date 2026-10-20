@@ -52,6 +52,8 @@ const SIGNED_IN_ONLY = [
   "get_pickup_options",
   "set_cart_pickup",
   "change_pickup_time",
+  // Guest insights (20261029090000); owner/manager, checked inside.
+  "get_guest_insights",
   // Reviewed 2026-10-17 and revoked from anon by
   // 20261017090000_revoke_anon_from_signed_in_functions.sql. Each checks
   // its caller inside or is a small helper; no signed-out page calls them.
