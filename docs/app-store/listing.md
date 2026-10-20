@@ -1,6 +1,7 @@
 # App Store listing
 
-Draft for App Store Connect, Tableside staff app (`menu.tableside.app`), written 2026-10-11. Every
+Draft for App Store Connect, Tableside staff app (`menu.tableside.app`), written 2026-10-11 and
+refreshed 2026-10-20 for what the app does now. Every
 claim describes something the app does today. The Google Play counterpart is
 `docs/play-store/listing/README.md`; the two stores' privacy answers agree.
 
@@ -46,10 +47,17 @@ restaurant,kitchen,orders,KDS,QR menu,waiter,POS,staff,tickets,cafe,dine-in,tabl
 Tableside is the staff app for restaurants that take orders with Tableside. Diners scan the QR code on their table, browse your menu and order from their own phone. This app is for your team: it puts every order, table request and alert in one place.
 
 KITCHEN BOARD
-• Every order appears on a live board the moment a diner places it.
+• Every order appears on a live board the moment a diner places it, dine-in and pickup.
 • New orders keep chiming until someone accepts them, so nothing waits unseen.
-• Move tickets through confirmed, preparing, ready and served with one tap.
+• Move tickets through confirmed, preparing, ready and served with one tap, with a few seconds to undo.
 • Split an order across tickets or merge several, and send dishes to kitchen stations.
+• Print kitchen tickets on a receipt printer, automatically or by hand.
+• If a diner cancels before you accept, the board tells you.
+
+BUSY NIGHTS
+• Mark a dish sold out until tomorrow, or an add-on like oat milk, and diners see it straight away.
+• Add wait time when you're slammed, or pause new orders for a while.
+• Or just tell the Waiter, the built-in assistant: "86 the paneer tikka", "pause ordering for an hour". It asks before changing prices, and every change can be undone.
 
 TABLE REQUESTS
 • See straight away when a table wants a waiter or the bill.
@@ -63,9 +71,12 @@ ORDER ALERTS
 ORDERS AND REPORTS
 • Find any order by number or dish, and filter by status or date.
 • See today's orders and takings at a glance, with reports for each day.
+• See how often guests come back and what they order.
 
 YOUR MENU
 • Add and edit dishes, prices, photos, allergens and modifiers, and diners see the changes right away.
+• Import a menu from photos of your printed one, then check every dish before it goes live.
+• No photos yet? Generate a drawn illustration of each dish, approve the ones you like, and diners see them labelled "AI-generated".
 • Translate your menu and add nutrition information.
 
 YOUR TEAM
@@ -117,19 +128,19 @@ Every question is **None** or **No**, which gives **4+**:
 **Do you or your third-party partners collect data from this app?** Yes.
 **Tracking:** No data is used to track users. No advertising, no data brokers.
 
-| Apple data type                     | Linked to the user | Purposes          | What it is                                                       |
-| ----------------------------------- | ------------------ | ----------------- | ---------------------------------------------------------------- |
-| Contact Info → Email Address        | Yes                | App Functionality | Sign-in, staff invites, owner emails                             |
-| Contact Info → Name                 | Yes                | App Functionality | The name a diner gives with a reservation request                |
-| Contact Info → Phone Number         | Yes                | App Functionality | Reservation requests, the restaurant's phone                     |
-| Identifiers → User ID               | Yes                | App Functionality | The account ID                                                   |
-| Identifiers → Device ID             | Yes                | App Functionality | The device's push token, for order alerts. Only if alerts are on |
-| Purchases → Purchase History        | Yes                | App Functionality | Orders, payments, refunds (card numbers never reach Tableside)   |
-| User Content → Photos or Videos     | Yes                | App Functionality | Dish photos and the hero video owners upload                     |
-| User Content → Other User Content   | Yes                | App Functionality | AI waiter conversations, order notes, table requests, feedback   |
-| Usage Data → Product Interaction    | **No**             | Analytics         | Dish open/add/order counts per day, with no session or user      |
-| Diagnostics → Crash Data            | **No**             | App Functionality | Sentry error reports, IP addresses and personal details left out |
-| Diagnostics → Other Diagnostic Data | **No**             | App Functionality | The same error reports                                           |
+| Apple data type                     | Linked to the user | Purposes          | What it is                                                                    |
+| ----------------------------------- | ------------------ | ----------------- | ----------------------------------------------------------------------------- |
+| Contact Info → Email Address        | Yes                | App Functionality | Sign-in, staff invites, owner emails                                          |
+| Contact Info → Name                 | Yes                | App Functionality | The name a diner gives with a reservation request                             |
+| Contact Info → Phone Number         | Yes                | App Functionality | Reservation requests, the restaurant's phone                                  |
+| Identifiers → User ID               | Yes                | App Functionality | The account ID                                                                |
+| Identifiers → Device ID             | Yes                | App Functionality | The device's push token, for order alerts. Only if alerts are on              |
+| Purchases → Purchase History        | Yes                | App Functionality | Orders, payments, refunds (card numbers never reach Tableside)                |
+| User Content → Photos or Videos     | Yes                | App Functionality | Dish photos, menu photos for import, the hero video owners upload             |
+| User Content → Other User Content   | Yes                | App Functionality | AI waiter chats, staff Waiter commands, order notes, table requests, feedback |
+| Usage Data → Product Interaction    | **No**             | Analytics         | Dish open/add/order counts per day, with no session or user                   |
+| Diagnostics → Crash Data            | **No**             | App Functionality | Sentry error reports, IP addresses and personal details left out              |
+| Diagnostics → Other Diagnostic Data | **No**             | App Functionality | The same error reports                                                        |
 
 Not collected: location, contacts, health, financial info (card details stay with Stripe), browsing
 or search history, sensitive info, audio (voice input runs on the device's speech service and sends
@@ -150,10 +161,12 @@ a few dishes and tables, never a real restaurant's data.
 Tableside is a staff app for restaurants. Diners order from a QR code on their table in the browser; this app is for the restaurant's team.
 
 To try it: sign in with the account above (a manager of our demo restaurant). The Kitchen tab is the live order board. To see a new order arrive, open this demo table's menu in Safari on another device or the simulator, add a dish and place the order:
-<menu link for one demo table>
+https://tableside.menu/r/tableside-demo-cafe/table/12294b71-fb06-4647-9d41-cade6da866d2
 It appears on the board within seconds and chimes until you tap Confirm. On the kitchen board, "Turn on alerts" asks for notification permission; after that, new orders and table requests arrive as push notifications even when the app is closed, and tapping one opens the order. "Send a test" sends one straight away.
 
 Native features: push notifications through APNs, notification taps that open the order, and an offline screen when there's no connection.
+
+AI features: the "Waiter" button lets staff type kitchen changes ("86 the paneer tikka"); a third-party AI model only interprets the command, and nothing changes without the rules behind it, prices only after a yes. Owners can also generate drawn illustrations of dishes; each is approved by the restaurant before diners see it and is always labelled "AI-generated". No diner or staff personal data is sent to AI models from this app.
 
 Accounts: restaurant owners create their restaurant at tableside.menu and invite staff. Staff can delete their account in the app from Account (top of the dashboard).
 
@@ -167,5 +180,8 @@ Payments: there are no purchases in the app. Restaurants' Tableside subscription
    iPhone app, and the description's ORDER ALERTS section isn't true yet.
 2. **The reviewer account** exists, and you've signed in with it in the app once.
 3. **A demo table's menu link** for the review notes (Tables & QR, on the demo restaurant).
-4. **Build uploaded** from Xcode (Product → Archive → Distribute App → App Store Connect) and
+4. **Fresh screenshots.** The set in `screenshots/` is from 2026-10-11; the dashboard has changed since
+   (Waiter button, Sold out, busy mode, menu photos). Retake both sizes from a fictional demo
+   restaurant before uploading.
+5. **Build uploaded** from Xcode (Product → Archive → Distribute App → App Store Connect) and
    selected on the version page.
