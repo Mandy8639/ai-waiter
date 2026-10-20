@@ -1,5 +1,8 @@
 "use server";
 
+import { switchedOffMessage } from "@/lib/admin/restaurant-switches-core";
+import { isAiFeatureAllowed } from "@/lib/admin/restaurant-switches";
+
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -170,6 +173,9 @@ export async function draftMissingTranslations(
 ): Promise<TranslationActionResult> {
   const auth = await authorize(restaurantId);
   if (!auth.ok) return { error: auth.error };
+  if (!(await isAiFeatureAllowed(restaurantId, "owner_tools"))) {
+    return { error: switchedOffMessage("owner_tools") };
+  }
   if (!isMenuLanguage(language)) return { error: "Choose a language." };
 
   const rows = await getTranslationWorkbench(restaurantId, language);

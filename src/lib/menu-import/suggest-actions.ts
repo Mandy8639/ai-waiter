@@ -1,5 +1,8 @@
 "use server";
 
+import { switchedOffMessage } from "@/lib/admin/restaurant-switches-core";
+import { isAiFeatureAllowed } from "@/lib/admin/restaurant-switches";
+
 import { openRouterModels } from "@/lib/ai/model-list";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -135,6 +138,9 @@ export async function suggestDetailsBatch(
   };
   const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
   if (!auth.ok) return { ...empty, error: auth.error };
+  if (!(await isAiFeatureAllowed(restaurantId, "owner_tools"))) {
+    return { ...empty, error: switchedOffMessage("owner_tools") };
+  }
 
   const supabase = await createClient();
 

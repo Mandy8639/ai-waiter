@@ -1,5 +1,8 @@
 "use server";
 
+import { switchedOffMessage } from "@/lib/admin/restaurant-switches-core";
+import { isAiFeatureAllowed } from "@/lib/admin/restaurant-switches";
+
 import { revalidatePath } from "next/cache";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { reportError } from "@/lib/observability/report";
@@ -109,6 +112,14 @@ export async function sendStaffCommand(
   if (!auth.ok) {
     return { text: auth.error, tone: "error", buttons: [], cancellable: false };
   }
+  if (!(await isAiFeatureAllowed(restaurantId, "staff_assistant"))) {
+    return {
+      text: switchedOffMessage("staff_assistant"),
+      tone: "error",
+      buttons: [],
+      cancellable: false,
+    };
+  }
   const command = text.trim().slice(0, MAX_COMMAND_LENGTH);
   if (!command) {
     return replyForPlan({ type: "answered", text: HELP_TEXT });
@@ -197,6 +208,14 @@ export async function applyStaffAction(
   const auth = await authorizeRestaurantAction(restaurantId, [...KITCHEN_SIDE]);
   if (!auth.ok) {
     return { text: auth.error, tone: "error", buttons: [], cancellable: false };
+  }
+  if (!(await isAiFeatureAllowed(restaurantId, "staff_assistant"))) {
+    return {
+      text: switchedOffMessage("staff_assistant"),
+      tone: "error",
+      buttons: [],
+      cancellable: false,
+    };
   }
   const parsed = staffActionSchema.safeParse(rawAction);
   if (!parsed.success) {

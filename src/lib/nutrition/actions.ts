@@ -1,5 +1,8 @@
 "use server";
 
+import { switchedOffMessage } from "@/lib/admin/restaurant-switches-core";
+import { isAiFeatureAllowed } from "@/lib/admin/restaurant-switches";
+
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
@@ -196,6 +199,9 @@ export async function estimateMissingNutrition(
 ): Promise<NutritionActionResult> {
   const auth = await authorize(restaurantId);
   if (!auth.ok) return { error: auth.error };
+  if (!(await isAiFeatureAllowed(restaurantId, "owner_tools"))) {
+    return { error: switchedOffMessage("owner_tools") };
+  }
 
   const rows = await getNutritionReview(restaurantId);
   const todo = rows.filter((r) => r.state === "missing");

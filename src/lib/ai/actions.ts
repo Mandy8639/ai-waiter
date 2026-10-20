@@ -1,5 +1,8 @@
 "use server";
 
+import { WAITER_OFF_FOR_DINERS } from "@/lib/admin/restaurant-switches-core";
+import { isAiFeatureAllowed } from "@/lib/admin/restaurant-switches";
+
 import { requireActiveCustomerSession } from "@/lib/customer/session";
 import {
   getPublicRestaurantBySlug,
@@ -64,6 +67,10 @@ export async function sendChatMessage(
   const orderSettings = await getPublicOrderSettings(restaurant.id);
   if (!orderSettings.allowAiRecommendations) {
     return { error: "The AI waiter isn't available at this restaurant." };
+  }
+  // Admin Phase 6: Tableside can switch the waiter off for one restaurant.
+  if (!(await isAiFeatureAllowed(restaurant.id, "waiter"))) {
+    return { error: WAITER_OFF_FOR_DINERS };
   }
 
   // Read from the diner's own session inside the database, never from an
@@ -141,5 +148,8 @@ export async function isAiWaiterAvailable(
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
   if (!restaurant || !restaurant.isActive) return false;
   const settings = await getPublicOrderSettings(restaurant.id);
-  return settings.allowAiRecommendations;
+  return (
+    settings.allowAiRecommendations &&
+    (await isAiFeatureAllowed(restaurant.id, "waiter"))
+  );
 }
