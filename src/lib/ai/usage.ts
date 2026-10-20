@@ -20,9 +20,12 @@ type Store = {
   };
 };
 
+/** AI jobs with a model list, plus dish images (one model, MENU_IMAGE_MODEL). */
+export type UsageJob = AiJob | "images";
+
 export async function recordAiUsage(input: {
   tally: UsageTally;
-  job: AiJob;
+  job: UsageJob;
   restaurantId?: string | null;
   source?: "app" | "admin_test" | "safety_check";
 }): Promise<void> {

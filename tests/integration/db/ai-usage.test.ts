@@ -77,6 +77,16 @@ describe("AI usage and cost per restaurant", () => {
     expect(Number(two.cost_usd)).toBe(0);
   });
 
+  it("accepts a dish image's cost", async () => {
+    const { rows } = await db.admin.query<{ id: number }>(
+      "insert into public.ai_usage (job, source, model, cost_usd) values ('images', 'app', 'bytedance-seed/seedream-5-0-flash', 0.018) returning id;",
+    );
+    expect(rows).toHaveLength(1);
+    await db.admin.query("delete from public.ai_usage where id = $1;", [
+      rows[0].id,
+    ]);
+  });
+
   it("refuses an unknown job or source, and a negative cost", async () => {
     await expect(
       db.admin.query(
