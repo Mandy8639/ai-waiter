@@ -151,9 +151,10 @@ export default async function TermsPage() {
             doesn&apos;t pause anything.
           </li>
           <li>
-            <Term>Cancel any time</Term> by emailing us from your account&apos;s
-            address. Your plan runs to the end of the month you&apos;ve paid
-            for. We don&apos;t refund part months.
+            <Term>Cancel any time</Term> from Payments in your dashboard (owners
+            and managers). Your plan runs to the end of the month you&apos;ve
+            paid for, and you can change your mind until then. We don&apos;t
+            refund part months.
           </li>
           <li>
             <Term>Price changes.</Term> We&apos;ll tell you at least 30 days
