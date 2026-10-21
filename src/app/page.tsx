@@ -4,6 +4,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
 import { SUPPORT_PATH } from "@/lib/legal/support";
+import { SECURITY_PATH } from "@/lib/legal/security";
 import { publicPageMetadata } from "@/lib/seo/metadata";
 import { JsonLd } from "@/components/seo/json-ld";
 import { organizationJsonLd } from "@/lib/seo/structured-data";
@@ -228,6 +229,13 @@ export default async function Home() {
             className="underline-offset-4 hover:underline"
           >
             Support
+          </Link>
+          {" · "}
+          <Link
+            href={SECURITY_PATH}
+            className="underline-offset-4 hover:underline"
+          >
+            Security
           </Link>
         </p>
       </footer>
