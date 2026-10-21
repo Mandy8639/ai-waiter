@@ -8,6 +8,7 @@ export interface RestaurantSubscription {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   planSlug: string;
+  stripeSubscriptionId: string;
 }
 
 export async function getRestaurantSubscription(
@@ -17,7 +18,9 @@ export async function getRestaurantSubscription(
 
   const { data } = await supabase
     .from("restaurant_subscriptions")
-    .select("status, current_period_end, cancel_at_period_end, plan_id")
+    .select(
+      "status, current_period_end, cancel_at_period_end, plan_id, stripe_subscription_id",
+    )
     .eq("restaurant_id", restaurantId)
     .maybeSingle();
 
@@ -34,6 +37,7 @@ export async function getRestaurantSubscription(
     currentPeriodEnd: data.current_period_end,
     cancelAtPeriodEnd: data.cancel_at_period_end,
     planSlug: plan?.slug ?? "unknown",
+    stripeSubscriptionId: data.stripe_subscription_id,
   };
 }
 
