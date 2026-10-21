@@ -12,11 +12,22 @@ name: Auto-merge
 # Note: merging to main applies database migrations to production by itself
 # (the Supabase integration) and deploys (Vercel), exactly as a hand merge
 # does.
+#
+# Two triggers, because either can finish last: CI completing, and a commit
+# status turning green (Vercel's preview build). Until 2026-10-21 only CI
+# triggered it, so when Vercel was still building at that moment the PR
+# just sat there green and unmerged (#174, #176). Runs for one commit are
+# queued, never parallel, so the two triggers can't both try to merge.
 
 on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
+  status:
+
+concurrency:
+  group: automerge-${{ github.event.workflow_run.head_sha || github.event.sha }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -26,21 +37,23 @@ permissions:
 
 jobs:
   merge:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || (github.event_name == 'status' && github.event.state == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Merge the PR if every check on its head commit is green
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.event.sha }}
         run: |
           set -euo pipefail
 
-          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
-            --json number,headRefOid,labels,isDraft,baseRefName \
-            --jq ".[] | select(.headRefOid == \"$SHA\" and .baseRefName == \"main\" and (.isDraft | not) and any(.labels[]; .name == \"automerge\")) | .number")
+          # The open, labelled PR into main whose head is exactly this
+          # commit. Found from the commit, which both triggers carry.
+          pr=$(gh api "repos/$REPO/commits/$SHA/pulls" \
+            --jq "[.[] | select(.state == \"open\" and .head.sha == \"$SHA\" and .base.ref == \"main\" and (.draft | not) and any(.labels[]; .name == \"automerge\")) | .number] | first // empty")
           if [ -z "$pr" ]; then
             echo "No open, labelled PR into main at $SHA. Nothing to do."
             exit 0
