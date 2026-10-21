@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
 import { SUPPORT_PATH } from "@/lib/legal/support";
 import { SECURITY_PATH } from "@/lib/legal/security";
+import { TERMS_PATH } from "@/lib/legal/terms";
 import { publicPageMetadata } from "@/lib/seo/metadata";
 import { JsonLd } from "@/components/seo/json-ld";
 import { organizationJsonLd } from "@/lib/seo/structured-data";
@@ -236,6 +237,13 @@ export default async function Home() {
             className="underline-offset-4 hover:underline"
           >
             Security
+          </Link>
+          {" · "}
+          <Link
+            href={TERMS_PATH}
+            className="underline-offset-4 hover:underline"
+          >
+            Terms
           </Link>
         </p>
       </footer>

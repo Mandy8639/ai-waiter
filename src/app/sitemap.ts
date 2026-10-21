@@ -6,6 +6,7 @@ import {
 } from "@/lib/legal/privacy";
 import { SUPPORT_PATH } from "@/lib/legal/support";
 import { SECURITY_PATH } from "@/lib/legal/security";
+import { TERMS_PATH, TERMS_UPDATED } from "@/lib/legal/terms";
 
 /**
  * The public pages a search engine should know about.
@@ -29,6 +30,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: `${SITE_URL}${SECURITY_PATH}`,
       changeFrequency: "monthly",
       priority: 0.5,
+    },
+    {
+      url: `${SITE_URL}${TERMS_PATH}`,
+      lastModified: new Date(TERMS_UPDATED),
+      changeFrequency: "yearly",
+      priority: 0.3,
     },
     {
       url: `${SITE_URL}${PRIVACY_POLICY_PATH}`,
