@@ -17,6 +17,7 @@ describe("sitemap.xml", () => {
       "https://tableside.menu/signup",
       "https://tableside.menu/login",
       "https://tableside.menu/support",
+      "https://tableside.menu/security",
       "https://tableside.menu/privacy",
     ]);
   });

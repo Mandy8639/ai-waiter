@@ -1,3 +1,6 @@
+import { Download } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { SECURITY_PATH } from "@/lib/legal/security";
 import {
   Card,
   CardContent,
@@ -239,6 +242,38 @@ export default async function SettingsPage() {
               }}
               email={user.email ?? null}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {restaurant.role === "owner" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Your data</CardTitle>
+            <CardDescription>
+              Everything Tableside holds for this restaurant, in one file you
+              can keep or move elsewhere: menu, tables, every order and payment,
+              reservations, feedback, staff and the change history. It&apos;s
+              yours, and you can download it any time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            {/* A plain link, not next/link: it's a file download, and a
+                prefetch would build the whole export in the background. */}
+            <a
+              href="/dashboard/settings/export"
+              download
+              className={buttonVariants({ variant: "outline" })}
+            >
+              <Download className="size-4" aria-hidden="true" />
+              Download all data (JSON)
+            </a>
+            <a
+              href={SECURITY_PATH}
+              className="text-muted-foreground text-sm underline underline-offset-4"
+            >
+              How we keep it safe
+            </a>
           </CardContent>
         </Card>
       )}
