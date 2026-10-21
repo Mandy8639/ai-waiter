@@ -18,6 +18,7 @@ describe("sitemap.xml", () => {
       "https://tableside.menu/login",
       "https://tableside.menu/support",
       "https://tableside.menu/security",
+      "https://tableside.menu/terms",
       "https://tableside.menu/privacy",
     ]);
   });

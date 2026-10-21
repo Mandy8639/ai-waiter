@@ -9,6 +9,7 @@ import { AuthForm } from "@/components/auth/auth-form";
 import { isInviteToken } from "@/lib/staff/invitations-core";
 import { signUp } from "@/lib/auth/actions";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
+import { TERMS_PATH } from "@/lib/legal/terms";
 import { publicPageMetadata } from "@/lib/seo/metadata";
 
 export const metadata = publicPageMetadata({
@@ -57,13 +58,18 @@ export default async function SignupPage({
             </Link>
           </p>
           <p className="text-muted-foreground text-center text-xs">
-            How we handle your information:{" "}
+            By creating an account, you agree to the{" "}
+            <Link href={TERMS_PATH} className="underline underline-offset-4">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
             <Link
               href={PRIVACY_POLICY_PATH}
               className="underline underline-offset-4"
             >
               Privacy policy
             </Link>
+            .
           </p>
         </CardContent>
       </Card>
