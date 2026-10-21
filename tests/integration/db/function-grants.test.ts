@@ -30,6 +30,8 @@ const WEBHOOK_ONLY = [
  * admin.
  */
 const SERVER_ONLY = [
+  "mark_tap_to_pay_succeeded",
+  "set_terminal_location",
   "save_platform_models",
   "clear_platform_models",
   "save_waiter_model_override",
@@ -41,6 +43,9 @@ const SERVER_ONLY = [
 /** Signed-in callers only; each checks its caller inside as well. */
 const SIGNED_IN_ONLY = [
   "count_recent_orders_for_session",
+  "start_tap_to_pay_payment",
+  "attach_tap_to_pay_intent",
+  "cancel_tap_to_pay_payment",
   "customer_cancel_order",
   "transition_order_status",
   "get_restaurant_staff",

@@ -84,6 +84,11 @@ const PAYMENT_MESSAGES: Record<string, string> = {
     "Only a cash or card-machine payment can be reversed. Refund a card payment instead.",
   PAYMENT_NOT_REVERSIBLE:
     "Only a settled payment can be reversed. This one isn't.",
+  // Tap to Pay (20261105090000). Staff-facing.
+  PAYMENT_BAD_INTENT:
+    "Stripe sent back something unexpected. Please try again.",
+  PAYMENT_BAD_LOCATION:
+    "Couldn't set up Tap to Pay for this restaurant. Please try again.",
   PAYMENT_REASON_REQUIRED: "Say why this is being reversed.",
 
   // Phase 3, step 3 — raised by start_refund()/attach_refund_stripe_id()/
