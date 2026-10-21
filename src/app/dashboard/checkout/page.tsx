@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CashPaymentDialog } from "@/components/payments/cash-payment-dialog";
+import { TapToPayDialog } from "@/components/payments/tap-to-pay-dialog";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/orders/format";
@@ -34,7 +35,7 @@ export default async function CheckoutPage() {
   const [{ data: settings }, tables] = await Promise.all([
     supabase
       .from("restaurant_settings")
-      .select("accept_cash, accept_card_terminal, tipping_enabled")
+      .select("accept_cash, accept_card_terminal, accept_card, tipping_enabled")
       .eq("restaurant_id", restaurant.id)
       .maybeSingle(),
     getUnpaidOrdersByTable(restaurant.id),
@@ -43,6 +44,9 @@ export default async function CheckoutPage() {
   const acceptsCash = settings?.accept_cash ?? false;
   const acceptsCardTerminal = settings?.accept_card_terminal ?? false;
   const tippingEnabled = settings?.tipping_enabled ?? false;
+  // Tap to Pay needs card payments on; it only appears inside the staff
+  // app, and the database refuses it if the Stripe account can't charge.
+  const acceptsCard = settings?.accept_card ?? false;
 
   const outstanding = tables.reduce((sum, t) => sum + t.total, 0);
   const currency = tables[0]?.currency ?? "USD";
@@ -132,8 +136,17 @@ export default async function CheckoutPage() {
                   ))}
                 </ul>
 
-                {(acceptsCash || acceptsCardTerminal) && (
+                {(acceptsCash || acceptsCardTerminal || acceptsCard) && (
                   <div className="flex flex-wrap gap-2">
+                    {acceptsCard && (
+                      <TapToPayDialog
+                        restaurantId={restaurant.id}
+                        tableLabel={table.tableLabel}
+                        orders={table.orders}
+                        currency={table.currency}
+                        tippingEnabled={tippingEnabled}
+                      />
+                    )}
                     {acceptsCash && (
                       <CashPaymentDialog
                         method="cash"

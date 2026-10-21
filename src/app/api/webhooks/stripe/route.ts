@@ -128,6 +128,34 @@ export async function POST(request: Request) {
     }
   }
 
+  // Tap to Pay (src/lib/payments/tap-to-pay.ts). The staff app settles it
+  // straight after the tap by reading the PaymentIntent back; this is the
+  // backstop when the phone lost signal first. Only intents this system
+  // created for Tap to Pay (metadata.source), and only through the
+  // service-role function, which ignores an intent it doesn't know.
+  if (event.type === "payment_intent.succeeded") {
+    const intent = event.data.object as Stripe.PaymentIntent;
+    if (intent.metadata?.source === "tap_to_pay") {
+      const { error } = await admin.rpc(
+        "mark_tap_to_pay_succeeded" as never,
+        { p_payment_intent_id: intent.id } as never,
+      );
+      // Charged, but the table was settled another way meanwhile: no retry
+      // can fix that, so it's reported for a refund and acknowledged.
+      if (error && /ALREADY_SETTLED|ALREADY_PAID/.test(error.message)) {
+        reportError(new Error(error.message), {
+          scope: "tap_to_pay.webhook.double_payment",
+          extra: { paymentIntentId: intent.id },
+        });
+      } else if (error) {
+        return NextResponse.json(
+          { error: "could not apply event" },
+          { status: 500 },
+        );
+      }
+    }
+  }
+
   // An abandoned or failed checkout. Recorded so "has this order been
   // paid?" has an answer other than "still pending, forever", and so the
   // diner is offered a retry rather than a stuck screen. The function

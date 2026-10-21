@@ -61,6 +61,28 @@ Vercel (Production):
 Redeploy. One key works for both the sandbox gateway (Xcode builds) and production (TestFlight,
 App Store). The server learns which one each phone's token belongs to.
 
+## Tap to Pay on iPhone
+
+Staff take card payments on the phone itself from Settle up (Stripe Terminal through
+`@capacitor-community/stripe-terminal`; server side in `src/lib/payments/tap-to-pay.ts`). The code
+and the location and Bluetooth purpose strings are in the app; what's left needs the Apple account:
+
+1. **Request the entitlement.** In the Apple Developer account, request **Tap to Pay on iPhone**
+   (Apple reviews it; the form asks how the app is used and by whom). Development access comes
+   first, distribution access later.
+2. **Add the capability** once granted: Xcode → App target → Signing & Capabilities → **+ Tap to
+   Pay on iPhone**. That adds `com.apple.developer.proximity-reader.payment.acceptance` to
+   `App.entitlements`. Don't add it by hand before Apple grants it: signing fails without it on the
+   provisioning profile.
+3. **Test on a real iPhone XS or newer** (the simulator can't). The first tap on a phone shows
+   Apple's terms for the merchant, which an owner or manager accepts once.
+4. **Before App Review**, Apple checks its Tap to Pay requirements (education screens, the
+   "Tap to Pay on iPhone" name and mark). See Apple's Tap to Pay on iPhone marketing and
+   implementation guidelines.
+
+On Android nothing extra is needed beyond NFC switched on (Android 11+). Live payments only work
+from the Play build, not a debug build.
+
 ## App Store review notes
 
 The app is for restaurant staff. Reviewers need a staff sign-in: see
