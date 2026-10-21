@@ -16,6 +16,8 @@ import {
   SUBSCRIPTION_STATUS_LABELS,
 } from "@/lib/billing/subscription";
 import { startSubscriptionCheckout } from "@/lib/billing/subscription-actions";
+import { cancelControlsFor } from "@/lib/billing/subscription-cancel-core";
+import { PlanCancelControls } from "@/components/billing/plan-cancel-controls";
 import { SubscribeButton } from "@/components/payments/subscribe-button";
 import { canSellPlans } from "@/lib/app-shell/core";
 import { getAppShell } from "@/lib/app-shell/server";
@@ -156,13 +158,21 @@ export default async function PaymentsPage() {
                 {SUBSCRIPTION_STATUS_LABELS[subscription.status] ??
                   subscription.status}
                 {subscription.currentPeriodEnd &&
+                  !subscription.cancelAtPeriodEnd &&
                   ` · renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`}
-                {subscription.cancelAtPeriodEnd && " · ends at period end"}
+                {subscription.cancelAtPeriodEnd && " · cancelled"}
               </p>
             ) : (
               <p className="text-muted-foreground text-xs">
                 {exempt ? "No subscription needed." : "No subscription yet."}
               </p>
+            )}
+            {plansForSale && (
+              <PlanCancelControls
+                restaurantId={restaurant.id}
+                controls={cancelControlsFor(subscription)}
+                timeZone={restaurant.timezone}
+              />
             )}
           </CardContent>
         </Card>
@@ -203,7 +213,7 @@ export default async function PaymentsPage() {
                     </span>
                   ) : isFree ? (
                     <span className="text-muted-foreground text-xs">
-                      Cancel from Stripe to return to this
+                      Cancel your plan above to return to this
                     </span>
                   ) : !p.stripe_price_id ? (
                     /* Said plainly rather than offering a button that opens

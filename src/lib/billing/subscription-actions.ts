@@ -1,6 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getRestaurantSubscription } from "./subscription";
+import { cancelControlsFor } from "./subscription-cancel-core";
+import { resolvePeriodEnd } from "./subscription-period";
 import { headers } from "next/headers";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { getStripe, isStripeConfigured } from "@/lib/payments/stripe";
@@ -127,4 +132,82 @@ export async function startSubscriptionCheckout(
 
   // Outside the try: redirect() signals by throwing.
   redirect(checkoutUrl);
+}
+
+export interface CancelPlanResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * "Cancel plan" and "Keep my plan" on the Payments page: sets Stripe's
+ * cancel_at_period_end on the restaurant's subscription (on the platform
+ * account, like the checkout above), then records what Stripe returned at
+ * once instead of waiting for the webhook, which writes the same row.
+ */
+export async function setPlanCancellation(
+  restaurantId: string,
+  cancel: boolean,
+): Promise<CancelPlanResult> {
+  const auth = await authorizeRestaurantAction(restaurantId, [
+    "owner",
+    "manager",
+  ]);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (!canSellPlans(await getAppShell())) {
+    return { ok: false, error: "Plans can't be changed in this app." };
+  }
+  if (!isStripeConfigured()) {
+    return { ok: false, error: "Stripe isn't configured." };
+  }
+
+  const current = await getRestaurantSubscription(restaurantId);
+  const controls = cancelControlsFor(current);
+  if (!current || controls.kind === "none") {
+    return { ok: false, error: "There's no active plan to change." };
+  }
+  if (cancel === (controls.kind === "ending")) {
+    return { ok: true }; // already as asked
+  }
+
+  try {
+    const updated = await getStripe().subscriptions.update(
+      current.stripeSubscriptionId,
+      { cancel_at_period_end: cancel },
+    );
+    const restaurantMeta = updated.metadata?.restaurant_id;
+    const planId = updated.metadata?.plan_id;
+    if (restaurantMeta !== restaurantId || !planId) {
+      throw new Error(`Subscription ${updated.id} metadata mismatch`);
+    }
+    const admin = createAdminClient();
+    const { error } = await admin.rpc("record_restaurant_subscription", {
+      p_restaurant_id: restaurantId,
+      p_plan_id: planId,
+      p_stripe_customer_id: String(updated.customer),
+      p_stripe_subscription_id: updated.id,
+      p_status: updated.status,
+      p_current_period_end: resolvePeriodEnd(updated),
+      p_cancel_at_period_end: updated.cancel_at_period_end ?? false,
+    });
+    // Stripe has the change either way; the webhook will record it if
+    // this write failed, so it's reported rather than shown as a failure.
+    if (error) {
+      reportError(error, {
+        scope: "billing.cancel.record",
+        extra: { restaurantId },
+      });
+    }
+  } catch (error) {
+    reportError(error, {
+      scope: cancel ? "billing.cancel" : "billing.resume",
+      extra: { restaurantId },
+    });
+    return {
+      ok: false,
+      error: "Couldn't reach Stripe to change your plan. Please try again.",
+    };
+  }
+  revalidatePath("/dashboard/payments");
+  return { ok: true };
 }
