@@ -132,6 +132,8 @@ export function MenuItemCard({
         alt={item.name}
         sizes={CARD_SIZES}
         className="size-24 shrink-0 self-start rounded-lg sm:size-28"
+        caption="short"
+        figureClassName="w-24 shrink-0 self-start sm:w-28"
       />
     </Link>
   );
