@@ -279,6 +279,7 @@ export default async function MenuItemDetailPage({
         alt={item.name}
         sizes={DETAIL_SIZES}
         priority
+        caption="full"
         className="aspect-[4/3] w-full rounded-2xl"
       />
 
