@@ -47,6 +47,7 @@ const SIGNED_IN_ONLY = [
   "attach_tap_to_pay_intent",
   "cancel_tap_to_pay_payment",
   "customer_cancel_order",
+  "staff_place_order",
   "transition_order_status",
   "get_restaurant_staff",
   "record_in_person_payment",

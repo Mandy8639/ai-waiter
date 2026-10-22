@@ -302,6 +302,9 @@ describe("the boundary around the service-role sender", () => {
       // Confirm/Cancel on the kitchen board: tells Android phones to stop
       // ringing for an order the database just let this member update.
       "src/lib/orders/transition.ts",
+      // The POS screen: staff_place_order() just returned this id for an
+      // order the member rang up.
+      "src/lib/pos/actions.ts",
       "src/lib/push/actions.ts",
       "src/lib/table-requests/actions.ts",
     ]);

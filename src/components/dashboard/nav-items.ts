@@ -3,6 +3,7 @@ import {
   Carrot,
   ChartColumn,
   ChefHat,
+  ClipboardPen,
   CircleSlash,
   CreditCard,
   HandCoins,
@@ -49,8 +50,8 @@ export interface NavItem {
 /**
  * Who opens what:
  *   - owner, manager: everything.
- *   - staff (floor and front desk): Overview, Kitchen, Orders, Settle up,
- *     Reservations.
+ *   - staff (floor and front desk): Overview, Kitchen, Take order, Orders,
+ *     Settle up, Reservations.
  *   - kitchen (the screen on the pass): Kitchen, Sold out and Waiter.
  * src/lib/dashboard/access-core.ts enforces the same table on the server.
  */
@@ -89,6 +90,15 @@ export const NAV_ITEMS: NavItem[] = [
     group: "Service",
     icon: Sparkles,
     roles: KITCHEN_SIDE,
+  },
+  // The till: staff ring up walk-ins, phone orders and tables
+  // (staff_place_order(), 20261107090000).
+  {
+    label: "Take order",
+    href: "/dashboard/pos",
+    group: "Service",
+    icon: ClipboardPen,
+    roles: FRONT_OF_HOUSE,
   },
   // Front of house: a waiter settling a dispute needs order history as
   // much as an owner does. Takings stay owner/manager-only (Reports).

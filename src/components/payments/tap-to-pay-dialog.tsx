@@ -45,12 +45,15 @@ export function TapToPayDialog({
   orders,
   currency,
   tippingEnabled,
+  onPaid,
 }: {
   restaurantId: string;
   tableLabel: string;
   orders: UnpaidOrder[];
   currency: string;
   tippingEnabled: boolean;
+  /** Told once the bank approves: the POS screen marks its order paid. */
+  onPaid?: () => void;
 }) {
   const router = useRouter();
   // Known only in the browser, after mount: the server can't tell.
@@ -93,6 +96,7 @@ export function TapToPayDialog({
         onStep: setStep,
       });
       setPaid(true);
+      onPaid?.();
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "The tap didn't go through.");
