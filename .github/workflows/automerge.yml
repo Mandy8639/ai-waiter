@@ -50,10 +50,29 @@ jobs:
         run: |
           set -euo pipefail
 
+          # GitHub's API now and then answers with an empty body ("unexpected
+          # end of JSON input", seen on #178 and #179). Each call is retried;
+          # if GitHub stays unreachable the run ends quietly instead of
+          # failing, and the next trigger (CI or a status) tries again.
+          api() {
+            local out err
+            for attempt in 1 2 3 4; do
+              if out=$(gh api "$@" 2>/tmp/gh-err); then
+                printf '%s' "$out"
+                return 0
+              fi
+              err=$(cat /tmp/gh-err)
+              echo "gh api failed (attempt $attempt): $err" >&2
+              sleep $((attempt * 5))
+            done
+            return 1
+          }
+
           # The open, labelled PR into main whose head is exactly this
           # commit. Found from the commit, which both triggers carry.
-          pr=$(gh api "repos/$REPO/commits/$SHA/pulls" \
-            --jq "[.[] | select(.state == \"open\" and .head.sha == \"$SHA\" and .base.ref == \"main\" and (.draft | not) and any(.labels[]; .name == \"automerge\")) | .number] | first // empty")
+          pr=$(api "repos/$REPO/commits/$SHA/pulls" \
+            --jq "[.[] | select(.state == \"open\" and .head.sha == \"$SHA\" and .base.ref == \"main\" and (.draft | not) and any(.labels[]; .name == \"automerge\")) | .number] | first // empty") \
+            || { echo "Couldn't reach GitHub to find the PR. A later trigger will retry."; exit 0; }
           if [ -z "$pr" ]; then
             echo "No open, labelled PR into main at $SHA. Nothing to do."
             exit 0
@@ -61,18 +80,21 @@ jobs:
 
           # CI runs twice per PR (push and pull_request). Wait for every
           # check run except this job, finished and green.
-          not_green=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
+          not_green=$(api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
             --jq '[.check_runs[] | select(.name != "merge")
                    | select(.status != "completed"
                             or ((.conclusion == "success" or .conclusion == "skipped" or .conclusion == "neutral") | not))]
-                  | length')
+                  | length') \
+            || { echo "Couldn't read the checks. A later trigger will retry."; exit 0; }
           if [ "$not_green" != "0" ]; then
             echo "$not_green check run(s) not finished or not green yet. Waiting for the next CI completion."
             exit 0
           fi
 
           # Commit statuses too (Vercel). None at all is fine.
-          read -r state count < <(gh api "repos/$REPO/commits/$SHA/status" --jq '"\(.state) \(.total_count)"')
+          status_line=$(api "repos/$REPO/commits/$SHA/status" --jq '"\(.state) \(.total_count)"') \
+            || { echo "Couldn't read the commit status. A later trigger will retry."; exit 0; }
+          read -r state count <<< "$status_line"
           if [ "$count" != "0" ] && [ "$state" != "success" ]; then
             echo "Commit status is $state. Not merging."
             exit 0
