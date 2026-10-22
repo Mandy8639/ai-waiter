@@ -39,7 +39,7 @@ export interface TicketOptions {
   reprint?: boolean;
 }
 
-const SPICE_LABELS: Record<string, string> = {
+export const SPICE_LABELS: Record<string, string> = {
   none: "No spice",
   mild: "Mild",
   medium: "Medium",
