@@ -73,6 +73,7 @@ export function CashPaymentDialog({
   orders,
   currency,
   tippingEnabled,
+  onRecorded,
 }: {
   method?: InPersonMethod;
   recordAction: Action;
@@ -80,8 +81,17 @@ export function CashPaymentDialog({
   orders: UnpaidOrder[];
   currency: string;
   tippingEnabled: boolean;
+  /** Told once the payment is recorded: the POS screen marks its order paid. */
+  onRecorded?: () => void;
 }) {
-  const [state, submit, pending] = useActionState(recordAction, initialState);
+  const [state, submit, pending] = useActionState(
+    async (prev: CashState, formData: FormData) => {
+      const next = await recordAction(prev, formData);
+      if (next.success) onRecorded?.();
+      return next;
+    },
+    initialState,
+  );
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(orders.map((o) => o.id)),

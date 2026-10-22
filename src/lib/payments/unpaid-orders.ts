@@ -38,7 +38,7 @@ export interface UnpaidOrder {
 }
 
 export interface UnpaidTable {
-  /** The table's id — or, at a pickup counter, the diner's session id, since strangers share a counter but never a bill. */
+  /** The table's id — or, at a pickup counter, the diner's session id (the order's own id when staff rang it up), since strangers share a counter but never a bill. */
   tableId: string;
   tableLabel: string;
   orders: UnpaidOrder[];
@@ -107,15 +107,16 @@ export async function getUnpaidOrdersByTable(
 
     const table = tableById.get(order.table_id);
     const pickup = order as unknown as {
-      customer_session_id: string;
+      customer_session_id: string | null;
       pickup_at: string | null;
       pickup_name: string | null;
     };
     // A pickup order is grouped by the diner who placed it, never with the
-    // other strangers at the same counter.
+    // other strangers at the same counter. One rung up by staff (no diner
+    // session, 20261107090000) is its own bill.
     const key =
       pickup.pickup_at && pickup.pickup_name
-        ? `pickup:${pickup.customer_session_id}`
+        ? `pickup:${pickup.customer_session_id ?? order.id}`
         : order.table_id;
     const group = byTable.get(key) ?? {
       tableId: key,
