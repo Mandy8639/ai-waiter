@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Star, TrendingUp } from "lucide-react";
+import type { DishHighlight } from "@/lib/menu/highlights";
 import { AllergenLine } from "@/components/customer/allergen-note";
 import { DietBadges } from "@/components/customer/diet-badges";
 import { formatPrice } from "@/lib/format/price";
@@ -26,6 +28,8 @@ export interface MenuItemCardData {
   language?: MenuLanguage | null;
   /** Phase M: confirmed calories per serving, when the restaurant has confirmed them. */
   calories?: number | null;
+  /** "House favorite" (starred by the restaurant) or "Most ordered" (real orders). */
+  highlight?: DishHighlight | null;
 }
 
 /**
@@ -56,6 +60,21 @@ export function MenuItemCard({
       className="group bg-card shadow-card focus-visible:ring-ring/50 hover:border-foreground/15 flex gap-4 rounded-xl border p-4 transition-[border-color,background-color] duration-150 focus-visible:ring-3 focus-visible:outline-none"
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        {item.highlight && (
+          <span className="type-caption text-primary inline-flex items-center gap-1 font-medium">
+            {item.highlight === "house_favorite" ? (
+              <>
+                <Star className="size-3 fill-current" aria-hidden="true" />
+                House favorite
+              </>
+            ) : (
+              <>
+                <TrendingUp className="size-3" aria-hidden="true" />
+                Most ordered
+              </>
+            )}
+          </span>
+        )}
         <h3 className="type-dish text-foreground group-hover:text-primary transition-colors">
           {item.name}
         </h3>

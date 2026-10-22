@@ -84,6 +84,8 @@ export interface MenuListRow
   is_vegan: boolean;
   is_spicy: boolean;
   category_id: string;
+  /** 20261106090000: starred by the restaurant. */
+  is_house_favorite?: boolean;
 }
 
 /** The column list to add to a select that needs an image. */

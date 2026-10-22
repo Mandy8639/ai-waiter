@@ -166,6 +166,7 @@ const SIGNED_IN_ONLY = [
  */
 const ANON_BY_DESIGN = [
   "get_kitchen_status",
+  "get_most_ordered_dishes",
   "get_staff_invitation_preview",
   "get_tab_split",
   "start_split_payment",
