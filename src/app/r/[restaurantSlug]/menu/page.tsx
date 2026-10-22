@@ -37,6 +37,7 @@ import {
   type DietFilterKey,
 } from "@/lib/menu/diet-filters";
 import { publicPageMetadata } from "@/lib/seo/metadata";
+import { highlightFor, highlightSections } from "@/lib/menu/highlights";
 import {
   restaurantDescription,
   restaurantShareImage,
@@ -110,7 +111,7 @@ export default async function MenuPage({
   let itemsQuery = supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, category_id",
+      "id, name, description, price, image_url, active_image_id, image_source, image_variants, is_vegetarian, is_vegan, is_spicy, is_halal, is_kosher, category_id, is_house_favorite",
     )
     .eq("restaurant_id", restaurant.id)
     .order("display_order", { ascending: true })
@@ -148,6 +149,7 @@ export default async function MenuPage({
     { data: menuItems },
     { data: flagRows },
     menusResult,
+    { data: mostOrderedRows },
   ] = await Promise.all([
     supabase
       .from("categories")
@@ -173,7 +175,17 @@ export default async function MenuPage({
     // Phase L: which menus are on right now (decided in the database,
     // in the restaurant's timezone).
     getPublicMenus(restaurant.id, supabase),
+    // "Most ordered this month": ids in rank order, nothing until there
+    // are enough orders to mean something (20261106090000).
+    (
+      supabase.rpc.bind(supabase) as unknown as (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: { menu_item_id: string }[] | null }>
+    )("get_most_ordered_dishes", { p_restaurant_id: restaurant.id }),
   ]);
+  const mostOrderedIds = (mostOrderedRows ?? []).map((r) => r.menu_item_id);
+  const mostOrderedSet = new Set(mostOrderedIds);
 
   // Only sections on a menu that's on now. Null means the lookup failed:
   // show everything rather than an empty menu — ordering is enforced in
@@ -240,32 +252,37 @@ export default async function MenuPage({
   // Phase M: confirmed calories for the cards.
   const nutrition = await getConfirmedNutrition(itemIds, supabase);
 
-  const cards: Array<MenuItemCardData & { categoryId: string }> = itemRows.map(
-    (item) => ({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      price: Number(item.price),
-      image: resolveDinerImage({
-        activeImageId: item.active_image_id,
-        imageSource: item.image_source,
-        imageVariants: item.image_variants,
-        legacyImageUrl: item.image_url,
-        supabaseUrl: env.NEXT_PUBLIC_SUPABASE_URL,
-      }),
-      isVegetarian: item.is_vegetarian,
-      isVegan: item.is_vegan,
-      isSpicy: item.is_spicy,
-      isHalal: item.is_halal,
-      isKosher: item.is_kosher,
-      allergens: allergensByItem.get(item.id) ?? [],
-      categoryId: item.category_id,
-      translatedName: translations.dishName(item.id),
-      translatedDescription: translations.dishDescription(item.id),
-      language: translations.language,
-      calories: nutrition.get(item.id)?.calories ?? null,
+  const cards: Array<
+    MenuItemCardData & { categoryId: string; isHouseFavorite: boolean }
+  > = itemRows.map((item) => ({
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    price: Number(item.price),
+    image: resolveDinerImage({
+      activeImageId: item.active_image_id,
+      imageSource: item.image_source,
+      imageVariants: item.image_variants,
+      legacyImageUrl: item.image_url,
+      supabaseUrl: env.NEXT_PUBLIC_SUPABASE_URL,
     }),
-  );
+    isVegetarian: item.is_vegetarian,
+    isVegan: item.is_vegan,
+    isSpicy: item.is_spicy,
+    isHalal: item.is_halal,
+    isKosher: item.is_kosher,
+    allergens: allergensByItem.get(item.id) ?? [],
+    categoryId: item.category_id,
+    translatedName: translations.dishName(item.id),
+    translatedDescription: translations.dishDescription(item.id),
+    language: translations.language,
+    calories: nutrition.get(item.id)?.calories ?? null,
+    isHouseFavorite: item.is_house_favorite === true,
+    highlight: highlightFor(
+      { id: item.id, isHouseFavorite: item.is_house_favorite === true },
+      mostOrderedSet,
+    ),
+  }));
 
   const isFiltered = Boolean(categoryId || search || diet.length > 0);
   const activeCategory = categories?.find((c) => c.id === categoryId);
@@ -277,9 +294,22 @@ export default async function MenuPage({
   const uncategorised = cards.filter(
     (card) => !knownCategoryIds.has(card.categoryId),
   );
+  // House favorites and Most ordered lead the whole menu (not a single
+  // category or a search). Their dishes stay in their own sections too.
+  const highlights = highlightSections(cards, mostOrderedIds);
   const sections =
     !categoryId && !search
       ? [
+          {
+            id: "house-favorites",
+            name: "House favorites",
+            items: highlights.favorites,
+          },
+          {
+            id: "most-ordered",
+            name: "Most ordered this month",
+            items: highlights.mostOrdered,
+          },
           ...(categories ?? []).map((category) => ({
             id: category.id,
             name: translations.categoryName(category.id) ?? category.name,

@@ -451,6 +451,69 @@ async function getMenuItem(
   };
 }
 
+type HighlightDish = { id: string; name: string; price: number };
+
+/**
+ * House favorites (starred by the restaurant) and the most-ordered dishes
+ * (get_most_ordered_dishes, 20261106090000), both limited to what a diner
+ * can order right now. Prices are included so the menu-claim guard can
+ * back any price the waiter quotes from them.
+ */
+async function getMenuHighlights(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  restaurantId: string,
+): Promise<{ houseFavorites: HighlightDish[]; mostOrdered: HighlightDish[] }> {
+  type Rows = {
+    data: { id: string; name: string; price: number | string }[] | null;
+  };
+  type Query = {
+    eq: (c: string, v: string | boolean) => Query;
+    in: (c: string, v: string[]) => Query;
+    order: (c: string, o: { ascending: boolean }) => Query;
+    limit: (n: number) => Query;
+    then: Promise<Rows>["then"];
+  };
+  // database.types.ts predates is_house_favorite (20261106090000).
+  const from = supabase.from.bind(supabase) as unknown as (t: string) => {
+    select: (c: string) => Query;
+  };
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: { menu_item_id: string; rank: number }[] | null }>;
+
+  const [favorites, ranked] = await Promise.all([
+    from("menu_items")
+      .select("id, name, price")
+      .eq("restaurant_id", restaurantId)
+      .eq("is_house_favorite", true)
+      .eq("is_available", true)
+      .order("display_order", { ascending: true })
+      .limit(8),
+    rpc("get_most_ordered_dishes", { p_restaurant_id: restaurantId }),
+  ]);
+  const rankedIds = (ranked.data ?? []).map((r) => r.menu_item_id);
+  const popularRows = rankedIds.length
+    ? await from("menu_items")
+        .select("id, name, price")
+        .eq("restaurant_id", restaurantId)
+        .in("id", rankedIds)
+    : { data: [] };
+  const byId = new Map((popularRows.data ?? []).map((r) => [r.id, r]));
+  const dish = (r: { id: string; name: string; price: number | string }) => ({
+    id: r.id,
+    name: r.name,
+    price: Number(r.price),
+  });
+  return {
+    houseFavorites: (favorites.data ?? []).map(dish),
+    mostOrdered: rankedIds
+      .map((id) => byId.get(id))
+      .filter((r): r is NonNullable<typeof r> => r !== undefined)
+      .map(dish),
+  };
+}
+
 async function getRestaurantInfo(
   _args: z.infer<typeof getRestaurantInfoSchema>,
   context: ToolContext,
@@ -476,10 +539,17 @@ async function getRestaurantInfo(
   ]);
   const onNow = onNowFilter(menusResult);
   const menus = menusResult ?? [];
+  const highlights = await getMenuHighlights(supabase, context.restaurantId);
 
   return {
     ok: true,
     data: {
+      // The restaurant's own starred dishes, and the dishes ordered most
+      // in the last 30 days (only once there are enough orders to mean
+      // something). Empty lists mean the restaurant has none: say you
+      // don't know what's popular rather than guessing.
+      houseFavorites: highlights.houseFavorites,
+      mostOrderedThisMonth: highlights.mostOrdered,
       // Only what's being served now (phase L), so search_menu's category
       // filter is used with sections that can actually be ordered.
       menuCategories: (categoryRows ?? [])
@@ -522,7 +592,7 @@ export const menuTools: ToolDefinition[] = [
   {
     name: "get_restaurant_info",
     description:
-      'Get this restaurant\'s name, description, address, phone number, the menu categories being served right now (e.g. Snacks, Chaat, Thali Special), and its menus with their hours and whether each is serving now. Call this before using search_menu\'s category filter — every restaurant\'s categories are different — and for questions like "do you do breakfast?" or "when is dinner?".',
+      'Get this restaurant\'s name, description, address, phone number, the menu categories being served right now (e.g. Snacks, Chaat, Thali Special), its menus with their hours and whether each is serving now, its house favorites (dishes the restaurant itself recommends) and its most-ordered dishes this month. Call this for "what\'s popular?", "what do you recommend?" or "what\'s the house special?". Call this before using search_menu\'s category filter — every restaurant\'s categories are different — and for questions like "do you do breakfast?" or "when is dinner?".',
     schema: getRestaurantInfoSchema,
     execute: getRestaurantInfo as ToolDefinition["execute"],
   },

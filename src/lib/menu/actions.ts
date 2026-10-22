@@ -194,6 +194,40 @@ export async function deleteMenuItem(
   return {};
 }
 
+/**
+ * Stars or unstars a dish as a house favorite: shown in "House favorites"
+ * at the top of the diner menu, with a badge (20261106090000).
+ */
+export async function toggleHouseFavorite(
+  restaurantId: string,
+  menuItemId: string,
+  nextValue: boolean,
+): Promise<void> {
+  const auth = await authorizeRestaurantAction(restaurantId, [
+    "owner",
+    "manager",
+  ]);
+  if (!auth.ok) return;
+
+  // database.types.ts predates the column.
+  await (
+    auth.context.supabase.from("menu_items") as unknown as {
+      update: (v: Record<string, unknown>) => {
+        eq: (
+          c: string,
+          v: string,
+        ) => { eq: (c: string, v: string) => Promise<unknown> };
+      };
+    }
+  )
+    .update({ is_house_favorite: nextValue })
+    .eq("id", menuItemId)
+    .eq("restaurant_id", restaurantId);
+
+  revalidatePath("/dashboard/menu");
+  revalidatePath("/r/[restaurantSlug]", "layout");
+}
+
 export async function toggleMenuItemAvailability(
   restaurantId: string,
   menuItemId: string,

@@ -14,7 +14,12 @@ import { DishDetailsCard } from "@/components/dashboard/dish-details-card";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
-import { deleteMenuItem, toggleMenuItemAvailability } from "@/lib/menu/actions";
+import {
+  deleteMenuItem,
+  toggleHouseFavorite,
+  toggleMenuItemAvailability,
+} from "@/lib/menu/actions";
+import { Star } from "lucide-react";
 import { countDraftNutrition } from "@/lib/nutrition/queries";
 
 export const metadata = {
@@ -25,19 +30,40 @@ export default async function MenuPage() {
   const { restaurant } = await requireCurrentRestaurant();
   const supabase = await createClient();
 
-  const [{ data: menuItems }, { data: categories }] = await Promise.all([
-    supabase
-      .from("menu_items")
-      .select(
-        "id, name, category_id, price, is_available, is_vegetarian, is_spicy, details_source, display_order",
+  const [{ data: menuItems }, { data: categories }, { data: favoriteRows }] =
+    await Promise.all([
+      supabase
+        .from("menu_items")
+        .select(
+          "id, name, category_id, price, is_available, is_vegetarian, is_spicy, details_source, display_order",
+        )
+        .eq("restaurant_id", restaurant.id)
+        .order("display_order", { ascending: true }),
+      supabase
+        .from("categories")
+        .select("id, name")
+        .eq("restaurant_id", restaurant.id),
+      // House favorites (20261106090000; postdates database.types.ts).
+      (
+        supabase.from("menu_items") as unknown as {
+          select: (c: string) => {
+            eq: (
+              c: string,
+              v: string | boolean,
+            ) => {
+              eq: (
+                c: string,
+                v: string | boolean,
+              ) => Promise<{ data: { id: string }[] | null }>;
+            };
+          };
+        }
       )
-      .eq("restaurant_id", restaurant.id)
-      .order("display_order", { ascending: true }),
-    supabase
-      .from("categories")
-      .select("id, name")
-      .eq("restaurant_id", restaurant.id),
-  ]);
+        .select("id")
+        .eq("restaurant_id", restaurant.id)
+        .eq("is_house_favorite", true),
+    ]);
+  const favoriteIds = new Set((favoriteRows ?? []).map((r) => r.id));
 
   // Dishes carrying an allergen suggestion nobody has confirmed. Counted
   // rather than fetched: the page only needs to know whether to nudge.
@@ -229,7 +255,51 @@ export default async function MenuPage() {
               {menuItems.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="font-medium">
-                    {item.name}
+                    <span className="inline-flex items-center gap-1.5">
+                      {canManage ? (
+                        <form
+                          action={toggleHouseFavorite.bind(
+                            null,
+                            restaurant.id,
+                            item.id,
+                            !favoriteIds.has(item.id),
+                          )}
+                        >
+                          <button
+                            type="submit"
+                            aria-pressed={favoriteIds.has(item.id)}
+                            aria-label={
+                              favoriteIds.has(item.id)
+                                ? `Remove ${item.name} from house favorites`
+                                : `Add ${item.name} to house favorites`
+                            }
+                            title={
+                              favoriteIds.has(item.id)
+                                ? "House favorite: shown at the top of your menu"
+                                : "Make it a house favorite"
+                            }
+                            className="hover:bg-muted -m-1 flex size-7 items-center justify-center rounded-md"
+                          >
+                            <Star
+                              className={
+                                favoriteIds.has(item.id)
+                                  ? "text-primary size-4 fill-current"
+                                  : "text-muted-foreground size-4"
+                              }
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </form>
+                      ) : (
+                        favoriteIds.has(item.id) && (
+                          <Star
+                            className="text-primary size-4 fill-current"
+                            aria-label="House favorite"
+                          />
+                        )
+                      )}
+                      {item.name}
+                    </span>
                     {/*
                       The description and prep time on this dish were
                       written from its NAME and nobody has read them. Diners
