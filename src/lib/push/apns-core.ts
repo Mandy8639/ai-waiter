@@ -71,6 +71,23 @@ export function apnsProviderToken(
 }
 
 /**
+ * Whether iPhone alerts can go out: every setting present and the private
+ * key one Node can sign with. For the health check; a key pasted in a
+ * shape that doesn't parse would otherwise only show up as alerts that
+ * never arrive.
+ */
+export function apnsReady(env: Record<string, string | undefined>): boolean {
+  const config = apnsConfigFrom(env);
+  if (!config) return false;
+  try {
+    apnsProviderToken(config, Math.floor(Date.now() / 1000));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The order ring, bundled in the iOS app (ios/App/App/order-ring.caf):
  * 29 seconds, under Apple's 30-second limit for notification sounds.
  */
