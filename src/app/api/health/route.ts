@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { isAiConfigured } from "@/lib/ai/client";
+import { apnsReady } from "@/lib/push/apns-core";
 
 /**
  * High-level readiness signal for uptime monitoring/deployment checks
@@ -25,5 +26,7 @@ export async function GET() {
     status: "ok",
     supabaseConfigured,
     aiConfigured: isAiConfigured(),
+    // iPhone kitchen alerts: the APNS_* settings are there and the key signs.
+    iosPushConfigured: apnsReady(process.env),
   });
 }

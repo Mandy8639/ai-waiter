@@ -7,6 +7,7 @@ import {
   apnsConfigFrom,
   apnsEnvironmentsToTry,
   apnsProviderToken,
+  apnsReady,
   apnsRequest,
   apnsVerdict,
   ORDER_RING_SOUND,
@@ -75,6 +76,25 @@ describe("apnsProviderToken", () => {
         raw,
       ),
     ).toBe(true);
+  });
+});
+
+describe("apnsReady", () => {
+  const base = { APNS_KEY_ID: "ABC123DEFG", APNS_TEAM_ID: "TEAM123456" };
+
+  it("is ready with every setting and a key that signs, pasted either way", () => {
+    expect(apnsReady({ ...base, APNS_PRIVATE_KEY: pem })).toBe(true);
+    expect(
+      apnsReady({
+        ...base,
+        APNS_PRIVATE_KEY: pem.trim().replace(/\n/g, "\\n"),
+      }),
+    ).toBe(true);
+  });
+
+  it("isn't ready with a setting missing or a key that won't parse", () => {
+    expect(apnsReady({ ...base })).toBe(false);
+    expect(apnsReady({ ...base, APNS_PRIVATE_KEY: "not a key" })).toBe(false);
   });
 });
 
