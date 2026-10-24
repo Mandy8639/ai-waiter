@@ -6,6 +6,7 @@ import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/session";
 import { sendTestPush } from "./dispatch";
+import { describeTestResults } from "./dispatch-core";
 import { pushConfigured } from "./config";
 import { apnsConfig, type NativeTarget } from "./apns";
 import { fcmConfig } from "./fcm";
@@ -113,7 +114,11 @@ export async function deletePushSubscription(
  */
 export async function sendTestPushToMyDevices(
   restaurantId: string,
-): Promise<PushActionResult & { delivered?: number; total?: number }> {
+  /** How the calling device is registered, so the answer can say whether it got the test. */
+  mine: { nativeToken?: string | null; endpoint?: string | null } = {},
+): Promise<
+  PushActionResult & { delivered?: number; total?: number; message?: string }
+> {
   if (!anyPushConfigured()) {
     return { ok: false, error: "Alerts aren't set up for Tableside yet." };
   }
@@ -154,15 +159,25 @@ export async function sendTestPushToMyDevices(
       error: "Alerts aren't on for any of your devices yet.",
     };
   }
-  const { delivered, total } = await sendTestPush(targets, nativeTargets);
+  const { delivered, total, results } = await sendTestPush(
+    targets,
+    nativeTargets,
+  );
+  // The tokens and endpoints stay here; the page only learns which result
+  // is its own.
+  const message = describeTestResults(
+    results.map((r) => ({
+      kind: r.kind,
+      ok: r.ok,
+      statusCode: r.statusCode,
+      thisDevice:
+        (!!mine.nativeToken && r.key === mine.nativeToken) ||
+        (!!mine.endpoint && r.key === mine.endpoint),
+    })),
+  );
   return delivered > 0
-    ? { ok: true, delivered, total }
-    : {
-        ok: false,
-        delivered,
-        total,
-        error: "The test didn't reach any device.",
-      };
+    ? { ok: true, delivered, total, message }
+    : { ok: false, delivered, total, message, error: message };
 }
 
 export type NativePlatform = "ios" | "android";
