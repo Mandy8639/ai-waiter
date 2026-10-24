@@ -566,6 +566,7 @@ export async function sendTestPush(
     key: string;
     ok: boolean;
     statusCode?: number;
+    reason?: string;
   }[];
 }> {
   const payload: PushPayload = {
@@ -582,6 +583,7 @@ export async function sendTestPush(
     key: string;
     ok: boolean;
     statusCode?: number;
+    reason?: string;
   };
   const fromOutcome = (
     kind: Result["kind"],
@@ -609,7 +611,10 @@ export async function sendTestPush(
       }
       return apns
         ? sendApns(t, payload, apns)
-            .then((r) => fromOutcome("ios", t.token, r.outcome))
+            .then((r) => ({
+              ...fromOutcome("ios", t.token, r.outcome),
+              reason: r.outcome.ok ? undefined : r.reason,
+            }))
             .catch(() => ({ kind: "ios" as const, key: t.token, ok: false }))
         : Promise.resolve({ kind: "ios", key: t.token, ok: false });
     }),
@@ -620,6 +625,7 @@ export async function sendTestPush(
       kind: r.kind,
       ok: r.ok,
       status: r.statusCode,
+      reason: r.reason,
     })),
   });
   return {

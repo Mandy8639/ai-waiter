@@ -232,6 +232,8 @@ export interface TestDeviceResult {
   ok: boolean;
   /** The push service's HTTP status when it refused. */
   statusCode?: number;
+  /** Its reason, when it gave one (APNs: "BadDeviceToken", "InvalidProviderToken"…). */
+  reason?: string;
   /** The device the test was sent from. */
   thisDevice: boolean;
 }
@@ -254,10 +256,11 @@ export function describeTestResults(results: TestDeviceResult[]): string {
   const others = results.filter((r) => !r.thisDevice);
   const parts: string[] = [];
   for (const r of mine) {
+    const why = [r.statusCode, r.reason].filter(Boolean).join(" ");
     parts.push(
       r.ok
         ? "Sent to this device."
-        : `This device: refused${r.statusCode ? ` (${r.statusCode})` : ""}.`,
+        : `This device: refused${why ? ` (${why})` : ""}.`,
     );
   }
   if (mine.length === 0) {

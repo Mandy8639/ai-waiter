@@ -170,8 +170,9 @@ export async function sendTestPushToMyDevices(
       kind: r.kind,
       ok: r.ok,
       statusCode: r.statusCode,
+      reason: r.reason,
       thisDevice:
-        (!!mine.nativeToken && r.key === mine.nativeToken) ||
+        (!!mine.nativeToken && sameNativeToken(r.key, mine.nativeToken)) ||
         (!!mine.endpoint && r.key === mine.endpoint),
     })),
   );
@@ -181,6 +182,18 @@ export async function sendTestPushToMyDevices(
 }
 
 export type NativePlatform = "ios" | "android";
+
+/**
+ * Whether a stored token is the one this device holds. APNs tokens are hex
+ * and stored lowercase (saveNativePushToken), but the iOS plugin hands
+ * them over in uppercase; FCM tokens are case-sensitive and never all-hex.
+ */
+function sameNativeToken(stored: string, fromDevice: string): boolean {
+  const normalized = /^[0-9a-fA-F]{64,200}$/.test(fromDevice)
+    ? fromDevice.toLowerCase()
+    : fromDevice;
+  return stored === normalized;
+}
 
 /** APNs device tokens are hex; FCM registration tokens are not, and are case-sensitive. */
 const nativeTokenSchemas = {
