@@ -1,31 +1,31 @@
 # App Store listing
 
 Draft for App Store Connect, Tableside staff app (`menu.tableside.app`), written 2026-10-11 and
-refreshed 2026-10-20 for what the app does now. Every
+refreshed 2026-10-20 for what the app does now, and entered into App Store Connect 2026-10-24 (version 1.0.0, build 1). Every
 claim describes something the app does today. The Google Play counterpart is
 `docs/play-store/listing/README.md`; the two stores' privacy answers agree.
 
 ## App information
 
-| Field              | Value                                                                               |
-| ------------------ | ----------------------------------------------------------------------------------- |
-| Name (max 30)      | `Tableside`. If App Store Connect says it's taken: `Tableside for Restaurants` (25) |
-| Subtitle (max 30)  | `Kitchen board & order alerts` (28)                                                 |
-| Bundle ID          | `menu.tableside.app`                                                                |
-| SKU                | `tableside-staff`                                                                   |
-| Primary language   | English (U.S.)                                                                      |
-| Primary category   | Business                                                                            |
-| Secondary category | Food & Drink                                                                        |
-| Content rights     | No third-party content                                                              |
-| Age rating         | 4+ (answers below)                                                                  |
-| Price              | Free                                                                                |
-| Availability       | United States to start (add countries any time)                                     |
-| Privacy Policy URL | `https://tableside.menu/privacy`                                                    |
-| Support URL        | `https://tableside.menu/support`                                                    |
-| Marketing URL      | `https://tableside.menu`                                                            |
-| Copyright          | `2026 Beacon Digital Consulting LLC`                                                |
-| Version            | 1.0.0 (build 1), as set in Xcode                                                    |
-| Export compliance  | Already answered in the build (`ITSAppUsesNonExemptEncryption` = NO: HTTPS only)    |
+| Field              | Value                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| Name (max 30)      | `Tableside for Restaurants` (25). Plain `Tableside` was already taken (2026-10-24) |
+| Subtitle (max 30)  | `Kitchen board & order alerts` (28)                                                |
+| Bundle ID          | `menu.tableside.app`                                                               |
+| SKU                | `tableside-staff`                                                                  |
+| Primary language   | English (U.S.)                                                                     |
+| Primary category   | Business                                                                           |
+| Secondary category | Food & Drink                                                                       |
+| Content rights     | No third-party content                                                             |
+| Age rating         | 4+ (answers below)                                                                 |
+| Price              | Free                                                                               |
+| Availability       | United States to start (add countries any time)                                    |
+| Privacy Policy URL | `https://tableside.menu/privacy`                                                   |
+| Support URL        | `https://tableside.menu/support`                                                   |
+| Marketing URL      | `https://tableside.menu`                                                           |
+| Copyright          | `2026 Beacon Digital Consulting LLC`                                               |
+| Version            | 1.0.0 (build 1), as set in Xcode                                                   |
+| Export compliance  | Already answered in the build (`ITSAppUsesNonExemptEncryption` = NO: HTTPS only)   |
 
 ## Promotional text (max 170)
 
@@ -54,6 +54,11 @@ KITCHEN BOARD
 • Print kitchen tickets on a receipt printer, automatically or by hand.
 • If a diner cancels before you accept, the board tells you.
 
+TAKE ORDERS
+• Ring up a table, a walk-in or a phone order on the Take order screen and send it straight to the kitchen.
+• Add options, quantities and a note for the kitchen to each dish.
+• Record cash or card-machine payments as soon as a takeout order is placed.
+
 BUSY NIGHTS
 • Mark a dish sold out until tomorrow, or an add-on like oat milk, and diners see it straight away.
 • Add wait time when you're slammed, or pause new orders for a while.
@@ -76,7 +81,7 @@ ORDERS AND REPORTS
 YOUR MENU
 • Add and edit dishes, prices, photos, allergens and modifiers, and diners see the changes right away.
 • Import a menu from photos of your printed one, then check every dish before it goes live.
-• No photos yet? Generate a drawn illustration of each dish, approve the ones you like, and diners see them labelled "AI-generated".
+• No photos yet? Generate a picture of each dish, approve the ones you like, and diners see them labelled "AI-generated".
 • Translate your menu and add nutrition information.
 
 YOUR TEAM
@@ -94,12 +99,13 @@ reads like buying something.
 
 ## Screenshots
 
-| Display     | Files                                                 | Size        |
-| ----------- | ----------------------------------------------------- | ----------- |
-| iPhone 6.9" | `screenshots/iphone-6.9/1-kitchen.png` … `4-menu.png` | 1320 × 2868 |
-| iPad 13"    | `screenshots/ipad-13/1-kitchen.png` … `4-menu.png`    | 2064 × 2752 |
+| Display     | Files                                                             | Size        |
+| ----------- | ----------------------------------------------------------------- | ----------- |
+| iPhone 6.9" | `screenshots/iphone-6.9/1-kitchen.png` … `4-menu.png`             | 1320 × 2868 |
+| iPhone 6.3" | the same four scaled with `sips -z 2622 1206` (what was uploaded) | 1206 × 2622 |
+| iPad 13"    | `screenshots/ipad-13/1-kitchen.png` … `4-menu.png`                | 2064 × 2752 |
 
-App Store Connect scales these down for the smaller displays, so no other sizes are needed. iPad
+As of October 2026, App Store Connect's iPhone slot is "iPhone with Dynamic Island (medium display)" and only accepts 6.1"/6.3" sizes (1179 × 2556 or 1206 × 2622); it rejected 1320 × 2868, so the 6.3" copies were uploaded and used for every iPhone size. iPad
 screenshots are required because the app runs on iPad (`TARGETED_DEVICE_FAMILY` 1,2).
 
 They show the fictional demo restaurant "Saffron & Sage" on the disposable test project, signed in
@@ -162,11 +168,11 @@ Tableside is a staff app for restaurants. Diners order from a QR code on their t
 
 To try it: sign in with the account above (a manager of our demo restaurant). The Kitchen tab is the live order board. To see a new order arrive, open this demo table's menu in Safari on another device or the simulator, add a dish and place the order:
 https://tableside.menu/r/tableside-demo-cafe/table/12294b71-fb06-4647-9d41-cade6da866d2
-It appears on the board within seconds and chimes until you tap Confirm. On the kitchen board, "Turn on alerts" asks for notification permission; after that, new orders and table requests arrive as push notifications even when the app is closed, and tapping one opens the order. "Send a test" sends one straight away.
+It appears on the board within seconds and chimes until you tap Confirm. On the kitchen board, "Turn on alerts" asks for notification permission; after that, new orders and table requests arrive as push notifications even when the app is closed, and tapping one opens the order. "Send a test" sends one straight away. "Take order" lets staff ring up an order themselves.
 
 Native features: push notifications through APNs, notification taps that open the order, and an offline screen when there's no connection.
 
-AI features: the "Waiter" button lets staff type kitchen changes ("86 the paneer tikka"); a third-party AI model only interprets the command, and nothing changes without the rules behind it, prices only after a yes. Owners can also generate drawn illustrations of dishes; each is approved by the restaurant before diners see it and is always labelled "AI-generated". No diner or staff personal data is sent to AI models from this app.
+AI features: the "Waiter" button lets staff type kitchen changes ("86 the paneer tikka"); a third-party AI model only interprets the command, and nothing changes without the rules behind it, prices only after a yes. Owners can also generate pictures of dishes; each is approved by the restaurant before diners see it and is always labelled "AI-generated". No diner or staff personal data is sent to AI models from this app.
 
 Accounts: restaurant owners create their restaurant at tableside.menu and invite staff. Staff can delete their account in the app from Account (top of the dashboard).
 
