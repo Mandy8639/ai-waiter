@@ -34,4 +34,18 @@ describe("what Send a test says", () => {
       "Alerts aren't on for any of your devices yet.",
     );
   });
+
+  it("gives Apple's reason with the code", () => {
+    expect(
+      describeTestResults([
+        {
+          kind: "ios",
+          ok: false,
+          statusCode: 403,
+          reason: "InvalidProviderToken",
+          thisDevice: true,
+        },
+      ]),
+    ).toBe("This device: refused (403 InvalidProviderToken).");
+  });
 });

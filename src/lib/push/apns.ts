@@ -106,7 +106,12 @@ export async function sendApns(
   target: NativeTarget,
   payload: PushPayload,
   config: ApnsConfig,
-): Promise<{ outcome: SendOutcome; environment?: ApnsEnvironment }> {
+): Promise<{
+  outcome: SendOutcome;
+  environment?: ApnsEnvironment;
+  /** Apple's reason when it refused, e.g. "BadDeviceToken". Not secret. */
+  reason?: string;
+}> {
   const now = Math.floor(Date.now() / 1000);
   const bearer = providerToken(config, now);
   const request = apnsRequest(target.token, payload, config, now);
@@ -119,9 +124,15 @@ export async function sendApns(
     const verdict = apnsVerdict(status, reason);
     if (verdict.ok) return { outcome: { ok: true }, environment };
     if (!verdict.otherEnvironment) {
-      return { outcome: { ok: false, gone: verdict.gone, statusCode: status } };
+      return {
+        outcome: { ok: false, gone: verdict.gone, statusCode: status },
+        reason,
+      };
     }
   }
   // Refused as a bad token by both gateways: no build of this app owns it.
-  return { outcome: { ok: false, gone: true, statusCode: 400 } };
+  return {
+    outcome: { ok: false, gone: true, statusCode: 400 },
+    reason: "BadDeviceToken",
+  };
 }
