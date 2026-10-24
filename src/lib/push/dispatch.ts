@@ -557,7 +557,17 @@ export function scheduleTableRequestPush(requestId: string): void {
 export async function sendTestPush(
   targets: PushTarget[],
   nativeTargets: NativeTarget[] = [],
-): Promise<{ delivered: number; total: number }> {
+): Promise<{
+  delivered: number;
+  total: number;
+  /** Per device, keyed by its endpoint or token so the caller can spot its own. */
+  results: {
+    kind: "web" | "ios" | "android";
+    key: string;
+    ok: boolean;
+    statusCode?: number;
+  }[];
+}> {
   const payload: PushPayload = {
     title: "Tableside alerts are on",
     body: "New orders and table requests will show up here, even with the app closed.",
@@ -567,24 +577,54 @@ export async function sendTestPush(
   const vapid = configureVapid();
   const apns = apnsConfig();
   const fcm = fcmConfig();
-  const sends: Promise<{ ok: boolean }>[] = [
-    ...(vapid ? targets.map((t) => sendOne(t, payload)) : []),
-    ...nativeTargets.map((t) => {
+  type Result = {
+    kind: "web" | "ios" | "android";
+    key: string;
+    ok: boolean;
+    statusCode?: number;
+  };
+  const fromOutcome = (
+    kind: Result["kind"],
+    key: string,
+    outcome: { ok: boolean; statusCode?: number },
+  ): Result => ({
+    kind,
+    key,
+    ok: outcome.ok,
+    statusCode: outcome.ok ? undefined : outcome.statusCode,
+  });
+  const sends: Promise<Result>[] = [
+    ...(vapid
+      ? targets.map((t) =>
+          sendOne(t, payload).then((o) => fromOutcome("web", t.endpoint, o)),
+        )
+      : []),
+    ...nativeTargets.map((t): Promise<Result> => {
       if (t.platform === "android") {
         return fcm
-          ? sendFcm(t.token, { kind: "alert", payload }, fcm)
-          : Promise.resolve({ ok: false });
+          ? sendFcm(t.token, { kind: "alert", payload }, fcm).then((o) =>
+              fromOutcome("android", t.token, o),
+            )
+          : Promise.resolve({ kind: "android", key: t.token, ok: false });
       }
       return apns
         ? sendApns(t, payload, apns)
-            .then((r) => r.outcome)
-            .catch(() => ({ ok: false }))
-        : Promise.resolve({ ok: false });
+            .then((r) => fromOutcome("ios", t.token, r.outcome))
+            .catch(() => ({ kind: "ios" as const, key: t.token, ok: false }))
+        : Promise.resolve({ kind: "ios", key: t.token, ok: false });
     }),
   ];
-  const outcomes = await Promise.all(sends);
+  const results = await Promise.all(sends);
+  log("push_test", {
+    devices: results.map((r) => ({
+      kind: r.kind,
+      ok: r.ok,
+      status: r.statusCode,
+    })),
+  });
   return {
-    delivered: outcomes.filter((o) => o.ok).length,
+    delivered: results.filter((r) => r.ok).length,
     total: targets.length + nativeTargets.length,
+    results,
   };
 }

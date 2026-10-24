@@ -254,13 +254,23 @@ export function PushAlertsToggle({
   function sendTest() {
     setMessage(null);
     startTransition(async () => {
-      const result = await sendTestPushToMyDevices(restaurantId);
+      // Tell the server how this device is registered, so the answer can
+      // say whether this one got the test, not just that something did.
+      const nativeToken = native ? rememberedToken() : null;
+      const endpoint = native
+        ? null
+        : await currentSubscription()
+            .then((s) => s?.endpoint ?? null)
+            .catch(() => null);
+      const result = await sendTestPushToMyDevices(restaurantId, {
+        nativeToken,
+        endpoint,
+      });
       setMessage(
-        !result.ok
-          ? (result.error ?? "The test didn't go through.")
-          : result.total === 1
-            ? "Test sent to this device."
-            : `Test sent to ${result.delivered} of your ${result.total} devices.`,
+        result.message ??
+          (!result.ok
+            ? (result.error ?? "The test didn't go through.")
+            : `Test sent to ${result.delivered} of your ${result.total} devices.`),
       );
     });
   }

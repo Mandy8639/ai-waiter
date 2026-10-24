@@ -225,3 +225,65 @@ export function tableRequestPayload(request: {
 export function isSafeNotificationUrl(url: string): boolean {
   return /^\/dashboard(\/[a-z0-9/_-]*)?$/i.test(url);
 }
+
+/** One device's answer to "Send a test", without its token or endpoint. */
+export interface TestDeviceResult {
+  kind: "web" | "ios" | "android";
+  ok: boolean;
+  /** The push service's HTTP status when it refused. */
+  statusCode?: number;
+  /** The device the test was sent from. */
+  thisDevice: boolean;
+}
+
+const KIND_LABEL: Record<TestDeviceResult["kind"], string> = {
+  web: "web browser",
+  ios: "iPhone/iPad app",
+  android: "Android app",
+};
+
+/**
+ * What "Send a test" says: where each alert went, and whether this device
+ * was one of them. A single "sent" used to hide a test that reached some
+ * other device (an old phone, a browser on a laptop) but not this one.
+ */
+export function describeTestResults(results: TestDeviceResult[]): string {
+  if (results.length === 0)
+    return "Alerts aren't on for any of your devices yet.";
+  const mine = results.filter((r) => r.thisDevice);
+  const others = results.filter((r) => !r.thisDevice);
+  const parts: string[] = [];
+  for (const r of mine) {
+    parts.push(
+      r.ok
+        ? "Sent to this device."
+        : `This device: refused${r.statusCode ? ` (${r.statusCode})` : ""}.`,
+    );
+  }
+  if (mine.length === 0) {
+    parts.push(
+      "This device isn't registered for alerts here: turn alerts off and on again to add it.",
+    );
+  }
+  if (others.length > 0) {
+    const counts = new Map<string, { sent: number; refused: number }>();
+    for (const r of others) {
+      const label = KIND_LABEL[r.kind];
+      const c = counts.get(label) ?? { sent: 0, refused: 0 };
+      if (r.ok) c.sent += 1;
+      else c.refused += 1;
+      counts.set(label, c);
+    }
+    const list = [...counts.entries()].map(([label, c]) => {
+      const n = c.sent + c.refused;
+      const name = `${n} other ${label}${n === 1 ? "" : "s"}`;
+      return c.refused === 0
+        ? `${name} (sent)`
+        : c.sent === 0
+          ? `${name} (refused)`
+          : `${name} (${c.sent} sent, ${c.refused} refused)`;
+    });
+    parts.push(`Also: ${list.join(", ")}.`);
+  }
+  return parts.join(" ");
+}
