@@ -25,7 +25,8 @@
     "db:check-grants": "tsx --env-file=.env.local scripts/check-function-grants.ts",
     "db:backup": "tsx --env-file=.env.local scripts/backup-database.ts",
     "db:verify-backup": "tsx scripts/verify-backup.ts",
-    "storage:cleanup": "tsx scripts/storage-cleanup.ts"
+    "storage:cleanup": "tsx scripts/storage-cleanup.ts",
+    "eval:waiter": "sh evals/run.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
