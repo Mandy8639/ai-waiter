@@ -1407,6 +1407,23 @@ Emails carry no tracking pixels or click tracking (tracking is off on the Resend
 every database value into HTML, and say why they arrived with a link to the setting that stops
 them.
 
+**The fourth deliberate exception to "application code never uses the admin client".**
+`src/lib/pos/square/api.ts` reads and writes `pos_credentials` (a restaurant's Square OAuth tokens)
+with the service key, because that table deliberately has no RLS policy any signed-in role could
+pass. What contains it:
+
+- The table holds **ciphertext only** (AES-256-GCM under `POS_TOKEN_ENCRYPTION_KEY`, which is never
+  in the database), and grants nothing to `anon` or `authenticated`.
+- `api.ts` is `server-only` and not a server action. `tests/unit/square-connection.test.ts` pins its
+  importers to the Square actions, the OAuth callback and the Point of sale settings page.
+- Every caller authorises first: membership plus `is_restaurant_manager_or_owner()` (so two-step
+  verification applies), or, on the settings page, an RLS read of the integration row that only
+  owners and managers pass. The callback also checks the OAuth state against an httpOnly cookie.
+- Tokens never leave the server: no action or page returns one, and logs carry Square's error
+  codes, never a token.
+
+See [`pos-integration.md`](./pos-integration.md#square).
+
 ## Account deletion — (Play Store prerequisite)
 
 Google Play requires an app with sign-up to let people delete their account from inside it, and

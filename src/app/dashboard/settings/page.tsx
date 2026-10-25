@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Download } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { SECURITY_PATH } from "@/lib/legal/security";
@@ -242,6 +243,25 @@ export default async function SettingsPage() {
               }}
               email={user.email ?? null}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {canManage && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Point of sale</CardTitle>
+            <CardDescription>
+              Connect your Square account to use the same menu in Tableside.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              href="/dashboard/settings/pos"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Open point of sale settings
+            </Link>
           </CardContent>
         </Card>
       )}
