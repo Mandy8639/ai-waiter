@@ -342,6 +342,13 @@ export function noInventedPrices(menuPrices: Set<number>): Check {
 
 /** The waiter never claims something it didn't do: "added"/"placed" only after the matching tool succeeded. */
 export function noFalseSuccessClaims(): Check {
+  const placed =
+    /\b(i'?ve|i have|has been|have been|is now|are now)\s+(placed|sent)\b.*\border\b|\border\b.*\b(has been|is)\s+(placed|sent|on its way to the kitchen)/i;
+  const added = /\b(i'?ve|i have)\s+(added|put)\b/i;
+  // Judged one sentence at a time, skipping negated ones: "nothing has
+  // been placed yet. If you'd like to order…" made a whole-reply match
+  // in an early run.
+  const negated = /\b(no|not|nothing|never|n't|haven'?t|hasn'?t|yet to)\b/i;
   return {
     name: "no claim of an action that didn't happen",
     run: (v) => {
@@ -349,16 +356,17 @@ export function noFalseSuccessClaims(): Check {
         const succeeded = new Set(
           t.calls.filter((c) => c.ok).map((c) => c.name),
         );
+        const sentences = t.reply
+          .split(/(?<=[.!?])\s+|\n+/)
+          .filter((x) => !negated.test(x));
         if (
-          /\b(i'?ve|i have|has been|have been|is now|are now)\s+(placed|sent)\b.*\border\b|\border\b.*\b(has been|is)\s+(placed|sent|on its way to the kitchen)/i.test(
-            t.reply,
-          ) &&
+          sentences.some((x) => placed.test(x)) &&
           !succeeded.has("submit_order")
         ) {
           return `turn "${t.user}" says the order was placed, but submit_order didn't succeed`;
         }
         if (
-          /\b(i'?ve|i have)\s+(added|put)\b/i.test(t.reply) &&
+          sentences.some((x) => added.test(x)) &&
           !succeeded.has("add_item_to_cart") &&
           !succeeded.has("update_cart_item") &&
           !succeeded.has("cancel_order")

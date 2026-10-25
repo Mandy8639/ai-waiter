@@ -118,6 +118,16 @@ describe("graders", () => {
       ],
     });
     expect(noFalseSuccessClaims().run(real)).toBe(true);
+    // A correct "no order yet" answer from a live run, once wrongly failed.
+    const none = visit({
+      turns: [
+        turn(
+          "where's my order?",
+          "Nothing has been placed in this session yet. If you'd like to order something, I can help.",
+        ),
+      ],
+    });
+    expect(noFalseSuccessClaims().run(none)).toBe(true);
   });
 
   it("only judges orders the waiter placed, not ones that were already there", () => {
