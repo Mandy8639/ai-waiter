@@ -156,13 +156,26 @@ export const AUTHORITATIVE_MENU_TOOL_NAMES = new Set([
   "get_restaurant_info",
 ]);
 
-/** True only if an authoritative tool call SUCCEEDED this turn — a failed call or a call to any other tool (get_cart included) never counts. */
+/**
+ * True only if an authoritative tool call SUCCEEDED this turn — a failed
+ * call or a call to any other tool (get_cart included) never counts.
+ *
+ * get_order_status counts too, for this guard only: "how long until my
+ * food is ready?" matches the "how long until" pattern, and the order's
+ * own estimate is the right source for it, not the menu. Without it the
+ * guard rejected a correct answer built from get_order_status twice and
+ * the diner got "I wasn't able to pull that up from the menu" (found by
+ * the waiter evaluation, evals/). Not added to AUTHORITATIVE_MENU_TOOL_NAMES,
+ * which also decides what can back a menu claim (menu-claim-detection.ts).
+ */
 export function hasAuthoritativeMenuFactSource(
   toolOutcomes: LoopToolOutcome[],
 ): boolean {
   return toolOutcomes.some(
     (outcome) =>
-      AUTHORITATIVE_MENU_TOOL_NAMES.has(outcome.toolName) && outcome.result.ok,
+      (AUTHORITATIVE_MENU_TOOL_NAMES.has(outcome.toolName) ||
+        outcome.toolName === "get_order_status") &&
+      outcome.result.ok,
   );
 }
 
@@ -174,7 +187,7 @@ export function hasAuthoritativeMenuFactSource(
  * in-flight message list.
  */
 export const MENU_FACT_CORRECTIVE_INSTRUCTION =
-  "[System note: the customer's last message asks about menu items, prices, dietary information, ingredients, how a dish is made, how long it takes, how many people it feeds, availability, or restaurant details. Call search_menu, get_menu_item, or get_restaurant_info now and answer from its result — do not answer from memory or general knowledge about this kind of food, even if this was discussed earlier in this conversation.]";
+  "[System note: the customer's last message asks about menu items, prices, dietary information, ingredients, how a dish is made, how long it takes, how many people it feeds, availability, or restaurant details. Call search_menu, get_menu_item, or get_restaurant_info now (or get_order_status, if they're asking when an order they've already placed will be ready) and answer from its result — do not answer from memory or general knowledge about this kind of food, even if this was discussed earlier in this conversation.]";
 
 /** Customer-facing fallback if the model still won't call a menu tool after the one corrective retry — never surfaces the internal instruction text. */
 export const MENU_FACT_GUARD_FALLBACK_TEXT = fallbackText("menuFact", "en");

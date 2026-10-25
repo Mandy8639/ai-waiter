@@ -22,9 +22,16 @@ import type { FallbackLanguage } from "./fallback-text";
 const POSITIVE =
   /(?<![\p{L}])(thanks?|thank you|thx|ty|cheers|love[ds]?|lovely|liked?|enjoy(ed|ing)?|delicious|tasty|yummy|amazing|awesome|great|excellent|fantastic|wonderful|perfect|superb|so good|very good|really good|was good|is good|good food|nice food|well done|shukriya|dhanyavaa?d|bahut acc?h(a|i)|ac?ch(a|i) (tha|thi|hai)|mast|gracias|delicios[oa]|riqu[ií]sim[oa]|muy ric[oa]|me encant[oó]|buen[ií]sim[oa]|धन्यवाद|शुक्रिया|स्वादिष्ट|बहुत अच्छा|बहुत बढ़िया|मज़ा आ गया|मजा आ गया)(?![\p{L}])/iu;
 
-/** Anything that asks for something, or isn't wholly happy. */
+/**
+ * Anything that asks for something, or isn't wholly happy. "I'd like the
+ * biryani" is an order, not praise: "like" is in POSITIVE, so the
+ * contractions that turn it into a request (I'd, I'll, I'm having) and
+ * "like a / an / to / some" are listed here. Found by the waiter
+ * evaluation (evals/), whose first run got "Thank you, that's lovely to
+ * hear!" back for "I'd like the chicken biryani", with nothing added.
+ */
 const NOT_ONLY_PRAISE =
-  /\?|(?<![\p{L}])(order|add|get|want|more|another|bring|can|could|would|will|need|bill|check|menu|recommend|suggest|what|how|where|when|which|why|who|is there|do you|allerg\w*|spic\w*|price|cost|cart|pay|please|not|no|n't|never|but|however|though|bad|cold|late|slow|wrong|salty|bland|too|raw|burnt|sick|cuenta|quiero|pero|nahi|nahin|lekin|नहीं|लेकिन|बिल|और)(?![\p{L}])/iu;
+  /\?|(?<![\p{L}])(order|add|get|give|want|more|another|bring|can|could|would|will|need|bill|check|menu|recommend|suggest|what|how|where|when|which|why|who|is there|do you|allerg\w*|spic\w*|price|cost|cart|pay|please|not|no|n't|never|but|however|though|bad|cold|late|slow|wrong|salty|bland|too|raw|burnt|sick|i['’]?d|i['’]?ll|i['’]?m having|like (?:a|an|to|some)|cuenta|quiero|pero|nahi|nahin|lekin|नहीं|लेकिन|बिल|और)(?![\p{L}])/iu;
 
 /** Long messages are rarely only a thank-you; let the model read them. */
 const MAX_LENGTH = 100;
