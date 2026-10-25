@@ -1,8 +1,8 @@
 # Connecting a restaurant's POS
 
-Nothing in this repository talks to Toast, Square or Clover. What exists is the **seam** a
-connector plugs into — the three things that are expensive to retrofit and cheap to add before
-anyone needs them.
+**Square is connected** (phase 1: connect an account and import its menu; see "Square" below).
+Toast and Clover are not. Underneath is the **seam** any connector plugs into — the three things
+that are expensive to retrofit and cheap to add before anyone needs them.
 
 ## Why a seam and not a connector
 
@@ -99,3 +99,64 @@ quietly wrong.
 - No `order.status_changed` event. `event_type` is constrained to `order.created`; widening it is a
   one-line migration when a connector needs it.
 - No delivery worker. There is nothing to deliver to yet.
+
+## Square
+
+Settings → Point of sale. Phase 1 of four: connect the restaurant's Square account and import its
+menu. Diner payments through Square (phase 2), Square Terminal and cash (phase 3) and pay-when-
+ordering (phase 4) come next.
+
+### Two Square facts that shape everything
+
+- **Square only shows an API order on the register, and only prints it, once it is fully paid**
+  ("Orders with fulfillment that have been fully paid are pushed to the Square Point of Sale",
+  Square's Orders API overview). In a sit-down restaurant that pays at the end, Square sees the
+  sale when the bill is paid; kitchen tickets keep coming from Tableside's own kitchen screen or
+  printer. Where diners pay when they order, Square prints straight away.
+- **Orders paid through anyone but Square cost the app maker 1%** (Square's payments pricing).
+  That is Tableside's whole fee, so a Square restaurant's diners pay through Square, and
+  Tableside's fee is collected with `app_fee_money` on those payments. Square supports that on
+  hosted checkout links and Terminal checkouts, with the `PAYMENTS_WRITE_ADDITIONAL_RECIPIENTS`
+  permission, which is why the connection asks for it now.
+
+### Connecting
+
+`startSquareConnect` → Square's consent screen → `/api/pos/square/callback`.
+
+- **One redirect URL.** Square allows one per application, so `SQUARE_REDIRECT_URI` names it and
+  the flow always starts and ends on that host (an owner signed in on the other domain is sent
+  there first). The state value is checked against an httpOnly cookie, so a link someone else
+  started can't attach their Square account here.
+- **Tokens.** The seam above said tokens belong in the deployment's secret store. That works for a
+  single deployment-wide key, not for OAuth, where every restaurant gets its own token at runtime.
+  So `pos_credentials` holds them, **as ciphertext only** (AES-256-GCM, `src/lib/pos/token-crypto.ts`)
+  under `POS_TOKEN_ENCRYPTION_KEY`, which stays in the secret store. The table has no RLS policies
+  and no grants to signed-in roles: only the service key reads it, through
+  `src/lib/pos/square/api.ts` alone (importers pinned by `tests/unit/square-connection.test.ts`).
+  A dump or backup holds nothing usable without the key. Access tokens are refreshed a week before
+  their 30-day expiry. Disconnecting revokes Tableside's access at Square and deletes the row.
+- **Who.** Owners and managers, checked twice before the token store is touched: the membership
+  row, then `is_restaurant_manager_or_owner()` (two-step verification included). The callback also
+  writes the integration row through RLS before saving any token.
+
+### Importing the menu
+
+`listCatalog` → `mapSquareCatalog` (`catalog-core.ts`, pure and unit-tested) →
+`apply_pos_menu_sync()`, one transaction.
+
+| Square                   | Tableside                                                | `external_id`                                             |
+| ------------------------ | -------------------------------------------------------- | --------------------------------------------------------- |
+| Category                 | Section ("Other" for none)                               | category id                                               |
+| Item, one variation      | Dish                                                     | the **variation** id (what an order line points at)       |
+| Item, several variations | Dish at the cheapest price + required "Choose one" group | item id; group `var:<item id>`; options are variation ids |
+| Modifier list            | A group on every dish it's attached to                   | `ml:<list id>:<item id>`; options are modifier ids        |
+
+- Only items present at the connected location; per-location price and sold-out apply.
+- Variable-priced items are skipped and named, never guessed at.
+- Re-importing updates by `external_id`. Square owns name, price, section and availability;
+  photos, allergens and dietary flags added in Tableside are kept.
+- Nothing is deleted (carts and orders point at menu rows): what Square dropped is hidden, and a
+  dropped group stops being required so it can't block an order. Dishes added by hand in
+  Tableside are never touched.
+- An import that maps to zero dishes is refused rather than applied, since it would hide the
+  whole menu.

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { isAiConfigured } from "@/lib/ai/client";
 import { apnsReady } from "@/lib/push/apns-core";
+import { squareReady } from "@/lib/pos/square/oauth-core";
 
 /**
  * High-level readiness signal for uptime monitoring/deployment checks
@@ -28,5 +29,8 @@ export async function GET() {
     aiConfigured: isAiConfigured(),
     // iPhone kitchen alerts: the APNS_* settings are there and the key signs.
     iosPushConfigured: apnsReady(process.env),
+    // Square connection (Settings → Point of sale): app keys and a valid
+    // token encryption key are set.
+    squareConfigured: squareReady(process.env),
   });
 }
