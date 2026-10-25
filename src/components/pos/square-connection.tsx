@@ -25,6 +25,8 @@ export interface SquareConnectionView {
     items_updated?: number;
     items_hidden?: number;
   } | null;
+  /** Diners' card payments go through Square. */
+  paymentsEnabled: boolean;
 }
 
 function Result({ state }: { state: SquareActionState }) {
@@ -56,12 +58,14 @@ export function SquareConnection({
   locationAction,
   syncAction,
   disconnectAction,
+  paymentsAction,
 }: {
   view: SquareConnectionView;
   connectAction: Action;
   locationAction: Action;
   syncAction: Action;
   disconnectAction: Action;
+  paymentsAction: Action;
 }) {
   const [connectState, connect, connecting] = useActionState(connectAction, {});
   const [locationState, chooseLocation, savingLocation] = useActionState(
@@ -71,6 +75,10 @@ export function SquareConnection({
   const [syncState, sync, syncing] = useActionState(syncAction, {});
   const [disconnectState, disconnectForm, disconnecting] = useActionState(
     disconnectAction,
+    {},
+  );
+  const [paymentsState, paymentsForm, savingPayments] = useActionState(
+    paymentsAction,
     {},
   );
 
@@ -159,6 +167,34 @@ export function SquareConnection({
               : view.menuSyncedAt
                 ? "Import again"
                 : "Import menu from Square"}
+          </Button>
+        </div>
+      </form>
+
+      <form action={paymentsForm} className="flex flex-col gap-2">
+        <Result state={paymentsState} />
+        <p className="text-sm font-medium">Card payments</p>
+        <p className="text-muted-foreground text-sm">
+          {view.paymentsEnabled
+            ? "Diners pay their bill by card through Square. Each sale lands in Square, itemised, and Tableside's fee is taken by Square on each payment."
+            : "Switch diners' card payments to Square so each sale lands in Square, itemised. Kitchen tickets keep coming from Tableside."}
+        </p>
+        <input
+          type="hidden"
+          name="enable"
+          value={view.paymentsEnabled ? "0" : "1"}
+        />
+        <div>
+          <Button
+            type="submit"
+            variant={view.paymentsEnabled ? "outline" : "default"}
+            disabled={savingPayments || !view.locationId}
+          >
+            {savingPayments
+              ? "Saving…"
+              : view.paymentsEnabled
+                ? "Stop taking payments through Square"
+                : "Take card payments through Square"}
           </Button>
         </div>
       </form>

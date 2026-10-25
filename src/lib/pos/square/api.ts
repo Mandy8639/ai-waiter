@@ -294,3 +294,80 @@ export async function listCatalog(
     "Square's menu is larger than Tableside can import in one go.",
   );
 }
+
+// ── Diner payments (phase 2) ──────────────────────────────────────────
+//
+// Called from a diner's request (an anonymous user), right after
+// start_order_payment()/start_tab_payment() created or reused the payment
+// for that diner's own orders. That function call is the authorisation:
+// these helpers only look up the restaurant behind that payment id.
+
+export interface SquarePaymentContext {
+  restaurantId: string;
+  locationId: string;
+  /** A checkout already opened for this pending payment, to send the diner back to. */
+  existingCheckoutUrl: string | null;
+  restaurantName: string;
+}
+
+export async function squarePaymentContext(
+  paymentId: string,
+): Promise<SquarePaymentContext> {
+  const admin = untilTypesRegenerated();
+  const { data: payment } = await admin
+    .from("order_payments")
+    .select("restaurant_id, status, square_checkout_url")
+    .eq("id", paymentId)
+    .maybeSingle();
+  if (!payment || payment.status !== "pending") {
+    throw new SquareError("This payment can't be started.");
+  }
+  const [{ data: integration }, { data: restaurant }] = await Promise.all([
+    admin
+      .from("restaurant_pos_integrations")
+      .select("provider, external_location_id, is_enabled, payments_enabled")
+      .eq("restaurant_id", payment.restaurant_id)
+      .maybeSingle(),
+    admin
+      .from("restaurants")
+      .select("name")
+      .eq("id", payment.restaurant_id)
+      .maybeSingle(),
+  ]);
+  if (
+    integration?.provider !== "square" ||
+    !integration.is_enabled ||
+    !integration.payments_enabled ||
+    !integration.external_location_id
+  ) {
+    throw new SquareError(
+      "Card payments through Square aren't switched on here.",
+    );
+  }
+  return {
+    restaurantId: payment.restaurant_id,
+    locationId: integration.external_location_id,
+    existingCheckoutUrl: payment.square_checkout_url ?? null,
+    restaurantName: restaurant?.name ?? "the restaurant",
+  };
+}
+
+export async function createPaymentLink(
+  restaurantId: string,
+  request: unknown,
+): Promise<{ url: string; orderId: string }> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{
+    payment_link?: { url?: string; long_url?: string; order_id?: string };
+  }>("/v2/online-checkout/payment-links", {
+    method: "POST",
+    token,
+    body: request,
+  });
+  const link = body.payment_link;
+  const url = link?.url ?? link?.long_url;
+  if (!url || !link?.order_id) {
+    throw new SquareError("Square didn't return a checkout page.");
+  }
+  return { url, orderId: link.order_id };
+}

@@ -63,6 +63,8 @@ export async function GET(request: NextRequest) {
         // A fresh connection starts disabled until a location is chosen.
         external_location_id: null,
         is_enabled: false,
+        // Payments need an enabled connection; the owner switches them back on.
+        payments_enabled: false,
       },
       { onConflict: "restaurant_id" },
     );

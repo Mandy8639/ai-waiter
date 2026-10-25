@@ -102,9 +102,9 @@ quietly wrong.
 
 ## Square
 
-Settings → Point of sale. Phase 1 of four: connect the restaurant's Square account and import its
-menu. Diner payments through Square (phase 2), Square Terminal and cash (phase 3) and pay-when-
-ordering (phase 4) come next.
+Settings → Point of sale. Phase 1: connect the restaurant's Square account and import its menu.
+Phase 2: diners pay through Square. Square Terminal and cash (phase 3) and pay-when-ordering
+(phase 4) come next.
 
 ### Two Square facts that shape everything
 
@@ -160,3 +160,33 @@ ordering (phase 4) come next.
   Tableside are never touched.
 - An import that maps to zero dishes is refused rather than applied, since it would hide the
   whole menu.
+
+### Diners paying through Square (phase 2)
+
+The owner presses **Take card payments through Square** (`restaurant_pos_integrations.payments_enabled`,
+which needs the connection enabled; disconnecting or reconnecting switches it off).
+`restaurant_card_provider()` then answers `square`, and:
+
+- `get_public_payment_settings()` offers card without a Stripe account.
+- `start_order_payment()` / `start_tab_payment()` skip the Stripe account check and return a NULL
+  `stripe_account_id`. That NULL is how `checkout.ts` / `tab-checkout.ts` know to call
+  `openSquareCheckout()` instead of Stripe. Everything else about the payment row (price from the
+  orders, tip validation, one pending payment reused, one succeeded payment per order) is unchanged.
+- `openSquareCheckout()` (`src/lib/pos/square/checkout.ts`) reads the bill through
+  `payment_bill_lines()` (the diner's own orders only), works out Tableside's fee with the same
+  `platform_fee_for_payment()` as Stripe, builds the request (`checkout-core.ts`) and creates a
+  Square payment link. The bill is itemised: one line per dish at the price charged, one "Tax &
+  charges" line (or a discount), the tip as a "Tip" service charge, Tableside's fee as
+  `app_fee_money` on the bill without the tip, and Square's own tip screen off. A request whose total
+  isn't the payment total to the cent is refused. `attach_square_checkout()` records the Square
+  order id; a pending payment reopens the same checkout.
+- **Only the webhook settles** (`/api/webhooks/square`): signature checked over
+  `SQUARE_WEBHOOK_URL` + raw body with `SQUARE_WEBHOOK_SIGNATURE_KEY`; a completed `payment.*` event
+  calls `mark_square_payment_succeeded()` (service role only, idempotent), which refuses an amount or
+  currency that doesn't match and reports it. Payments the restaurant took in Square itself come
+  back `unknown` and are ignored.
+- The switch refuses to turn on without the webhook settings, because a payment that can't settle
+  would go through and never show as paid.
+
+Not through Square yet: **split bills** (hidden for Square restaurants), **refunds** (done in the
+Square Dashboard; Tableside says so), and staff card machines (phase 3).

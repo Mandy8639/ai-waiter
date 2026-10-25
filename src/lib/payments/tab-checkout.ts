@@ -8,6 +8,7 @@ import { toMinorUnits } from "./money";
 import { parsePaymentError } from "./errors";
 import { parseTip } from "./tip";
 import { reportError } from "@/lib/observability/report";
+import { openSquareCheckout } from "@/lib/pos/square/checkout";
 
 /**
  * Paying a whole tab by card — every unpaid order in this diner's session,
@@ -42,7 +43,8 @@ interface StartTabPaymentRow {
   tip_amount: string;
   total_amount: string;
   currency: string;
-  stripe_account_id: string;
+  /** NULL when the restaurant takes cards through Square. */
+  stripe_account_id: string | null;
   order_count: number;
 }
 
@@ -59,10 +61,6 @@ export async function startTabCheckout(
   _prevState: CheckoutState,
   formData: FormData,
 ): Promise<CheckoutState> {
-  if (!isStripeConfigured()) {
-    return { error: "Card payments aren't set up for this restaurant yet." };
-  }
-
   const parsedTip = parseTip(formData.get("tip"));
   if (!parsedTip.ok) {
     return { error: parsedTip.message };
@@ -87,6 +85,24 @@ export async function startTabCheckout(
   const payment = (data as StartTabPaymentRow[] | null)?.[0];
   if (!payment) {
     return { error: "Couldn't start this payment. Please try again." };
+  }
+
+  // A NULL Stripe account means this restaurant takes cards through Square
+  // (start_tab_payment, 20261110090000).
+  if (payment.stripe_account_id === null) {
+    const square = await openSquareCheckout({
+      supabase,
+      payment,
+      redirectUrl: `${await appOrigin()}/r/${restaurantSlug}/orders?paid=1`,
+      scope: "payments.tab.square",
+    });
+    if ("error" in square) return { error: square.error };
+    // Outside any try: redirect() signals by throwing.
+    redirect(square.url);
+  }
+
+  if (!isStripeConfigured()) {
+    return { error: "Card payments aren't set up for this restaurant yet." };
   }
 
   // The platform's cut — same rule as the single-order path: computed on

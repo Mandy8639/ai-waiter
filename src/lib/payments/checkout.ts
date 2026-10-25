@@ -8,6 +8,7 @@ import { toMinorUnits } from "./money";
 import { parsePaymentError } from "./errors";
 import { parseTip } from "./tip";
 import { reportError } from "@/lib/observability/report";
+import { openSquareCheckout } from "@/lib/pos/square/checkout";
 
 /**
  * Card payment for an order, via Stripe Checkout (hosted).
@@ -41,7 +42,8 @@ interface StartPaymentRow {
   tip_amount: string;
   total_amount: string;
   currency: string;
-  stripe_account_id: string;
+  /** NULL when the restaurant takes cards through Square. */
+  stripe_account_id: string | null;
 }
 
 /** Absolute origin for Stripe's return URLs, derived from the live request. */
@@ -58,10 +60,6 @@ export async function startOrderCheckout(
   _prevState: CheckoutState,
   formData: FormData,
 ): Promise<CheckoutState> {
-  if (!isStripeConfigured()) {
-    return { error: "Card payments aren't set up for this restaurant yet." };
-  }
-
   const parsedTip = parseTip(formData.get("tip"));
   if (!parsedTip.ok) {
     return { error: parsedTip.message };
@@ -91,6 +89,25 @@ export async function startOrderCheckout(
   const payment = (data as StartPaymentRow[] | null)?.[0];
   if (!payment) {
     return { error: "Couldn't start this payment. Please try again." };
+  }
+
+  // A NULL Stripe account means this restaurant takes cards through Square
+  // (start_order_payment, 20261110090000): same payment row, same price,
+  // Square's hosted checkout instead of Stripe's.
+  if (payment.stripe_account_id === null) {
+    const square = await openSquareCheckout({
+      supabase,
+      payment,
+      redirectUrl: `${await appOrigin()}/r/${restaurantSlug}/order/${orderId}?paid=1`,
+      scope: "payments.checkout.square",
+    });
+    if ("error" in square) return { error: square.error };
+    // Outside any try: redirect() signals by throwing.
+    redirect(square.url);
+  }
+
+  if (!isStripeConfigured()) {
+    return { error: "Card payments aren't set up for this restaurant yet." };
   }
 
   // The platform's cut, resolved server-side from the payment's own
