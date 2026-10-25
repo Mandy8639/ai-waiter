@@ -53,3 +53,6 @@ next-env.d.ts
 # supabase CLI local/tooling artifacts
 /supabase/.temp/
 backups/
+
+# AI waiter evaluation reports (evals/waiter.eval.ts)
+evals/results/
