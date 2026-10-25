@@ -15,6 +15,7 @@ export function PaymentSettingsForm({
   action,
   defaultValues,
   chargesEnabled,
+  paysThroughSquare = false,
 }: {
   action: (
     prevState: PaymentActionState,
@@ -28,6 +29,8 @@ export function PaymentSettingsForm({
     tippingEnabled: boolean;
   };
   chargesEnabled: boolean;
+  /** Card payments go through Square (Settings → Point of sale), not Stripe. */
+  paysThroughSquare?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(action, initialState);
 
@@ -83,6 +86,12 @@ export function PaymentSettingsForm({
           <p className="text-muted-foreground -mt-1 text-sm">
             Connect a Stripe account that can take payments before turning this
             on.
+          </p>
+        )}
+        {paysThroughSquare && (
+          <p className="text-muted-foreground -mt-1 text-sm">
+            Card payments go through Square (Settings → Point of sale), so no
+            Stripe account is needed.
           </p>
         )}
 

@@ -60,20 +60,33 @@ export default async function PaymentsPage() {
   // still shows; changing it happens on the website.
   const plansForSale = canSellPlans(await getAppShell());
 
-  const [{ data: account }, { data: settings }] = await Promise.all([
-    supabase
-      .from("restaurant_payment_accounts")
-      .select("charges_enabled, payouts_enabled, details_submitted")
-      .eq("restaurant_id", restaurant.id)
-      .maybeSingle(),
-    supabase
-      .from("restaurant_settings")
-      .select(
-        "payment_timing, accept_card, accept_cash, accept_card_terminal, tipping_enabled",
-      )
-      .eq("restaurant_id", restaurant.id)
-      .maybeSingle(),
-  ]);
+  const [{ data: account }, { data: settings }, { data: cardProvider }] =
+    await Promise.all([
+      supabase
+        .from("restaurant_payment_accounts")
+        .select("charges_enabled, payouts_enabled, details_submitted")
+        .eq("restaurant_id", restaurant.id)
+        .maybeSingle(),
+      supabase
+        .from("restaurant_settings")
+        .select(
+          "payment_timing, accept_card, accept_cash, accept_card_terminal, tipping_enabled",
+        )
+        .eq("restaurant_id", restaurant.id)
+        .maybeSingle(),
+      // Square phase 2 (20261110090000), newer than database.types.ts.
+      (
+        supabase as unknown as {
+          rpc: (
+            fn: string,
+            args: Record<string, unknown>,
+          ) => Promise<{ data: unknown }>;
+        }
+      ).rpc("restaurant_card_provider", { p_restaurant_id: restaurant.id }),
+    ]);
+  // A restaurant taking cards through Square can accept card payments
+  // without any Stripe account (Settings → Point of sale).
+  const paysThroughSquare = cardProvider === "square";
 
   const stripeConfigured = isStripeConfigured();
   const plan = await getRestaurantPlan(restaurant.id);
@@ -283,7 +296,10 @@ export default async function PaymentsPage() {
         <CardContent>
           <PaymentSettingsForm
             action={updatePaymentSettings.bind(null, restaurant.id)}
-            chargesEnabled={account?.charges_enabled ?? false}
+            chargesEnabled={
+              paysThroughSquare || (account?.charges_enabled ?? false)
+            }
+            paysThroughSquare={paysThroughSquare}
             defaultValues={{
               paymentTiming: settings?.payment_timing ?? "at_end",
               acceptCard: settings?.accept_card ?? false,
