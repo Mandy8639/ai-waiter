@@ -121,4 +121,15 @@ describe("hasAuthoritativeMenuFactSource", () => {
       ["get_menu_item", "get_restaurant_info", "search_menu"].sort(),
     );
   });
+
+  it("accepts the order's own status for a wait-time question", () => {
+    expect(
+      hasAuthoritativeMenuFactSource([outcome("get_order_status", true)]),
+    ).toBe(true);
+    expect(
+      hasAuthoritativeMenuFactSource([outcome("get_order_status", false)]),
+    ).toBe(false);
+    // ...without letting it back menu claims.
+    expect(AUTHORITATIVE_MENU_TOOL_NAMES.has("get_order_status")).toBe(false);
+  });
 });

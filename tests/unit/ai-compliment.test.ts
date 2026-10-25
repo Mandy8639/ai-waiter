@@ -33,6 +33,13 @@ describe("isOnlyCompliment", () => {
     "thanks! add a mango lassi",
     "great, is there anything vegan?",
     "khana accha tha lekin thanda tha",
+    // Orders that use "like" (found by evals/: the first was swallowed).
+    "I'd like the chicken biryani",
+    "I’d like the paneer tikka",
+    "I'll have the dosa, I love dosa",
+    "id like a mango lassi",
+    "I would like the lamb",
+    "I'd love two chai",
     "hello",
     "",
     "Thanks for everything, the dinner was wonderful and the staff were so kind to my mother on her birthday tonight",
