@@ -123,8 +123,8 @@ export function PayTabPanel({
       </Button>
 
       <p className="text-muted-foreground text-sm">
-        You&apos;ll be taken to Stripe to pay. Your card details never reach
-        this site.
+        You&apos;ll be taken to a secure checkout page to pay (Stripe or Square,
+        depending on the restaurant). Your card details never reach this site.
       </p>
     </form>
   );
