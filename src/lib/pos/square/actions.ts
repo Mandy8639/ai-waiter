@@ -184,7 +184,9 @@ export async function syncSquareMenu(
         .map((s) => s.name)
         .join(", ")}${mapped.skipped.length > 5 ? "…" : ""}.`
     : "";
-  return { success: `Menu imported from Square: ${parts.join(", ")}.${skipped}` };
+  return {
+    success: `Menu imported from Square: ${parts.join(", ")}.${skipped}`,
+  };
 }
 
 export async function disconnectSquare(

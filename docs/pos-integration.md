@@ -144,12 +144,12 @@ ordering (phase 4) come next.
 `listCatalog` → `mapSquareCatalog` (`catalog-core.ts`, pure and unit-tested) →
 `apply_pos_menu_sync()`, one transaction.
 
-| Square | Tableside | `external_id` |
-| --- | --- | --- |
-| Category | Section ("Other" for none) | category id |
-| Item, one variation | Dish | the **variation** id (what an order line points at) |
+| Square                   | Tableside                                                | `external_id`                                             |
+| ------------------------ | -------------------------------------------------------- | --------------------------------------------------------- |
+| Category                 | Section ("Other" for none)                               | category id                                               |
+| Item, one variation      | Dish                                                     | the **variation** id (what an order line points at)       |
 | Item, several variations | Dish at the cheapest price + required "Choose one" group | item id; group `var:<item id>`; options are variation ids |
-| Modifier list | A group on every dish it's attached to | `ml:<list id>:<item id>`; options are modifier ids |
+| Modifier list            | A group on every dish it's attached to                   | `ml:<list id>:<item id>`; options are modifier ids        |
 
 - Only items present at the connected location; per-location price and sold-out apply.
 - Variable-priced items are skipped and named, never guessed at.

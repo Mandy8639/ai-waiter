@@ -32,7 +32,9 @@ export function squareConfig(): SquareConfig | null {
   if (!squareReady(process.env)) return null;
   return {
     environment:
-      process.env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox",
+      process.env.SQUARE_ENVIRONMENT === "production"
+        ? "production"
+        : "sandbox",
     applicationId: process.env.SQUARE_APPLICATION_ID!,
     applicationSecret: process.env.SQUARE_APPLICATION_SECRET!,
   };
@@ -40,7 +42,8 @@ export function squareConfig(): SquareConfig | null {
 
 function requireConfig(): SquareConfig {
   const config = squareConfig();
-  if (!config) throw new SquareError("Square isn't set up on this deployment yet.");
+  if (!config)
+    throw new SquareError("Square isn't set up on this deployment yet.");
   return config;
 }
 
@@ -56,7 +59,12 @@ export class SquareError extends Error {
 
 async function squareFetch<T>(
   path: string,
-  init: { method?: string; token?: string; body?: unknown; clientSecret?: string },
+  init: {
+    method?: string;
+    token?: string;
+    body?: unknown;
+    clientSecret?: string;
+  },
 ): Promise<T> {
   const config = requireConfig();
   const headers: Record<string, string> = {
@@ -79,9 +87,12 @@ async function squareFetch<T>(
     // Non-JSON error page; handled below.
   }
   if (!response.ok) {
-    const errors = (json as { errors?: { code?: string; detail?: string }[] } | null)
-      ?.errors;
-    const detail = errors?.map((e) => `${e.code}: ${e.detail}`).join("; ") ?? text.slice(0, 300);
+    const errors = (
+      json as { errors?: { code?: string; detail?: string }[] } | null
+    )?.errors;
+    const detail =
+      errors?.map((e) => `${e.code}: ${e.detail}`).join("; ") ??
+      text.slice(0, 300);
     if (response.status === 401) {
       throw new SquareError(
         "Square no longer accepts Tableside's access. Reconnect Square.",
@@ -95,7 +106,10 @@ async function squareFetch<T>(
 
 // ── Tokens ────────────────────────────────────────────────────────────
 
-export async function exchangeCode(code: string, redirectUri: string): Promise<SquareTokens> {
+export async function exchangeCode(
+  code: string,
+  redirectUri: string,
+): Promise<SquareTokens> {
   const config = requireConfig();
   const body = await squareFetch<unknown>("/oauth2/token", {
     method: "POST",
@@ -119,7 +133,10 @@ function untilTypesRegenerated(): SupabaseClient {
   return createAdminClient() as unknown as SupabaseClient;
 }
 
-export async function saveTokens(restaurantId: string, tokens: SquareTokens): Promise<void> {
+export async function saveTokens(
+  restaurantId: string,
+  tokens: SquareTokens,
+): Promise<void> {
   const key = parseTokenKey(process.env.POS_TOKEN_ENCRYPTION_KEY);
   const { error } = await untilTypesRegenerated()
     .from("pos_credentials")
@@ -128,10 +145,16 @@ export async function saveTokens(restaurantId: string, tokens: SquareTokens): Pr
       provider: "square",
       merchant_id: tokens.merchantId,
       access_token_enc: encryptToken(tokens.accessToken, key),
-      refresh_token_enc: tokens.refreshToken ? encryptToken(tokens.refreshToken, key) : null,
+      refresh_token_enc: tokens.refreshToken
+        ? encryptToken(tokens.refreshToken, key)
+        : null,
       expires_at: tokens.expiresAt,
     });
-  if (error) throw new SquareError("Couldn't save the Square connection.", error.message);
+  if (error)
+    throw new SquareError(
+      "Couldn't save the Square connection.",
+      error.message,
+    );
 }
 
 /**
@@ -148,8 +171,13 @@ export async function accessTokenFor(restaurantId: string): Promise<string> {
     .eq("restaurant_id", restaurantId)
     .eq("provider", "square")
     .maybeSingle();
-  if (error) throw new SquareError("Couldn't read the Square connection.", error.message);
-  if (!data) throw new SquareError("Square isn't connected for this restaurant.");
+  if (error)
+    throw new SquareError(
+      "Couldn't read the Square connection.",
+      error.message,
+    );
+  if (!data)
+    throw new SquareError("Square isn't connected for this restaurant.");
 
   if (!needsRefresh(data.expires_at, new Date())) {
     return decryptToken(data.access_token_enc, key);
@@ -171,7 +199,8 @@ export async function accessTokenFor(restaurantId: string): Promise<string> {
   // Square may or may not rotate the refresh token; keep the old one if not.
   await saveTokens(restaurantId, {
     ...refreshed,
-    refreshToken: refreshed.refreshToken ?? decryptToken(data.refresh_token_enc, key),
+    refreshToken:
+      refreshed.refreshToken ?? decryptToken(data.refresh_token_enc, key),
   });
   return refreshed.accessToken;
 }
@@ -190,15 +219,27 @@ export async function disconnect(restaurantId: string): Promise<void> {
       await squareFetch("/oauth2/revoke", {
         method: "POST",
         clientSecret: config.applicationSecret,
-        body: { client_id: config.applicationId, merchant_id: data.merchant_id },
+        body: {
+          client_id: config.applicationId,
+          merchant_id: data.merchant_id,
+        },
       });
     } catch (e) {
       // Already revoked from Square's side, or Square is down: the local
       // tokens are deleted either way, so Tableside can't use them.
-      console.warn(JSON.stringify({ event: "square.revoke_failed", restaurantId, detail: String(e) }));
+      console.warn(
+        JSON.stringify({
+          event: "square.revoke_failed",
+          restaurantId,
+          detail: String(e),
+        }),
+      );
     }
   }
-  await admin.from("pos_credentials").delete().eq("restaurant_id", restaurantId);
+  await admin
+    .from("pos_credentials")
+    .delete()
+    .eq("restaurant_id", restaurantId);
 }
 
 // ── Data ──────────────────────────────────────────────────────────────
@@ -210,11 +251,16 @@ export interface SquareLocation {
   currency: string | null;
 }
 
-export async function listLocations(restaurantId: string): Promise<SquareLocation[]> {
+export async function listLocations(
+  restaurantId: string,
+): Promise<SquareLocation[]> {
   const token = await accessTokenFor(restaurantId);
-  const body = await squareFetch<{ locations?: Record<string, unknown>[] }>("/v2/locations", {
-    token,
-  });
+  const body = await squareFetch<{ locations?: Record<string, unknown>[] }>(
+    "/v2/locations",
+    {
+      token,
+    },
+  );
   return (body.locations ?? []).map((l) => ({
     id: String(l.id),
     name: String(l.name ?? l.id),
@@ -224,21 +270,27 @@ export async function listLocations(restaurantId: string): Promise<SquareLocatio
 }
 
 /** Every item, category and modifier list, following Square's pagination. */
-export async function listCatalog(restaurantId: string): Promise<SquareCatalogObject[]> {
+export async function listCatalog(
+  restaurantId: string,
+): Promise<SquareCatalogObject[]> {
   const token = await accessTokenFor(restaurantId);
   const objects: SquareCatalogObject[] = [];
   let cursor: string | undefined;
   // A hard page cap: a runaway cursor loop must not hang a request.
   for (let page = 0; page < 50; page++) {
-    const params = new URLSearchParams({ types: "ITEM,CATEGORY,MODIFIER_LIST" });
+    const params = new URLSearchParams({
+      types: "ITEM,CATEGORY,MODIFIER_LIST",
+    });
     if (cursor) params.set("cursor", cursor);
-    const body = await squareFetch<{ objects?: SquareCatalogObject[]; cursor?: string }>(
-      `/v2/catalog/list?${params}`,
-      { token },
-    );
+    const body = await squareFetch<{
+      objects?: SquareCatalogObject[];
+      cursor?: string;
+    }>(`/v2/catalog/list?${params}`, { token });
     objects.push(...(body.objects ?? []));
     cursor = body.cursor;
     if (!cursor) return objects;
   }
-  throw new SquareError("Square's menu is larger than Tableside can import in one go.");
+  throw new SquareError(
+    "Square's menu is larger than Tableside can import in one go.",
+  );
 }

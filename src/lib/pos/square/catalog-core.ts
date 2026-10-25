@@ -218,7 +218,9 @@ export function mapSquareCatalog(
     }
 
     const rawCategory =
-      data.categories?.[0]?.id ?? data.reporting_category?.id ?? data.category_id;
+      data.categories?.[0]?.id ??
+      data.reporting_category?.id ??
+      data.category_id;
     const categoryId =
       rawCategory && categoryNames.has(rawCategory)
         ? rawCategory
@@ -266,11 +268,7 @@ export function mapSquareCatalog(
         const single = listData.selection_type === "SINGLE";
         const min = Math.max(info.min_selected_modifiers ?? 0, 0);
         const rawMax = info.max_selected_modifiers ?? -1;
-        const max = single
-          ? 1
-          : rawMax > 0
-            ? rawMax
-            : modifiers.length;
+        const max = single ? 1 : rawMax > 0 ? rawMax : modifiers.length;
         groups.push({
           external_id: `ml:${list.id}:${item.id}`,
           name: listData.name?.trim() || "Options",
@@ -312,7 +310,8 @@ export function mapSquareCatalog(
     .sort((a, b) => a[1] - b[1])
     .map(([id], i) => ({
       external_id: id,
-      name: id === UNCATEGORIZED_ID ? "Other" : (categoryNames.get(id) ?? "Other"),
+      name:
+        id === UNCATEGORIZED_ID ? "Other" : (categoryNames.get(id) ?? "Other"),
       display_order: i,
     }));
 

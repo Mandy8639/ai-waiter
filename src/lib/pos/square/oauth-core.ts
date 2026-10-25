@@ -117,7 +117,8 @@ export function parseState(
  * health check can report it without revealing anything.
  */
 export function squareReady(env: Record<string, string | undefined>): boolean {
-  if (!env.SQUARE_APPLICATION_ID || !env.SQUARE_APPLICATION_SECRET) return false;
+  if (!env.SQUARE_APPLICATION_ID || !env.SQUARE_APPLICATION_SECRET)
+    return false;
   const key = env.POS_TOKEN_ENCRYPTION_KEY;
   return Boolean(key) && Buffer.from(key!, "base64").length === 32;
 }

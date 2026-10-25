@@ -11,7 +11,8 @@ export async function currentOrigin(): Promise<string> {
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const proto =
-    h.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
+    h.get("x-forwarded-proto") ??
+    (host?.startsWith("localhost") ? "http" : "https");
   return `${proto}://${host}`;
 }
 
@@ -23,7 +24,8 @@ export async function currentOrigin(): Promise<string> {
  */
 export async function squareRedirectUri(): Promise<string> {
   return (
-    process.env.SQUARE_REDIRECT_URI ?? `${await currentOrigin()}/api/pos/square/callback`
+    process.env.SQUARE_REDIRECT_URI ??
+    `${await currentOrigin()}/api/pos/square/callback`
   );
 }
 
@@ -34,11 +36,17 @@ export async function squareRedirectUri(): Promise<string> {
  * Both pass before anything reads the service-key token store.
  */
 export async function authorizeSquare(restaurantId: string) {
-  const auth = await authorizeRestaurantAction(restaurantId, ["owner", "manager"]);
+  const auth = await authorizeRestaurantAction(restaurantId, [
+    "owner",
+    "manager",
+  ]);
   if (!auth.ok) return auth;
-  const { data } = await auth.context.supabase.rpc("is_restaurant_manager_or_owner", {
-    target_restaurant_id: restaurantId,
-  });
+  const { data } = await auth.context.supabase.rpc(
+    "is_restaurant_manager_or_owner",
+    {
+      target_restaurant_id: restaurantId,
+    },
+  );
   if (data !== true) {
     return {
       ok: false as const,
@@ -47,4 +55,3 @@ export async function authorizeSquare(restaurantId: string) {
   }
   return auth;
 }
-

@@ -50,7 +50,9 @@ describe("token encryption", () => {
 
   it("insists on a 32-byte key", () => {
     expect(() => parseTokenKey(undefined)).toThrow(/not set/);
-    expect(() => parseTokenKey(randomBytes(16).toString("base64"))).toThrow(/32 bytes/);
+    expect(() => parseTokenKey(randomBytes(16).toString("base64"))).toThrow(
+      /32 bytes/,
+    );
     expect(parseTokenKey(randomBytes(32).toString("base64"))).toHaveLength(32);
   });
 });
@@ -66,7 +68,9 @@ describe("Square OAuth", () => {
       }),
     );
     expect(url.origin).toBe("https://connect.squareupsandbox.com");
-    expect(url.searchParams.get("scope")?.split(" ")).toEqual([...SQUARE_SCOPES]);
+    expect(url.searchParams.get("scope")?.split(" ")).toEqual([
+      ...SQUARE_SCOPES,
+    ]);
     expect(url.searchParams.get("state")).toBe("r1.n1");
     expect(url.searchParams.get("session")).toBeNull();
     // The fee permission is what lets Tableside take its cut in phase 2.
@@ -94,13 +98,19 @@ describe("Square OAuth", () => {
         expires_at: "2026-11-24T00:00:00Z",
         merchant_id: "M",
       }),
-    ).toEqual({ accessToken: "A", refreshToken: "R", expiresAt: "2026-11-24T00:00:00Z", merchantId: "M" });
+    ).toEqual({
+      accessToken: "A",
+      refreshToken: "R",
+      expiresAt: "2026-11-24T00:00:00Z",
+      merchantId: "M",
+    });
     expect(() => parseTokenResponse({ errors: [] })).toThrow();
   });
 
   it("refreshes inside the last week, not before", () => {
     const now = new Date("2026-10-25T12:00:00Z");
-    const inDays = (d: number) => new Date(now.getTime() + d * 86_400_000).toISOString();
+    const inDays = (d: number) =>
+      new Date(now.getTime() + d * 86_400_000).toISOString();
     expect(needsRefresh(inDays(20), now)).toBe(false);
     expect(needsRefresh(inDays(6), now)).toBe(true);
     expect(needsRefresh(inDays(-1), now)).toBe(true);
@@ -130,7 +140,8 @@ const variation = (
   item_variation_data: {
     name,
     pricing_type: cents === null ? "VARIABLE_PRICING" : "FIXED_PRICING",
-    price_money: cents === null ? undefined : { amount: cents, currency: "USD" },
+    price_money:
+      cents === null ? undefined : { amount: cents, currency: "USD" },
     ...extra,
   },
 });
@@ -153,15 +164,26 @@ describe("Square catalog mapping", () => {
   it("one variation: the dish is the variation, priced in dollars", () => {
     const { menu } = mapSquareCatalog(
       [
-        { type: "CATEGORY", id: "CAT_DRINKS", category_data: { name: "Drinks" } },
-        item("ITEM_LASSI", "Mango Lassi", [variation("VAR_LASSI", "Regular", 500)], {
-          categories: [{ id: "CAT_DRINKS" }],
-          description_plaintext: "Yogurt and mango",
-        }),
+        {
+          type: "CATEGORY",
+          id: "CAT_DRINKS",
+          category_data: { name: "Drinks" },
+        },
+        item(
+          "ITEM_LASSI",
+          "Mango Lassi",
+          [variation("VAR_LASSI", "Regular", 500)],
+          {
+            categories: [{ id: "CAT_DRINKS" }],
+            description_plaintext: "Yogurt and mango",
+          },
+        ),
       ],
       LOC,
     );
-    expect(menu.categories).toEqual([{ external_id: "CAT_DRINKS", name: "Drinks", display_order: 0 }]);
+    expect(menu.categories).toEqual([
+      { external_id: "CAT_DRINKS", name: "Drinks", display_order: 0 },
+    ]);
     expect(menu.items[0]).toMatchObject({
       external_id: "VAR_LASSI",
       category_external_id: "CAT_DRINKS",
@@ -190,7 +212,13 @@ describe("Square catalog mapping", () => {
       min_selections: 1,
       max_selections: 1,
     });
-    expect(dish.groups[0].options.map((o) => [o.external_id, o.name, o.price_adjustment])).toEqual([
+    expect(
+      dish.groups[0].options.map((o) => [
+        o.external_id,
+        o.name,
+        o.price_adjustment,
+      ]),
+    ).toEqual([
       ["VAR_REGULAR", "Regular", 0],
       ["VAR_FAMILY", "Family", 9],
     ]);
@@ -205,8 +233,22 @@ describe("Square catalog mapping", () => {
         name: "Spice",
         selection_type: "SINGLE",
         modifiers: [
-          { type: "MODIFIER", id: "MOD_HOT", present_at_all_locations: true, modifier_data: { name: "Hot", ordinal: 1, price_money: { amount: 50 } } },
-          { type: "MODIFIER", id: "MOD_MILD", present_at_all_locations: true, modifier_data: { name: "Mild", ordinal: 0 } },
+          {
+            type: "MODIFIER",
+            id: "MOD_HOT",
+            present_at_all_locations: true,
+            modifier_data: {
+              name: "Hot",
+              ordinal: 1,
+              price_money: { amount: 50 },
+            },
+          },
+          {
+            type: "MODIFIER",
+            id: "MOD_MILD",
+            present_at_all_locations: true,
+            modifier_data: { name: "Mild", ordinal: 0 },
+          },
         ],
       },
     };
@@ -218,8 +260,18 @@ describe("Square catalog mapping", () => {
         name: "Extras",
         selection_type: "MULTIPLE",
         modifiers: [
-          { type: "MODIFIER", id: "MOD_RAITA", present_at_all_locations: true, modifier_data: { name: "Raita", price_money: { amount: 150 } } },
-          { type: "MODIFIER", id: "MOD_EGG", present_at_all_locations: true, modifier_data: { name: "Egg", price_money: { amount: 100 } } },
+          {
+            type: "MODIFIER",
+            id: "MOD_RAITA",
+            present_at_all_locations: true,
+            modifier_data: { name: "Raita", price_money: { amount: 150 } },
+          },
+          {
+            type: "MODIFIER",
+            id: "MOD_EGG",
+            present_at_all_locations: true,
+            modifier_data: { name: "Egg", price_money: { amount: 100 } },
+          },
         ],
       },
     };
@@ -229,8 +281,16 @@ describe("Square catalog mapping", () => {
         extras,
         item("ITEM_A", "Curry A", [variation("VAR_A", "R", 1000)], {
           modifier_list_info: [
-            { modifier_list_id: "ML_SPICE", min_selected_modifiers: 1, max_selected_modifiers: -1 },
-            { modifier_list_id: "ML_EXTRAS", min_selected_modifiers: -1, max_selected_modifiers: -1 },
+            {
+              modifier_list_id: "ML_SPICE",
+              min_selected_modifiers: 1,
+              max_selected_modifiers: -1,
+            },
+            {
+              modifier_list_id: "ML_EXTRAS",
+              min_selected_modifiers: -1,
+              max_selected_modifiers: -1,
+            },
             { modifier_list_id: "ML_SPICE", enabled: false },
           ],
         }),
@@ -241,11 +301,20 @@ describe("Square catalog mapping", () => {
       LOC,
     );
     const [a, b] = menu.items;
-    expect(a.groups.map((g) => [g.external_id, g.is_required, g.min_selections, g.max_selections])).toEqual([
+    expect(
+      a.groups.map((g) => [
+        g.external_id,
+        g.is_required,
+        g.min_selections,
+        g.max_selections,
+      ]),
+    ).toEqual([
       ["ml:ML_SPICE:ITEM_A", true, 1, 1],
       ["ml:ML_EXTRAS:ITEM_A", false, 0, 2],
     ]);
-    expect(a.groups[0].options.map((o) => [o.name, o.price_adjustment])).toEqual([
+    expect(
+      a.groups[0].options.map((o) => [o.name, o.price_adjustment]),
+    ).toEqual([
       ["Mild", 0],
       ["Hot", 0.5],
     ]);
@@ -260,22 +329,45 @@ describe("Square catalog mapping", () => {
       LOC,
     );
     expect(menu.items).toEqual([]);
-    expect(skipped).toEqual([{ name: "Market Fish", reason: expect.stringMatching(/variable pricing/) }]);
+    expect(skipped).toEqual([
+      {
+        name: "Market Fish",
+        reason: expect.stringMatching(/variable pricing/),
+      },
+    ]);
   });
 
   it("respects locations: absent, location-only, per-location price and sold out", () => {
     const { menu } = mapSquareCatalog(
       [
-        item("ITEM_GONE", "Elsewhere only", [variation("V1", "R", 500)], {}, {
-          present_at_all_locations: false,
-          present_at_location_ids: ["LOC_OTHER"],
-        }),
-        item("ITEM_ABSENT", "Not here", [variation("V2", "R", 500)], {}, {
-          absent_at_location_ids: [LOC],
-        }),
+        item(
+          "ITEM_GONE",
+          "Elsewhere only",
+          [variation("V1", "R", 500)],
+          {},
+          {
+            present_at_all_locations: false,
+            present_at_location_ids: ["LOC_OTHER"],
+          },
+        ),
+        item(
+          "ITEM_ABSENT",
+          "Not here",
+          [variation("V2", "R", 500)],
+          {},
+          {
+            absent_at_location_ids: [LOC],
+          },
+        ),
         item("ITEM_HERE", "Here", [
           variation("V3", "R", 500, {
-            location_overrides: [{ location_id: LOC, price_money: { amount: 650 }, sold_out: true }],
+            location_overrides: [
+              {
+                location_id: LOC,
+                price_money: { amount: 650 },
+                sold_out: true,
+              },
+            ],
           }),
         ]),
       ],
@@ -291,13 +383,23 @@ describe("Square catalog mapping", () => {
     const { menu } = mapSquareCatalog(
       [
         item("ITEM_X", "Loose item", [variation("VX", "R", 300)]),
-        item("ITEM_DEL", "Deleted", [variation("VD", "R", 300)], {}, { is_deleted: true }),
-        item("ITEM_ARC", "Archived", [variation("VA", "R", 300)], { is_archived: true }),
+        item(
+          "ITEM_DEL",
+          "Deleted",
+          [variation("VD", "R", 300)],
+          {},
+          { is_deleted: true },
+        ),
+        item("ITEM_ARC", "Archived", [variation("VA", "R", 300)], {
+          is_archived: true,
+        }),
       ],
       LOC,
     );
     expect(menu.items.map((i) => i.name)).toEqual(["Loose item"]);
-    expect(menu.categories).toEqual([{ external_id: UNCATEGORIZED_ID, name: "Other", display_order: 0 }]);
+    expect(menu.categories).toEqual([
+      { external_id: UNCATEGORIZED_ID, name: "Other", display_order: 0 },
+    ]);
   });
 });
 
@@ -315,7 +417,9 @@ describe("who may use the service-key Square token store", () => {
         if (statSync(full).isDirectory()) walk(full);
         else if (/\.(ts|tsx)$/.test(name)) {
           const text = readFileSync(full, "utf8");
-          const sibling = path.dirname(full).endsWith(path.join("pos", "square"));
+          const sibling = path
+            .dirname(full)
+            .endsWith(path.join("pos", "square"));
           if (
             /from ["']@\/lib\/pos\/square\/api["']/.test(text) ||
             (sibling && /from ["']\.\/api["']/.test(text))
@@ -340,9 +444,31 @@ describe("squareReady", () => {
   const key = randomBytes(32).toString("base64");
   it("needs the app id, secret and a real 32-byte key", async () => {
     const { squareReady } = await import("@/lib/pos/square/oauth-core");
-    expect(squareReady({ SQUARE_APPLICATION_ID: "a", SQUARE_APPLICATION_SECRET: "b", POS_TOKEN_ENCRYPTION_KEY: key })).toBe(true);
-    expect(squareReady({ SQUARE_APPLICATION_ID: "a", SQUARE_APPLICATION_SECRET: "b" })).toBe(false);
-    expect(squareReady({ SQUARE_APPLICATION_ID: "a", SQUARE_APPLICATION_SECRET: "b", POS_TOKEN_ENCRYPTION_KEY: "short" })).toBe(false);
-    expect(squareReady({ SQUARE_APPLICATION_SECRET: "b", POS_TOKEN_ENCRYPTION_KEY: key })).toBe(false);
+    expect(
+      squareReady({
+        SQUARE_APPLICATION_ID: "a",
+        SQUARE_APPLICATION_SECRET: "b",
+        POS_TOKEN_ENCRYPTION_KEY: key,
+      }),
+    ).toBe(true);
+    expect(
+      squareReady({
+        SQUARE_APPLICATION_ID: "a",
+        SQUARE_APPLICATION_SECRET: "b",
+      }),
+    ).toBe(false);
+    expect(
+      squareReady({
+        SQUARE_APPLICATION_ID: "a",
+        SQUARE_APPLICATION_SECRET: "b",
+        POS_TOKEN_ENCRYPTION_KEY: "short",
+      }),
+    ).toBe(false);
+    expect(
+      squareReady({
+        SQUARE_APPLICATION_SECRET: "b",
+        POS_TOKEN_ENCRYPTION_KEY: key,
+      }),
+    ).toBe(false);
   });
 });

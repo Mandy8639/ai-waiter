@@ -26,13 +26,26 @@ export const metadata = {
   title: "Point of sale — Tableside",
 };
 
-const RETURN_MESSAGES: Record<string, { tone: "ok" | "error"; text: string }> = {
-  connected: { tone: "ok", text: "Square is connected." },
-  cancelled: { tone: "error", text: "Square wasn't connected: the request was cancelled on Square's screen." },
-  expired: { tone: "error", text: "That connection link expired. Press Connect Square again." },
-  forbidden: { tone: "error", text: "Only an owner or manager (with two-step verification, if your restaurant requires it) can connect Square." },
-  error: { tone: "error", text: "Square didn't finish connecting. Try again in a minute." },
-};
+const RETURN_MESSAGES: Record<string, { tone: "ok" | "error"; text: string }> =
+  {
+    connected: { tone: "ok", text: "Square is connected." },
+    cancelled: {
+      tone: "error",
+      text: "Square wasn't connected: the request was cancelled on Square's screen.",
+    },
+    expired: {
+      tone: "error",
+      text: "That connection link expired. Press Connect Square again.",
+    },
+    forbidden: {
+      tone: "error",
+      text: "Only an owner or manager (with two-step verification, if your restaurant requires it) can connect Square.",
+    },
+    error: {
+      tone: "error",
+      text: "Square didn't finish connecting. Try again in a minute.",
+    },
+  };
 
 export default async function PointOfSalePage({
   searchParams,
@@ -64,7 +77,8 @@ export default async function PointOfSalePage({
         .filter((l) => l.status === "ACTIVE")
         .map((l) => ({ id: l.id, name: l.name }));
     } catch {
-      locationError = "Couldn't reach Square to list your locations. Reconnect if this keeps happening.";
+      locationError =
+        "Couldn't reach Square to list your locations. Reconnect if this keeps happening.";
     }
   }
 
@@ -82,12 +96,16 @@ export default async function PointOfSalePage({
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div>
-        <Link href="/dashboard/settings" className="text-muted-foreground text-sm hover:underline">
+        <Link
+          href="/dashboard/settings"
+          className="text-muted-foreground text-sm hover:underline"
+        >
           ← Settings
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Point of sale</h1>
         <p className="text-muted-foreground text-sm">
-          Connect the restaurant&apos;s Square account so Tableside uses the same menu.
+          Connect the restaurant&apos;s Square account so Tableside uses the
+          same menu.
         </p>
       </div>
 
@@ -101,8 +119,9 @@ export default async function PointOfSalePage({
         <CardHeader>
           <CardTitle className="text-base">Square</CardTitle>
           <CardDescription>
-            Square stays in charge of names, prices, sections and sold-out items. Photos, allergens
-            and dietary details you add in Tableside are kept when you import again.
+            Square stays in charge of names, prices, sections and sold-out
+            items. Photos, allergens and dietary details you add in Tableside
+            are kept when you import again.
           </CardDescription>
         </CardHeader>
         <CardContent>

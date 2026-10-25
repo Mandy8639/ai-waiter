@@ -20,7 +20,9 @@ interface Summary {
   items_hidden: number;
 }
 
-const menu = (overrides: { items?: unknown[]; categories?: unknown[] } = {}) => ({
+const menu = (
+  overrides: { items?: unknown[]; categories?: unknown[] } = {},
+) => ({
   categories: overrides.categories ?? [
     { external_id: "CAT_MAINS", name: "Mains", display_order: 0 },
   ],
@@ -42,8 +44,20 @@ const menu = (overrides: { items?: unknown[]; categories?: unknown[] } = {}) => 
           max_selections: 1,
           display_order: 0,
           options: [
-            { external_id: "MOD_MILD", name: "Mild", price_adjustment: 0, is_available: true, display_order: 0 },
-            { external_id: "MOD_HOT", name: "Hot", price_adjustment: 0.5, is_available: true, display_order: 1 },
+            {
+              external_id: "MOD_MILD",
+              name: "Mild",
+              price_adjustment: 0,
+              is_available: true,
+              display_order: 0,
+            },
+            {
+              external_id: "MOD_HOT",
+              name: "Hot",
+              price_adjustment: 0.5,
+              is_available: true,
+              display_order: 1,
+            },
           ],
         },
       ],
@@ -84,19 +98,27 @@ describe("apply_pos_menu_sync()", () => {
 
   function sync(userId: string, restaurantId: string, payload: unknown) {
     return db.asUser(userId, (c) =>
-      c.query<Summary>("select * from public.apply_pos_menu_sync($1, $2::jsonb);", [
-        restaurantId,
-        JSON.stringify(payload),
-      ]),
+      c.query<Summary>(
+        "select * from public.apply_pos_menu_sync($1, $2::jsonb);",
+        [restaurantId, JSON.stringify(payload)],
+      ),
     );
   }
 
   it("imports sections, dishes, groups and options", async () => {
     const { restaurantId, userId } = await setup();
     const { rows } = await sync(userId, restaurantId, menu());
-    expect(rows[0]).toMatchObject({ categories_created: 1, items_created: 2, items_hidden: 0 });
+    expect(rows[0]).toMatchObject({
+      categories_created: 1,
+      items_created: 2,
+      items_hidden: 0,
+    });
 
-    const { rows: items } = await db.admin.query<{ name: string; price: string; slug: string }>(
+    const { rows: items } = await db.admin.query<{
+      name: string;
+      price: string;
+      slug: string;
+    }>(
       "select name, price, slug from public.menu_items where restaurant_id = $1 order by display_order;",
       [restaurantId],
     );
@@ -104,7 +126,10 @@ describe("apply_pos_menu_sync()", () => {
       ["Chicken Biryani", 16, "chicken-biryani"],
       ["Mango Lassi", 5, "mango-lassi"],
     ]);
-    const { rows: options } = await db.admin.query<{ name: string; price_adjustment: string }>(
+    const { rows: options } = await db.admin.query<{
+      name: string;
+      price_adjustment: string;
+    }>(
       `select o.name, o.price_adjustment from public.modifier_options o
        join public.menu_item_modifiers g on g.id = o.modifier_id
        where g.restaurant_id = $1 order by o.display_order;`,
@@ -115,7 +140,10 @@ describe("apply_pos_menu_sync()", () => {
       ["Hot", 0.5],
     ]);
 
-    const { rows: integration } = await db.admin.query<{ menu_synced_at: string | null; last_sync_summary: Summary }>(
+    const { rows: integration } = await db.admin.query<{
+      menu_synced_at: string | null;
+      last_sync_summary: Summary;
+    }>(
       "select menu_synced_at, last_sync_summary from public.restaurant_pos_integrations where restaurant_id = $1;",
       [restaurantId],
     );
@@ -135,9 +163,16 @@ describe("apply_pos_menu_sync()", () => {
     const next = menu();
     (next.items[1] as { price: number }).price = 5.5;
     const { rows } = await sync(userId, restaurantId, next);
-    expect(rows[0]).toMatchObject({ categories_created: 0, items_created: 0, items_updated: 2 });
+    expect(rows[0]).toMatchObject({
+      categories_created: 0,
+      items_created: 0,
+      items_updated: 2,
+    });
 
-    const { rows: lassi } = await db.admin.query<{ price: string; is_vegetarian: boolean }>(
+    const { rows: lassi } = await db.admin.query<{
+      price: string;
+      is_vegetarian: boolean;
+    }>(
       "select price, is_vegetarian from public.menu_items where restaurant_id = $1 and external_id = 'ITEM_LASSI';",
       [restaurantId],
     );
@@ -148,7 +183,9 @@ describe("apply_pos_menu_sync()", () => {
   it("hides what Square dropped and never touches hand-made dishes", async () => {
     const { restaurantId, userId } = await setup();
     const handMadeCategory = await createCategory(db, restaurantId, "Specials");
-    const handMade = await createMenuItem(db, restaurantId, handMadeCategory, { price: 9 });
+    const handMade = await createMenuItem(db, restaurantId, handMadeCategory, {
+      price: 9,
+    });
     await sync(userId, restaurantId, menu());
 
     const lessMenu = menu();
@@ -164,7 +201,10 @@ describe("apply_pos_menu_sync()", () => {
     );
     expect(lassi[0].is_available).toBe(false);
 
-    const { rows: group } = await db.admin.query<{ is_required: boolean; min_selections: number }>(
+    const { rows: group } = await db.admin.query<{
+      is_required: boolean;
+      min_selections: number;
+    }>(
       "select is_required, min_selections from public.menu_item_modifiers where restaurant_id = $1;",
       [restaurantId],
     );
@@ -199,7 +239,10 @@ describe("apply_pos_menu_sync()", () => {
   it("gives a clashing new dish the next free slug", async () => {
     const { restaurantId, userId } = await setup();
     const cat = await createCategory(db, restaurantId);
-    await createMenuItem(db, restaurantId, cat, { name: "Mango Lassi", slug: "mango-lassi" });
+    await createMenuItem(db, restaurantId, cat, {
+      name: "Mango Lassi",
+      slug: "mango-lassi",
+    });
     await sync(userId, restaurantId, menu());
     const { rows } = await db.admin.query<{ slug: string }>(
       "select slug from public.menu_items where restaurant_id = $1 and external_id = 'ITEM_LASSI';",
@@ -208,22 +251,32 @@ describe("apply_pos_menu_sync()", () => {
     expect(rows[0].slug).toBe("mango-lassi-2");
   });
 
-  it.each(["staff", "kitchen"] as const)("refuses a %s account", async (role) => {
-    const { restaurantId, userId } = await setup(role);
-    await expect(sync(userId, restaurantId, menu())).rejects.toThrow(/POS_SYNC_FORBIDDEN/);
-  });
+  it.each(["staff", "kitchen"] as const)(
+    "refuses a %s account",
+    async (role) => {
+      const { restaurantId, userId } = await setup(role);
+      await expect(sync(userId, restaurantId, menu())).rejects.toThrow(
+        /POS_SYNC_FORBIDDEN/,
+      );
+    },
+  );
 
   it("refuses an owner of a different restaurant", async () => {
     const { userId } = await setup();
     const { restaurantId: other } = await setup();
-    await expect(sync(userId, other, menu())).rejects.toThrow(/POS_SYNC_FORBIDDEN/);
+    await expect(sync(userId, other, menu())).rejects.toThrow(
+      /POS_SYNC_FORBIDDEN/,
+    );
   });
 
   it("rolls back entirely when one dish points at an unknown section", async () => {
     const { restaurantId, userId } = await setup();
     const bad = menu();
-    (bad.items[1] as { category_external_id: string }).category_external_id = "CAT_NOPE";
-    await expect(sync(userId, restaurantId, bad)).rejects.toThrow(/POS_SYNC_UNKNOWN_CATEGORY/);
+    (bad.items[1] as { category_external_id: string }).category_external_id =
+      "CAT_NOPE";
+    await expect(sync(userId, restaurantId, bad)).rejects.toThrow(
+      /POS_SYNC_UNKNOWN_CATEGORY/,
+    );
     const { rows } = await db.admin.query<{ n: number }>(
       "select count(*)::int as n from public.menu_items where restaurant_id = $1;",
       [restaurantId],

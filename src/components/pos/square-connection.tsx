@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/dashboard/native-select";
 import type { SquareActionState } from "@/lib/pos/square/actions";
 
-type Action = (prev: SquareActionState, formData: FormData) => Promise<SquareActionState>;
+type Action = (
+  prev: SquareActionState,
+  formData: FormData,
+) => Promise<SquareActionState>;
 
 export interface SquareConnectionView {
   /** Square credentials exist on this deployment at all. */
@@ -61,9 +64,15 @@ export function SquareConnection({
   disconnectAction: Action;
 }) {
   const [connectState, connect, connecting] = useActionState(connectAction, {});
-  const [locationState, chooseLocation, savingLocation] = useActionState(locationAction, {});
+  const [locationState, chooseLocation, savingLocation] = useActionState(
+    locationAction,
+    {},
+  );
   const [syncState, sync, syncing] = useActionState(syncAction, {});
-  const [disconnectState, disconnectForm, disconnecting] = useActionState(disconnectAction, {});
+  const [disconnectState, disconnectForm, disconnecting] = useActionState(
+    disconnectAction,
+    {},
+  );
 
   if (!view.configured) {
     return (
@@ -78,8 +87,9 @@ export function SquareConnection({
       <form action={connect} className="flex flex-col gap-3">
         <Result state={connectState} />
         <p className="text-sm">
-          You&apos;ll sign in to Square and approve Tableside. It can read your menu and locations,
-          and (once payments through Square are on) create orders and take payments for you.
+          You&apos;ll sign in to Square and approve Tableside. It can read your
+          menu and locations, and (once payments through Square are on) create
+          orders and take payments for you.
         </p>
         <div>
           <Button type="submit" disabled={connecting}>
@@ -144,12 +154,19 @@ export function SquareConnection({
         </p>
         <div>
           <Button type="submit" disabled={syncing || !view.locationId}>
-            {syncing ? "Importing…" : view.menuSyncedAt ? "Import again" : "Import menu from Square"}
+            {syncing
+              ? "Importing…"
+              : view.menuSyncedAt
+                ? "Import again"
+                : "Import menu from Square"}
           </Button>
         </div>
       </form>
 
-      <form action={disconnectForm} className="flex flex-col gap-2 border-t pt-4">
+      <form
+        action={disconnectForm}
+        className="flex flex-col gap-2 border-t pt-4"
+      >
         <Result state={disconnectState} />
         <div>
           <Button type="submit" variant="ghost" disabled={disconnecting}>

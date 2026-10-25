@@ -67,7 +67,10 @@ export async function GET(request: NextRequest) {
       { onConflict: "restaurant_id" },
     );
   if (rowError) {
-    reportError(rowError, { scope: "square.callback.row", extra: { restaurantId } });
+    reportError(rowError, {
+      scope: "square.callback.row",
+      extra: { restaurantId },
+    });
     return back("forbidden");
   }
 
@@ -92,7 +95,10 @@ export async function GET(request: NextRequest) {
   } catch (e) {
     reportError(e, {
       scope: "square.callback",
-      extra: { restaurantId, detail: e instanceof SquareError ? e.detail : undefined },
+      extra: {
+        restaurantId,
+        detail: e instanceof SquareError ? e.detail : undefined,
+      },
     });
     return back("error");
   }
