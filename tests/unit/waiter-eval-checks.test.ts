@@ -170,6 +170,19 @@ describe("graders", () => {
         visit({ turns: [turn("x", "Sure, we have vegetarian dishes.")] }),
       ),
     ).not.toBe(true);
+    // A short reply from the first live run, wrongly failed by a smaller word list.
+    expect(
+      replyInLanguage("es").run(
+        visit({
+          turns: [
+            turn(
+              "x",
+              "¡Listo! He añadido un Mango Lassi a tu carrito. ¿Quieres algo más?",
+            ),
+          ],
+        }),
+      ),
+    ).toBe(true);
   });
 
   it("turns a throwing check into a failure instead of crashing the run", () => {

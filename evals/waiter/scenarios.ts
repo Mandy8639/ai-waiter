@@ -188,7 +188,7 @@ export const SCENARIOS: Scenario[] = [
     checks: [
       cartLacks(DISH.kulfi, "Mango Kulfi"),
       replyMatches(
-        /not available|unavailable|sold out|isn'?t available|run out|ran out|(not|isn'?t) on the menu|do(n'?t| not) have/i,
+        /not available|unavailable|sold out|isn'?t available|run out|ran out|(not|isn'?t) on (the|our) menu|do(n'?t| not) have/i,
         "says it's unavailable",
       ),
     ],

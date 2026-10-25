@@ -288,13 +288,15 @@ export function replyInLanguage(lang: "hi" | "es"): Check {
       if (lang === "hi") {
         return /[ऀ-ॿ]{3,}/.test(reply) ? true : "no Devanagari in the reply";
       }
-      const spanish = (
-        reply
-          .toLowerCase()
-          .match(
-            /\b(el|la|los|las|un|una|de|que|por|para|con|tenemos|su|usted|también|platos|claro|gracias)\b/g,
-          ) ?? []
-      ).length;
+      // Words English never uses, plus Spanish's opening ¿ and ¡.
+      const spanish =
+        (
+          reply
+            .toLowerCase()
+            .match(
+              /(?<![\p{L}])(el|la|los|las|un|una|de|del|que|por|para|con|tu|su|usted|más|algo|también|tenemos|quieres|quiere|claro|gracias|listo|añadido|agregado|carrito|platos|aquí|está|están|puedo)(?![\p{L}])/gu,
+            ) ?? []
+        ).length + (/[¿¡]/.test(reply) ? 1 : 0);
       return spanish >= 3 ? true : "the reply doesn't read as Spanish";
     },
   };
