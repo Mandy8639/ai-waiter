@@ -13,7 +13,11 @@ import {
   listLocations,
   squareConfig,
 } from "./api";
-import { buildState, squareAuthorizeUrl } from "./oauth-core";
+import {
+  buildState,
+  squareAuthorizeUrl,
+  squareWebhookReady,
+} from "./oauth-core";
 import {
   SETTINGS_PATH,
   STATE_COOKIE,
@@ -200,7 +204,8 @@ export async function disconnectSquare(
   // before the service-key token store is touched.
   const { error } = await loose(auth.context.supabase)
     .from("restaurant_pos_integrations")
-    .update({ is_enabled: false })
+    // Payments go with the connection: card payments fall back to Stripe.
+    .update({ is_enabled: false, payments_enabled: false })
     .eq("restaurant_id", restaurantId);
   if (error) return { error: "Couldn't disconnect Square." };
   try {
@@ -213,5 +218,61 @@ export async function disconnectSquare(
   return {
     success:
       "Square disconnected. Dishes imported from it stay on your menu; reconnect any time to sync again.",
+  };
+}
+
+export async function setSquarePayments(
+  restaurantId: string,
+  _prev: SquareActionState,
+  formData: FormData,
+): Promise<SquareActionState> {
+  const auth = await authorizeSquare(restaurantId);
+  if (!auth.ok) return { error: auth.error };
+  const enable = formData.get("enable") === "1";
+
+  if (enable && !squareWebhookReady(process.env)) {
+    // Without the webhook a Square payment would go through and never be
+    // marked paid in Tableside, so it can't be switched on yet.
+    return {
+      error:
+        "Square payments aren't fully set up on this deployment yet (Square's payment notifications). Nothing was changed.",
+    };
+  }
+
+  const supabase = loose(auth.context.supabase);
+  const { data: integration } = await supabase
+    .from("restaurant_pos_integrations")
+    .select("provider, is_enabled, external_location_id")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+  if (
+    enable &&
+    (integration?.provider !== "square" || !integration.is_enabled)
+  ) {
+    return { error: "Connect Square and pick a location first." };
+  }
+
+  const { error } = await supabase
+    .from("restaurant_pos_integrations")
+    .update({ payments_enabled: enable })
+    .eq("restaurant_id", restaurantId);
+  if (error) {
+    report(error, "square.payments_toggle", restaurantId);
+    return { error: "Couldn't change the payment setting." };
+  }
+
+  revalidatePath(SETTINGS_PATH);
+  if (!enable) {
+    return { success: "Card payments are back on Stripe (if it's set up)." };
+  }
+  const { data: settings } = await auth.context.supabase
+    .from("restaurant_settings")
+    .select("accept_card")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+  return {
+    success: settings?.accept_card
+      ? "Diners now pay by card through Square."
+      : "Square will take card payments once you turn on card payments under Payments.",
   };
 }

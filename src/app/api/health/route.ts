@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { isAiConfigured } from "@/lib/ai/client";
 import { apnsReady } from "@/lib/push/apns-core";
-import { squareReady } from "@/lib/pos/square/oauth-core";
+import { squareReady, squareWebhookReady } from "@/lib/pos/square/oauth-core";
 
 /**
  * High-level readiness signal for uptime monitoring/deployment checks
@@ -32,5 +32,7 @@ export async function GET() {
     // Square connection (Settings → Point of sale): app keys and a valid
     // token encryption key are set.
     squareConfigured: squareReady(process.env),
+    // Square payments can settle: its webhook signature key and URL are set.
+    squareWebhookConfigured: squareWebhookReady(process.env),
   });
 }

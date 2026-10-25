@@ -18,6 +18,7 @@ import { listLocations, squareConfig } from "@/lib/pos/square/api";
 import {
   chooseSquareLocation,
   disconnectSquare,
+  setSquarePayments,
   startSquareConnect,
   syncSquareMenu,
 } from "@/lib/pos/square/actions";
@@ -60,7 +61,7 @@ export default async function PointOfSalePage({
   const { data: row } = await supabase
     .from("restaurant_pos_integrations")
     .select(
-      "provider, external_location_id, is_enabled, connected_at, menu_synced_at, last_sync_summary",
+      "provider, external_location_id, is_enabled, payments_enabled, connected_at, menu_synced_at, last_sync_summary",
     )
     .eq("restaurant_id", restaurant.id)
     .maybeSingle();
@@ -90,6 +91,7 @@ export default async function PointOfSalePage({
     locationError,
     menuSyncedAt: row?.menu_synced_at ?? null,
     lastSync: row?.last_sync_summary ?? null,
+    paymentsEnabled: Boolean(row?.payments_enabled),
   };
   const message = square ? RETURN_MESSAGES[square] : undefined;
 
@@ -131,6 +133,7 @@ export default async function PointOfSalePage({
             locationAction={chooseSquareLocation.bind(null, restaurant.id)}
             syncAction={syncSquareMenu.bind(null, restaurant.id)}
             disconnectAction={disconnectSquare.bind(null, restaurant.id)}
+            paymentsAction={setSquarePayments.bind(null, restaurant.id)}
           />
         </CardContent>
       </Card>

@@ -435,6 +435,8 @@ describe("who may use the service-key Square token store", () => {
         "app/api/pos/square/callback/route.ts",
         "app/dashboard/settings/pos/page.tsx",
         "lib/pos/square/actions.ts",
+        // Phase 2: opening Square's checkout for a diner's own payment.
+        "lib/pos/square/checkout.ts",
       ].sort(),
     );
   });

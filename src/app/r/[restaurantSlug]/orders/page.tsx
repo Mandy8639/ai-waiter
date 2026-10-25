@@ -76,15 +76,24 @@ export default async function OrderHistoryPage({
   }
 
   const supabase = (await createClient()) as unknown as {
-    rpc: (fn: string) => Promise<{ data: unknown }>;
+    rpc: (
+      fn: string,
+      args?: Record<string, unknown>,
+    ) => Promise<{ data: unknown }>;
   };
-  const [orders, tab, returned, openSplitResult] = await Promise.all([
-    getOrdersForSession(session.id),
-    getTabPaymentState(session.id, restaurant.id),
-    searchParams,
-    // Phase J; database.types.ts predates it.
-    supabase.rpc("get_my_open_split"),
-  ]);
+  const [orders, tab, returned, openSplitResult, providerResult] =
+    await Promise.all([
+      getOrdersForSession(session.id),
+      getTabPaymentState(session.id, restaurant.id),
+      searchParams,
+      // Phase J; database.types.ts predates it.
+      supabase.rpc("get_my_open_split"),
+      // Square phase 2 (20261110090000), also newer than the types.
+      supabase.rpc("restaurant_card_provider", {
+        p_restaurant_id: restaurant.id,
+      }),
+    ]);
+  const paysThroughSquare = providerResult.data === "square";
   const openSplitToken =
     (openSplitResult.data as Array<{ open_split_token: string }> | null)?.[0]
       ?.open_split_token ?? null;
@@ -105,7 +114,9 @@ export default async function OrderHistoryPage({
     !tab.mixedCurrency;
   // One big order is the classic bill to split, so one unpaid order is
   // enough to offer it.
+  // Not yet through Square: split payments still run on Stripe only.
   const canSplit =
+    !paysThroughSquare &&
     !openSplitToken &&
     tab.canTakeCard &&
     tab.unpaidCount >= 1 &&
@@ -115,7 +126,7 @@ export default async function OrderHistoryPage({
     <div className="flex flex-1 flex-col gap-5">
       <h1 className="text-xl font-semibold tracking-tight">Your orders</h1>
 
-      {/* Coming back from Stripe proves only that the diner came back:
+      {/* Coming back from checkout proves only that the diner came back:
           settlement is the webhook's job, and it may not have arrived yet.
           So this says a payment was made without claiming it has cleared,
           and the list below shows the truth as the database knows it. */}

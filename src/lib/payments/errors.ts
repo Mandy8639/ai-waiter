@@ -108,7 +108,7 @@ const PAYMENT_MESSAGES: Record<string, string> = {
   REFUND_NO_ACCOUNT:
     "This restaurant's Stripe account is no longer connected, so the money can't be sent back.",
   REFUND_NO_PAYMENT_INTENT:
-    "That payment has no Stripe charge behind it, so it can't be refunded here.",
+    "That payment has no Stripe charge behind it, so it can't be refunded here. If it was paid through Square, refund it in your Square Dashboard.",
   REFUND_ALREADY_LINKED: "That refund has already been recorded.",
   // Raised by cancel_pending_refund() when Stripe did accept the refund
   // after all. Saying "nothing was sent" here would contradict the

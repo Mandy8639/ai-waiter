@@ -122,3 +122,13 @@ export function squareReady(env: Record<string, string | undefined>): boolean {
   const key = env.POS_TOKEN_ENCRYPTION_KEY;
   return Boolean(key) && Buffer.from(key!, "base64").length === 32;
 }
+
+/**
+ * Square can settle payments on this deployment: the webhook's signature
+ * key and the exact notification URL registered with Square are set.
+ */
+export function squareWebhookReady(
+  env: Record<string, string | undefined>,
+): boolean {
+  return Boolean(env.SQUARE_WEBHOOK_SIGNATURE_KEY && env.SQUARE_WEBHOOK_URL);
+}
