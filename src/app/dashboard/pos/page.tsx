@@ -27,6 +27,36 @@ export default async function PosPage() {
   const supabase = await createClient();
   const rpc = supabase.rpc.bind(supabase) as unknown as Rpc;
 
+  // Square phase 3 (20261111090000), newer than database.types.ts: a
+  // Square restaurant takes cards on its paired Terminals, not Tap to Pay.
+  const [{ data: cardProvider }, { data: devices }] = await Promise.all([
+    rpc("restaurant_card_provider", { p_restaurant_id: restaurant.id }),
+    (
+      supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (
+              c: string,
+              v: string,
+            ) => {
+              eq: (
+                c: string,
+                v: string,
+              ) => Promise<{
+                data: { device_id: string; name: string }[] | null;
+              }>;
+            };
+          };
+        };
+      }
+    )
+      .from("pos_devices")
+      .select("device_id, name")
+      .eq("restaurant_id", restaurant.id)
+      .eq("status", "paired"),
+  ]);
+  const paysThroughSquare = cardProvider === "square";
+
   const [restaurantRow, settings, tables, categories, dishes, groups] =
     await Promise.all([
       supabase
@@ -139,6 +169,12 @@ export default async function PosPage() {
           cardMachine: settings.data?.accept_card_terminal ?? false,
           card: settings.data?.accept_card ?? false,
           tipping: settings.data?.tipping_enabled ?? false,
+          squareTerminals: paysThroughSquare
+            ? (devices ?? []).map((d) => ({
+                deviceId: d.device_id,
+                name: d.name,
+              }))
+            : null,
         }}
       />
     </div>

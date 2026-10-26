@@ -28,6 +28,8 @@ export interface CompletedSquarePayment {
   paymentId: string;
   orderId: string;
   totalMinorUnits: number;
+  /** A tip the diner added on a Square Terminal (0 for online payments, whose tip is on the order). */
+  tipMinorUnits: number;
   currency: string;
 }
 
@@ -60,6 +62,11 @@ export function completedPaymentFrom(
     paymentId: payment.id,
     orderId: payment.order_id,
     totalMinorUnits: total.amount,
+    tipMinorUnits:
+      typeof (payment.tip_money as { amount?: unknown } | undefined)?.amount ===
+      "number"
+        ? (payment.tip_money as { amount: number }).amount
+        : 0,
     currency: total.currency,
   };
 }

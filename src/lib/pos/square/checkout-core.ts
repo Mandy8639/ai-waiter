@@ -89,9 +89,22 @@ const lineName = (line: BillLine) =>
     500,
   );
 
-export function buildSquarePaymentLink(
-  input: SquareCheckoutInput,
-): SquarePaymentLinkRequest {
+export type SquareOrder = SquarePaymentLinkRequest["order"];
+
+/**
+ * The itemised Square order for a payment: the part every Square path
+ * shares (online checkout, Terminal, cash sale). The tip goes on as a
+ * "Tip" service charge when Tableside already knows it; on a Terminal the
+ * diner adds it on the device instead, so it's left off (tipAmount 0).
+ */
+export function buildSquareOrder(input: {
+  paymentId: string;
+  locationId: string;
+  currency: string;
+  amount: string | number;
+  tipAmount: string | number;
+  lines: BillLine[];
+}): { order: SquareOrder; amountMinor: number; tipMinor: number } {
   const currency = input.currency.toUpperCase();
   const money = (minor: number): SquareMoney => ({ amount: minor, currency });
   const amountMinor = toMinorUnits(String(input.amount), currency);
@@ -139,14 +152,9 @@ export function buildSquarePaymentLink(
     });
   }
 
-  if (input.appFeeMinorUnits < 0 || input.appFeeMinorUnits > amountMinor) {
-    throw new BillMismatchError("Tableside's fee can't exceed the bill.");
-  }
-
   return {
-    // Square de-duplicates on this, so a double-tapped Pay button reuses
-    // the same checkout instead of opening a second one.
-    idempotency_key: `tableside-${input.paymentId}`,
+    amountMinor,
+    tipMinor,
     order: {
       location_id: input.locationId,
       // Square caps reference_id at 40 characters; a UUID is 36.
@@ -176,6 +184,27 @@ export function buildSquarePaymentLink(
           }
         : {}),
     },
+  };
+}
+
+function checkFee(appFeeMinorUnits: number, amountMinor: number) {
+  if (appFeeMinorUnits < 0 || appFeeMinorUnits > amountMinor) {
+    throw new BillMismatchError("Tableside's fee can't exceed the bill.");
+  }
+}
+
+export function buildSquarePaymentLink(
+  input: SquareCheckoutInput,
+): SquarePaymentLinkRequest {
+  const currency = input.currency.toUpperCase();
+  const { order, amountMinor } = buildSquareOrder(input);
+  checkFee(input.appFeeMinorUnits, amountMinor);
+
+  return {
+    // Square de-duplicates on this, so a double-tapped Pay button reuses
+    // the same checkout instead of opening a second one.
+    idempotency_key: `tableside-${input.paymentId}`,
+    order,
     checkout_options: {
       redirect_url: input.redirectUrl,
       // The diner already chose a tip in Tableside; Square asking again
@@ -183,28 +212,142 @@ export function buildSquarePaymentLink(
       allow_tipping: false,
       ask_for_shipping_address: false,
       ...(input.appFeeMinorUnits > 0
-        ? { app_fee_money: money(input.appFeeMinorUnits) }
+        ? { app_fee_money: { amount: input.appFeeMinorUnits, currency } }
         : {}),
     },
     payment_note: input.note.slice(0, 500),
   };
 }
 
-/** What Square will charge for a request built above: dishes, extras, tip, less any discount. */
-export function requestTotalMinorUnits(
-  request: SquarePaymentLinkRequest,
-): number {
-  const lines = request.order.line_items.reduce(
+/**
+ * Sending a Terminal payment: the itemised order to create first, then the
+ * checkout that pays it on the device. The Terminal shows the dishes
+ * (show_itemized_cart) and, if the restaurant takes tips, asks for one;
+ * Square requires the checkout amount to equal the order total, so the tip
+ * is on top of it and comes back on the payment.
+ */
+export function buildTerminalRequests(input: {
+  paymentId: string;
+  locationId: string;
+  currency: string;
+  amount: string | number;
+  lines: BillLine[];
+  deviceId: string;
+  tippingEnabled: boolean;
+  appFeeMinorUnits: number;
+  note: string;
+}): {
+  createOrder: { idempotency_key: string; order: SquareOrder };
+  checkout: (squareOrderId: string) => {
+    idempotency_key: string;
+    checkout: {
+      amount_money: SquareMoney;
+      order_id: string;
+      reference_id: string;
+      note: string;
+      app_fee_money?: SquareMoney;
+      device_options: {
+        device_id: string;
+        show_itemized_cart: true;
+        skip_receipt_screen: false;
+        tip_settings: { allow_tipping: boolean };
+      };
+    };
+  };
+} {
+  const currency = input.currency.toUpperCase();
+  const { order, amountMinor } = buildSquareOrder({ ...input, tipAmount: 0 });
+  checkFee(input.appFeeMinorUnits, amountMinor);
+  return {
+    createOrder: {
+      idempotency_key: `tableside-order-${input.paymentId}`,
+      order,
+    },
+    checkout: (squareOrderId) => ({
+      idempotency_key: `tableside-terminal-${input.paymentId}`,
+      checkout: {
+        amount_money: { amount: orderTotalMinorUnits(order), currency },
+        order_id: squareOrderId,
+        reference_id: input.paymentId,
+        note: input.note.slice(0, 250),
+        ...(input.appFeeMinorUnits > 0
+          ? { app_fee_money: { amount: input.appFeeMinorUnits, currency } }
+          : {}),
+        device_options: {
+          device_id: input.deviceId,
+          show_itemized_cart: true,
+          skip_receipt_screen: false,
+          tip_settings: { allow_tipping: input.tippingEnabled },
+        },
+      },
+    }),
+  };
+}
+
+/**
+ * Copying a recorded cash payment into Square: the itemised order (with
+ * the tip as a service charge) and a CASH payment for exactly its total.
+ * Square only records it; no money moves and no fee applies.
+ */
+export function buildCashSaleRequests(input: {
+  paymentId: string;
+  locationId: string;
+  currency: string;
+  amount: string | number;
+  tipAmount: string | number;
+  lines: BillLine[];
+}): {
+  createOrder: { idempotency_key: string; order: SquareOrder };
+  payment: (squareOrderId: string) => {
+    idempotency_key: string;
+    source_id: "CASH";
+    amount_money: SquareMoney;
+    order_id: string;
+    reference_id: string;
+    cash_details: { buyer_supplied_money: SquareMoney };
+  };
+} {
+  const currency = input.currency.toUpperCase();
+  const { order } = buildSquareOrder(input);
+  const total = orderTotalMinorUnits(order);
+  return {
+    createOrder: {
+      idempotency_key: `tableside-cash-order-${input.paymentId}`,
+      order,
+    },
+    payment: (squareOrderId) => ({
+      idempotency_key: `tableside-cash-${input.paymentId}`,
+      source_id: "CASH",
+      amount_money: { amount: total, currency },
+      order_id: squareOrderId,
+      reference_id: input.paymentId,
+      // Tableside doesn't record what the diner handed over, so this says
+      // exact change; Square only needs it to be at least the amount.
+      cash_details: { buyer_supplied_money: { amount: total, currency } },
+    }),
+  };
+}
+
+/** What Square will charge for an order built above: dishes, extras, tip, less any discount. */
+export function orderTotalMinorUnits(order: SquareOrder): number {
+  const lines = order.line_items.reduce(
     (sum, l) => sum + l.base_price_money.amount * Number(l.quantity),
     0,
   );
-  const charges = (request.order.service_charges ?? []).reduce(
+  const charges = (order.service_charges ?? []).reduce(
     (sum, c) => sum + c.amount_money.amount,
     0,
   );
-  const discounts = (request.order.discounts ?? []).reduce(
+  const discounts = (order.discounts ?? []).reduce(
     (sum, d) => sum + d.amount_money.amount,
     0,
   );
   return lines + charges - discounts;
+}
+
+/** What Square will charge for a payment-link request. */
+export function requestTotalMinorUnits(
+  request: SquarePaymentLinkRequest,
+): number {
+  return orderTotalMinorUnits(request.order);
 }

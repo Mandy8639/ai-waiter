@@ -1415,8 +1415,12 @@ pass. What contains it:
 - The table holds **ciphertext only** (AES-256-GCM under `POS_TOKEN_ENCRYPTION_KEY`, which is never
   in the database), and grants nothing to `anon` or `authenticated`.
 - `api.ts` is `server-only` and not a server action. `tests/unit/square-connection.test.ts` pins its
-  importers to the Square actions, the OAuth callback, the Point of sale settings page, and
-  `src/lib/pos/square/checkout.ts`.
+  importers to the Square actions, the OAuth callback, the Point of sale settings page,
+  `src/lib/pos/square/checkout.ts` and `src/lib/pos/square/in-person.ts`.
+- `in-person.ts` runs on a **member's** request, after their own call to
+  `start_square_terminal_payment()` or `record_in_person_payment()` succeeded for that restaurant.
+  Its one service-key write is `settleFromSquare()` → `settle_square_payment()` (service role only),
+  made only after the server has read the payment from Square, as Tap to Pay does with Stripe.
 - `checkout.ts` runs in a **diner's** request, after `start_order_payment()` / `start_tab_payment()`
   has created or reused a payment for that diner's own orders: that call is the authorisation, and
   the token is only used to open a checkout for that payment. The bill itself is read through the

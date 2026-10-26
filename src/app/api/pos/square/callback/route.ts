@@ -7,7 +7,7 @@ import {
   listLocations,
   saveTokens,
 } from "@/lib/pos/square/api";
-import { parseState } from "@/lib/pos/square/oauth-core";
+import { SQUARE_SCOPES, parseState } from "@/lib/pos/square/oauth-core";
 import {
   SETTINGS_PATH,
   STATE_COOKIE,
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const tokens = await exchangeCode(code, await squareRedirectUri());
-    await saveTokens(restaurantId, tokens);
+    await saveTokens(restaurantId, tokens, SQUARE_SCOPES);
 
     // One location (most small restaurants): pick it now and skip a step.
     const locations = (await listLocations(restaurantId)).filter(

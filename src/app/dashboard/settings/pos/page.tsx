@@ -14,12 +14,28 @@ import {
 } from "@/components/pos/square-connection";
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
-import { listLocations, squareConfig } from "@/lib/pos/square/api";
+import {
+  grantedScopes,
+  listLocations,
+  squareConfig,
+} from "@/lib/pos/square/api";
+import {
+  SQUARE_TEST_TERMINALS,
+  canPairTerminals,
+} from "@/lib/pos/square/oauth-core";
+import {
+  SquareTerminals,
+  type TerminalRow,
+} from "@/components/pos/square-terminals";
 import {
   chooseSquareLocation,
   disconnectSquare,
+  addTestTerminal,
+  checkTerminalPairing,
+  removeTerminal,
   setSquarePayments,
   startSquareConnect,
+  startTerminalPairing,
   syncSquareMenu,
 } from "@/lib/pos/square/actions";
 
@@ -95,6 +111,34 @@ export default async function PointOfSalePage({
   };
   const message = square ? RETURN_MESSAGES[square] : undefined;
 
+  // Terminals (phase 3): the owner's RLS view of pos_devices, and whether
+  // this connection may pair one.
+  let terminals: TerminalRow[] = [];
+  let canPair = false;
+  if (connected) {
+    const [{ data: devices }, scopes] = await Promise.all([
+      supabase
+        .from("pos_devices")
+        .select("id, name, status, pairing_code, pair_by")
+        .eq("restaurant_id", restaurant.id)
+        .in("status", ["pairing", "paired"])
+        .order("created_at"),
+      grantedScopes(restaurant.id),
+    ]);
+    terminals = (devices ?? []).map((d) => ({
+      id: d.id,
+      name: d.name,
+      status: d.status,
+      pairingCode: d.pairing_code,
+      pairBy: d.pair_by,
+    }));
+    canPair = canPairTerminals(scopes);
+  }
+  const testTerminals =
+    squareConfig()?.environment === "sandbox"
+      ? SQUARE_TEST_TERMINALS.map((t) => ({ ...t }))
+      : [];
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div>
@@ -137,6 +181,30 @@ export default async function PointOfSalePage({
           />
         </CardContent>
       </Card>
+
+      {connected && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Square Terminals</CardTitle>
+            <CardDescription>
+              Staff send a table&apos;s bill to a Terminal from Settle up or
+              Take order. The guest taps their card and can add a tip there, and
+              the sale lands in Square.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SquareTerminals
+              terminals={terminals}
+              canPair={canPair}
+              testTerminals={testTerminals}
+              pairAction={startTerminalPairing.bind(null, restaurant.id)}
+              checkAction={checkTerminalPairing.bind(null, restaurant.id)}
+              removeAction={removeTerminal.bind(null, restaurant.id)}
+              addTestAction={addTestTerminal.bind(null, restaurant.id)}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

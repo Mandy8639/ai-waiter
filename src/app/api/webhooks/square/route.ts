@@ -60,13 +60,16 @@ export async function POST(request: Request) {
   const payment = completedPaymentFrom(event);
   if (!payment) return NextResponse.json({ received: true, ignored: true });
 
+  // One settlement path for online and Terminal payments
+  // (20261111090000): a Terminal tip comes back on the payment.
   const { data, error } = await createAdminClient().rpc(
-    // database.types.ts predates 20261110090000.
-    "mark_square_payment_succeeded" as never,
+    // database.types.ts predates 20261111090000.
+    "settle_square_payment" as never,
     {
       p_square_order_id: payment.orderId,
       p_square_payment_id: payment.paymentId,
       p_total_minor_units: payment.totalMinorUnits,
+      p_tip_minor_units: payment.tipMinorUnits,
       p_currency: payment.currency,
     } as never,
   );

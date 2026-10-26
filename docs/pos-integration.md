@@ -103,8 +103,7 @@ quietly wrong.
 ## Square
 
 Settings → Point of sale. Phase 1: connect the restaurant's Square account and import its menu.
-Phase 2: diners pay through Square. Square Terminal and cash (phase 3) and pay-when-ordering
-(phase 4) come next.
+Phase 2: diners pay through Square. Phase 3: Square Terminal and cash. Pay-when-ordering (phase 4) comes next.
 
 ### Two Square facts that shape everything
 
@@ -188,5 +187,33 @@ which needs the connection enabled; disconnecting or reconnecting switches it of
 - The switch refuses to turn on without the webhook settings, because a payment that can't settle
   would go through and never show as paid.
 
-Not through Square yet: **split bills** (hidden for Square restaurants), **refunds** (done in the
-Square Dashboard; Tableside says so), and staff card machines (phase 3).
+Not through Square yet: **split bills** (hidden for Square restaurants) and **refunds** (done in the
+Square Dashboard; Tableside says so).
+
+### In person: Square Terminal and cash (phase 3)
+
+**Pairing.** Settings → Point of sale → Square Terminals → _Get pairing code_ calls the Devices
+API (`CreateDeviceCode`, `TERMINAL_API`, the connected location). The owner signs in on the Terminal
+with the 6-character code, then presses _Check pairing_, which reads the code back and stores the
+`device_id` in `pos_devices` (members read, owners and managers write, never deleted). This needs
+the `DEVICE_CREDENTIAL_MANAGEMENT` scope, which connections made before phase 3 lack:
+`pos_credentials.scopes` records what was asked for, and the page asks those owners to reconnect.
+In Square's test mode the page also offers Square's simulated Terminals (`SQUARE_TEST_TERMINALS`),
+which complete checkouts up to $25 without hardware.
+
+**Taking a card.** Settle up and Take order show _Square Terminal_ (and hide Stripe's Tap to Pay)
+for Square restaurants with a paired Terminal. `start_square_terminal_payment()` (any member,
+amount from the orders, tip 0, `tip_on_device`) opens the payment; `in-person.ts` creates the
+itemised Square order, then a Terminal checkout for exactly its total with `order_id`,
+`show_itemized_cart`, Tableside's fee as `app_fee_money`, and the Terminal's tip screen on if the
+restaurant takes tips. The dialog asks Square every 3 seconds; when the checkout completes, the
+server reads the payment from Square and settles through `settle_square_payment()` (service role),
+which, for a Terminal payment, checks that the total minus Square's tip is the bill and records the
+tip. The webhook settles the same way as a backstop. Staff can cancel a checkout the guest hasn't
+paid; a cancelled payment is never settled later (`mismatch`, reported).
+
+**Cash.** After `record_in_person_payment()` records cash, `cash-actions.ts` copies it to Square in
+`after()`: the itemised order (tip as a service charge) and a `CASH` payment for its total, recorded
+with `attach_square_cash_sale()` so it's sent once. Best effort: the cash is recorded in Tableside
+regardless, and a failure is reported. Card-machine records ("paid on your own card machine") are not
+copied: Square would count them as external payments, which cost the app maker 1%.
