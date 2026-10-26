@@ -210,7 +210,15 @@ export async function disconnectSquare(
   const { error } = await loose(auth.context.supabase)
     .from("restaurant_pos_integrations")
     // Payments go with the connection: card payments fall back to Stripe.
-    .update({ is_enabled: false, payments_enabled: false })
+    // connected_at is what the settings page reads as "connected"; clearing
+    // it shows the Connect button again. The location goes too: a new
+    // connection (possibly another Square account) picks its own.
+    .update({
+      is_enabled: false,
+      payments_enabled: false,
+      connected_at: null,
+      external_location_id: null,
+    })
     .eq("restaurant_id", restaurantId);
   if (error) return { error: "Couldn't disconnect Square." };
   try {
