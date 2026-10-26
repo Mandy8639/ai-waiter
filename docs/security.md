@@ -1347,6 +1347,24 @@ off an open split's orders.
   spreads the remaining order total across the lines, so parts are never
   negative and add up exactly. `create_tab_split()` now uses it too.
 
+## End of day — (day closes)
+
+Migration `20261116090000_day_closes.sql`.
+
+- **Who:** owners and managers only. `preview_day_close()` and `close_day()`
+  check `current_restaurant_role()`, and `day_closes` is readable only by
+  them (RLS). Staff get `CLOSE_FORBIDDEN`; the page 404s for them.
+- **What's frozen:** `close_day()` covers the time since the previous close
+  (the first, since local midnight) under a row lock on the restaurant, so
+  two managers can't close the same period. The report from
+  `day_close_summary()` (internal, no grants) is stored in `summary`, so
+  later refunds or adjustments never change a closed day.
+- **Expected cash:** the float, plus cash taken (bills and tips), less cash
+  refunded, in the period. Reversed payments were never taken; comp payments
+  are not sales.
+- **Printing:** print job kind `day_close` (with `day_close_id`) through
+  `request_print()`, for owners and managers, to receipt printers.
+
 ## Split bill — (phase J)
 
 `20261002090000_split_bill.sql`. A diner splits their tab into **equal shares** or **one part per
