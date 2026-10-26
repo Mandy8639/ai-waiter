@@ -108,11 +108,6 @@ export async function sendToTerminal(args: {
   )?.[0];
   if (!payment) return { ok: false, error: "Couldn't start the payment." };
 
-  const cancel = () =>
-    supabase.rpc("cancel_square_terminal_payment", {
-      p_payment_id: payment.payment_id,
-    });
-
   try {
     const { data: lines, error: linesError } = await supabase.rpc(
       "payment_bill_lines",
@@ -121,53 +116,157 @@ export async function sendToTerminal(args: {
       },
     );
     if (linesError) throw linesError;
-    const requests = buildTerminalRequests({
-      paymentId: payment.payment_id,
-      locationId: await squareLocationFor(args.restaurantId),
-      currency: payment.currency,
-      amount: payment.amount,
-      lines: (lines ?? []) as BillLine[],
+    return await pushToTerminal({
+      supabase,
+      restaurantId: args.restaurantId,
+      restaurantName: args.restaurantName,
       deviceId: args.deviceId,
-      tippingEnabled: payment.tipping_enabled,
-      appFeeMinorUnits: await fee(
-        supabase,
-        payment.payment_id,
-        payment.amount,
-        payment.currency,
-      ),
-      note: `Tableside: ${args.restaurantName}`,
+      payment,
+      lines: (lines ?? []) as BillLine[],
     });
-    const squareOrderId = await createOrder(
-      args.restaurantId,
-      requests.createOrder,
-    );
-    const checkout = await createTerminalCheckout(
-      args.restaurantId,
-      requests.checkout(squareOrderId),
-    );
-    const { error: attachError } = await supabase.rpc(
-      "attach_square_terminal_checkout",
-      {
-        p_payment_id: payment.payment_id,
-        p_square_order_id: squareOrderId,
-        p_checkout_id: checkout.id,
-      },
-    );
-    if (attachError) {
-      // The checkout exists on the Terminal but couldn't be recorded, so
-      // it could never be settled: take it back off the device.
-      await cancelTerminalCheckout(args.restaurantId, checkout.id).catch(
-        () => undefined,
-      );
-      throw attachError;
-    }
-    return { ok: true, paymentId: payment.payment_id };
   } catch (e) {
     report(e, "square.terminal.send", { paymentId: payment.payment_id });
-    await cancel();
+    await supabase.rpc("cancel_square_terminal_payment", {
+      p_payment_id: payment.payment_id,
+    });
     return {
       ok: false,
       error: "Couldn't send the bill to the Terminal. Please try again.",
+    };
+  }
+}
+
+interface StartedTerminalPayment {
+  payment_id: string;
+  amount: string;
+  currency: string;
+  tipping_enabled: boolean;
+}
+
+/**
+ * Puts a started Terminal payment on the device: the itemised order in
+ * Square, then the checkout, then the link back to our payment. Throws on
+ * any failure; the caller cancels the payment.
+ */
+async function pushToTerminal(args: {
+  supabase: SupabaseClient;
+  restaurantId: string;
+  restaurantName: string;
+  deviceId: string;
+  payment: StartedTerminalPayment;
+  lines: BillLine[];
+}): Promise<{ ok: true; paymentId: string }> {
+  const { supabase, payment } = args;
+  const requests = buildTerminalRequests({
+    paymentId: payment.payment_id,
+    locationId: await squareLocationFor(args.restaurantId),
+    currency: payment.currency,
+    amount: payment.amount,
+    lines: args.lines,
+    deviceId: args.deviceId,
+    tippingEnabled: payment.tipping_enabled,
+    appFeeMinorUnits: await fee(
+      supabase,
+      payment.payment_id,
+      payment.amount,
+      payment.currency,
+    ),
+    note: `Tableside: ${args.restaurantName}`,
+  });
+  const squareOrderId = await createOrder(
+    args.restaurantId,
+    requests.createOrder,
+  );
+  const checkout = await createTerminalCheckout(
+    args.restaurantId,
+    requests.checkout(squareOrderId),
+  );
+  const { error: attachError } = await supabase.rpc(
+    "attach_square_terminal_checkout",
+    {
+      p_payment_id: payment.payment_id,
+      p_square_order_id: squareOrderId,
+      p_checkout_id: checkout.id,
+    },
+  );
+  if (attachError) {
+    // The checkout exists on the Terminal but couldn't be recorded, so
+    // it could never be settled: take it back off the device.
+    await cancelTerminalCheckout(args.restaurantId, checkout.id).catch(
+      () => undefined,
+    );
+    throw attachError;
+  }
+  return { ok: true, paymentId: payment.payment_id };
+}
+
+/**
+ * Some parts of a split bill (20261115090000) on a Square Terminal. The
+ * parts cover no orders until the whole split is paid, so Square gets one
+ * line for exactly what they come to ("Share 1 of 3", or the dishes),
+ * rather than the itemised orders.
+ */
+export async function sendSplitToTerminal(args: {
+  supabase: unknown;
+  restaurantId: string;
+  restaurantName: string;
+  tableLabel: string;
+  splitId: string;
+  unitIds: string[];
+  deviceId: string;
+}): Promise<{ ok: true; paymentId: string } | { ok: false; error: string }> {
+  const supabase = args.supabase as SupabaseClient;
+
+  const { data: device } = await supabase
+    .from("pos_devices")
+    .select("device_id")
+    .eq("restaurant_id", args.restaurantId)
+    .eq("device_id", args.deviceId)
+    .eq("status", "paired")
+    .maybeSingle();
+  if (!device)
+    return {
+      ok: false,
+      error: "That Terminal isn't paired with this restaurant.",
+    };
+
+  const { data, error } = await supabase.rpc("start_split_terminal_payment", {
+    p_split_id: args.splitId,
+    p_unit_ids: args.unitIds,
+  });
+  if (error) return { ok: false, error: parsePaymentError(error.message) };
+  const payment = (
+    data as (StartedTerminalPayment & { label: string | null })[] | null
+  )?.[0];
+  if (!payment) return { ok: false, error: "Couldn't start the payment." };
+
+  try {
+    return await pushToTerminal({
+      supabase,
+      restaurantId: args.restaurantId,
+      restaurantName: args.restaurantName,
+      deviceId: args.deviceId,
+      payment,
+      lines: [
+        {
+          order_id: payment.payment_id,
+          item_name: `${args.tableLabel}: ${payment.label ?? "Part of the bill"}`,
+          options: null,
+          quantity: 1,
+          unit_amount: payment.amount,
+          line_total: payment.amount,
+          order_total: payment.amount,
+        },
+      ],
+    });
+  } catch (e) {
+    report(e, "square.terminal.split", { paymentId: payment.payment_id });
+    await supabase.rpc("cancel_square_terminal_payment", {
+      p_payment_id: payment.payment_id,
+    });
+    return {
+      ok: false,
+      error: "Couldn't send that part to the Terminal. Please try again.",
     };
   }
 }

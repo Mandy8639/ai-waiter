@@ -266,6 +266,47 @@ export function receiptDoc(
   return { lines, openDrawer: options.openDrawer, cut: true };
 }
 
+/**
+ * A receipt for some parts of a split bill (20261115090000): the parts
+ * cover no orders until the whole bill is paid, so this lists what this
+ * guest paid for rather than the dishes.
+ */
+export function partReceiptDoc(
+  parts: { label: string; amount: number }[],
+  payment: PrintPayment,
+  options: {
+    restaurant: PrintRestaurant;
+    placeLabel?: string;
+    openDrawer?: boolean;
+  },
+): PrintDoc {
+  const { restaurant } = options;
+  const money = (v: number) => formatMoney(v, payment.currency);
+  const lines: DocLine[] = [
+    ...header(restaurant),
+    text("RECEIPT", { align: "center", bold: true }),
+    text([options.placeLabel, "Part of the bill"].filter(Boolean).join(" · "), {
+      align: "center",
+    }),
+    text(ticketTime(payment.paidAt, restaurant.timeZone), { align: "center" }),
+    { kind: "rule" },
+  ];
+  for (const part of parts)
+    lines.push({ kind: "pair", left: part.label, right: money(part.amount) });
+  lines.push({ kind: "rule" });
+  if (payment.tip > 0)
+    lines.push({ kind: "pair", left: "Tip", right: money(payment.tip) });
+  lines.push({
+    kind: "pair",
+    left: `Paid · ${METHOD_LABEL[payment.method]}`,
+    right: money(payment.amount + payment.tip),
+    bold: true,
+  });
+  lines.push({ kind: "feed" });
+  lines.push(text("Thank you!", { align: "center" }));
+  return { lines, openDrawer: options.openDrawer, cut: true };
+}
+
 /** Opens the cash drawer and prints nothing. */
 export function drawerDoc(): PrintDoc {
   return { lines: [], openDrawer: true, cut: false };

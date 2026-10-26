@@ -15,6 +15,7 @@ import {
   drawerDoc,
   kitchenTicketDoc,
   receiptDoc,
+  partReceiptDoc,
   testDoc,
   type PrintOrder,
   type PrintPayment,
@@ -444,7 +445,7 @@ async function buildDoc(
         client
           .from("order_payments")
           .select(
-            "status, method, card_present, amount, tip_amount, currency, paid_at",
+            "status, method, card_present, amount, tip_amount, currency, paid_at, split_id",
           )
           .eq("id", job.payment_id)
           .eq("restaurant_id", printer.restaurant_id)
@@ -462,14 +463,42 @@ async function buildDoc(
         tip_amount: number | string;
         currency: string;
         paid_at: string | null;
+        split_id: string | null;
       } | null;
       if (!payment || payment.status !== "succeeded") return null;
+      if (payment.split_id) {
+        // Part of a split bill (20261115090000): what this guest paid for,
+        // not the whole table's dishes, even on the last part (whose
+        // payment then covers every order).
+        const { data: partRows } = await client
+          .from("tab_split_units")
+          .select("label, amount, position")
+          .eq("payment_id", job.payment_id)
+          .order("position");
+        const parts = (partRows ?? []) as {
+          label: string;
+          amount: number | string;
+        }[];
+        if (parts.length === 0) return job.open_drawer ? drawerDoc() : null;
+        return partReceiptDoc(
+          parts.map((p) => ({ label: p.label, amount: Number(p.amount) })),
+          {
+            method: payment.method,
+            cardPresent: payment.card_present,
+            amount: Number(payment.amount),
+            tip: Number(payment.tip_amount),
+            currency: payment.currency,
+            paidAt: payment.paid_at ?? now.toISOString(),
+          },
+          { restaurant, openDrawer: job.open_drawer },
+        );
+      }
       const orders = await loadOrders(
         printer.restaurant_id,
         ((links ?? []) as { order_id: string }[]).map((l) => l.order_id),
         restaurant.timeZone,
       );
-      if (orders.length === 0) return null;
+      if (orders.length === 0) return job.open_drawer ? drawerDoc() : null;
       return receiptDoc(
         orders,
         {

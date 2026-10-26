@@ -22,6 +22,8 @@ import { getPrintCapabilities } from "@/lib/printing/capabilities";
 import { PrintButton } from "@/components/printing/print-button";
 import { AdjustBillDialog } from "@/components/payments/adjust-bill-dialog";
 import { SettleUpSync } from "@/components/payments/settle-up-sync";
+import { SplitBillDialog } from "@/components/payments/split-bill-dialog";
+import { SplitPanel } from "@/components/payments/split-panel";
 
 export const metadata = {
   title: "Settle up — Tableside",
@@ -70,7 +72,7 @@ export default async function CheckoutPage() {
   };
   const [
     { data: settings },
-    { recent: tables, older },
+    { recent: tables, older, splits },
     { data: cardProvider },
     { data: devices },
     print,
@@ -109,60 +111,89 @@ export default async function CheckoutPage() {
   const canAdjust =
     restaurant.role === "owner" || restaurant.role === "manager";
 
-  const card = (table: UnpaidTable, showDates: boolean) => (
-    <Card key={table.tableId}>
-      <CardContent className="flex flex-col gap-3 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="font-medium">{table.tableLabel}</p>
-            <p className="text-muted-foreground text-xs">
-              {table.orders.length}{" "}
-              {table.orders.length === 1 ? "order" : "orders"}
+  const card = (table: UnpaidTable, showDates: boolean) => {
+    // A split (staff's, or a diner's on their phone) holds its orders until
+    // every part is paid; only the table's other orders can be paid as usual.
+    const split = splits.find((s) =>
+      table.orders.some((o) => s.orderIds.includes(o.id)),
+    );
+    const payable = split
+      ? table.orders.filter((o) => !split.orderIds.includes(o.id))
+      : table.orders;
+    return (
+      <Card key={table.tableId}>
+        <CardContent className="flex flex-col gap-3 p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="font-medium">{table.tableLabel}</p>
+              <p className="text-muted-foreground text-xs">
+                {table.orders.length}{" "}
+                {table.orders.length === 1 ? "order" : "orders"}
+              </p>
+            </div>
+            <p className="text-lg font-semibold tabular-nums">
+              {formatMoney(table.total, table.currency)}
             </p>
           </div>
-          <p className="text-lg font-semibold tabular-nums">
-            {formatMoney(table.total, table.currency)}
-          </p>
-        </div>
 
-        <ul className="flex flex-col gap-1 text-sm">
-          {table.orders.map((order) => (
-            <li
-              key={order.id}
-              className="flex items-center justify-between gap-2"
-            >
-              <span className="flex items-center gap-2">
-                <span className="font-medium">#{order.orderNumber}</span>
-                <Badge variant="outline">{order.status}</Badge>
-                {showDates && (
-                  <span className="text-muted-foreground text-xs">
-                    {new Date(order.createdAt).toLocaleDateString("en-US", {
-                      timeZone: restaurant.timezone,
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </span>
-                )}
-              </span>
-              <span className="tabular-nums">
-                {order.discountTotal > 0 && (
-                  <span className="text-muted-foreground mr-1 text-xs">
-                    −{formatMoney(order.discountTotal, order.currency)}
-                  </span>
-                )}
-                {formatMoney(order.total, order.currency)}
-              </span>
-            </li>
-          ))}
-        </ul>
+          <ul className="flex flex-col gap-1 text-sm">
+            {table.orders.map((order) => (
+              <li
+                key={order.id}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="font-medium">#{order.orderNumber}</span>
+                  <Badge variant="outline">{order.status}</Badge>
+                  {showDates && (
+                    <span className="text-muted-foreground text-xs">
+                      {new Date(order.createdAt).toLocaleDateString("en-US", {
+                        timeZone: restaurant.timezone,
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  )}
+                </span>
+                <span className="tabular-nums">
+                  {order.discountTotal > 0 && (
+                    <span className="text-muted-foreground mr-1 text-xs">
+                      −{formatMoney(order.discountTotal, order.currency)}
+                    </span>
+                  )}
+                  {formatMoney(order.total, order.currency)}
+                </span>
+              </li>
+            ))}
+          </ul>
 
-        {(print.receipt || canAdjust) && (
+          {split && (
+            <SplitPanel
+              restaurantId={restaurant.id}
+              tableLabel={table.tableLabel}
+              split={split}
+              acceptsCash={acceptsCash}
+              acceptsCardTerminal={acceptsCardTerminal}
+              terminals={acceptsCard ? terminals : []}
+              tippingEnabled={tippingEnabled}
+            />
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
-            {canAdjust && (
+            {canAdjust && !split && (
               <AdjustBillDialog
                 restaurantId={restaurant.id}
                 tableLabel={table.tableLabel}
                 orders={table.orders}
+                currency={table.currency}
+              />
+            )}
+            {!split && table.total > 0 && (
+              <SplitBillDialog
+                restaurantId={restaurant.id}
+                tableLabel={table.tableLabel}
+                orderIds={table.orders.map((o) => o.id)}
+                total={table.total}
                 currency={table.currency}
               />
             )}
@@ -175,53 +206,54 @@ export default async function CheckoutPage() {
               />
             )}
           </div>
-        )}
 
-        {(acceptsCash || acceptsCardTerminal || acceptsCard) && (
-          <div className="flex flex-wrap gap-2">
-            {acceptsCard && terminals.length > 0 && (
-              <SquareTerminalDialog
-                restaurantId={restaurant.id}
-                tableLabel={table.tableLabel}
-                orders={table.orders}
-                currency={table.currency}
-                terminals={terminals}
-              />
+          {payable.length > 0 &&
+            (acceptsCash || acceptsCardTerminal || acceptsCard) && (
+              <div className="flex flex-wrap gap-2">
+                {acceptsCard && terminals.length > 0 && (
+                  <SquareTerminalDialog
+                    restaurantId={restaurant.id}
+                    tableLabel={table.tableLabel}
+                    orders={payable}
+                    currency={table.currency}
+                    terminals={terminals}
+                  />
+                )}
+                {acceptsCard && !paysThroughSquare && (
+                  <TapToPayDialog
+                    restaurantId={restaurant.id}
+                    tableLabel={table.tableLabel}
+                    orders={payable}
+                    currency={table.currency}
+                    tippingEnabled={tippingEnabled}
+                  />
+                )}
+                {acceptsCash && (
+                  <CashPaymentDialog
+                    method="cash"
+                    recordAction={recordCashPayment}
+                    tableLabel={table.tableLabel}
+                    orders={payable}
+                    currency={table.currency}
+                    tippingEnabled={tippingEnabled}
+                  />
+                )}
+                {acceptsCardTerminal && (
+                  <CashPaymentDialog
+                    method="card_terminal"
+                    recordAction={recordCardTerminalPayment}
+                    tableLabel={table.tableLabel}
+                    orders={payable}
+                    currency={table.currency}
+                    tippingEnabled={tippingEnabled}
+                  />
+                )}
+              </div>
             )}
-            {acceptsCard && !paysThroughSquare && (
-              <TapToPayDialog
-                restaurantId={restaurant.id}
-                tableLabel={table.tableLabel}
-                orders={table.orders}
-                currency={table.currency}
-                tippingEnabled={tippingEnabled}
-              />
-            )}
-            {acceptsCash && (
-              <CashPaymentDialog
-                method="cash"
-                recordAction={recordCashPayment}
-                tableLabel={table.tableLabel}
-                orders={table.orders}
-                currency={table.currency}
-                tippingEnabled={tippingEnabled}
-              />
-            )}
-            {acceptsCardTerminal && (
-              <CashPaymentDialog
-                method="card_terminal"
-                recordAction={recordCardTerminalPayment}
-                tableLabel={table.tableLabel}
-                orders={table.orders}
-                currency={table.currency}
-                tippingEnabled={tippingEnabled}
-              />
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-6">
