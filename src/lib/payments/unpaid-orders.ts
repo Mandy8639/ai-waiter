@@ -80,11 +80,33 @@ export interface UnpaidTable {
   currency: string;
 }
 
+export interface SplitPart {
+  id: string;
+  label: string;
+  amount: number;
+  status: "open" | "pending" | "paid";
+}
+
+/** A bill being paid in parts (20261002090000, 20261115090000). */
+export interface OpenSplit {
+  id: string;
+  mode: "equal" | "by_dish";
+  currency: string;
+  total: number;
+  paidTotal: number;
+  /** Made by staff on Settle up, rather than by a diner on their phone. */
+  byStaff: boolean;
+  orderIds: string[];
+  parts: SplitPart[];
+}
+
 export interface SettleUpData {
   /** Placed in the last day. */
   recent: UnpaidTable[];
   /** Placed one to 30 days ago and still unpaid. */
   older: UnpaidTable[];
+  /** Every open split; its orders stay unpaid until the last part is. */
+  splits: OpenSplit[];
 }
 
 interface OrderRow {
@@ -117,13 +139,49 @@ export async function getUnpaidOrdersByTable(
 
   // settle_up_orders() (20261113090000, newer than database.types.ts)
   // returns only orders no succeeded payment covers.
-  const { data, error } = await rpc("settle_up_orders", {
-    p_restaurant_id: restaurantId,
-    p_since: new Date(now - OLDER_DAYS * 86_400_000).toISOString(),
-  });
+  const [{ data, error }, { data: splitData, error: splitError }] =
+    await Promise.all([
+      rpc("settle_up_orders", {
+        p_restaurant_id: restaurantId,
+        p_since: new Date(now - OLDER_DAYS * 86_400_000).toISOString(),
+      }),
+      rpc("settle_up_splits", { p_restaurant_id: restaurantId }),
+    ]);
   if (error) throw error;
+  if (splitError) throw splitError;
+  const splits: OpenSplit[] = (
+    (splitData ?? []) as {
+      id: string;
+      mode: OpenSplit["mode"];
+      currency: string;
+      total: number | string;
+      paid_total: number | string;
+      by_staff: boolean;
+      order_ids: string[];
+      units: {
+        id: string;
+        label: string;
+        amount: number | string;
+        status: SplitPart["status"];
+      }[];
+    }[]
+  ).map((x) => ({
+    id: x.id,
+    mode: x.mode,
+    currency: x.currency,
+    total: Number(x.total),
+    paidTotal: Number(x.paid_total),
+    byStaff: x.by_staff,
+    orderIds: x.order_ids,
+    parts: x.units.map((u) => ({
+      id: u.id,
+      label: u.label,
+      amount: Number(u.amount),
+      status: u.status,
+    })),
+  }));
   const orders = (data ?? []) as OrderRow[];
-  if (orders.length === 0) return { recent: [], older: [] };
+  if (orders.length === 0) return { recent: [], older: [], splits };
 
   const orderIds = orders.map((o) => o.id);
 
@@ -280,5 +338,6 @@ export async function getUnpaidOrdersByTable(
     older: group(
       orders.filter((o) => new Date(o.created_at).getTime() <= recentSince),
     ),
+    splits,
   };
 }

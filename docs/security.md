@@ -1316,6 +1316,37 @@ goes back:
   through Tableside. Reversal stays, for a payment recorded by mistake.
 - **Comp** payments charged nothing: `REFUND_NOTHING_CHARGED`.
 
+## Staff splits on Settle up — (Settle up, batch two)
+
+Migration `20261115090000_staff_splits.sql` reuses the Phase J engine
+(below) whole: the same tables, the exact allocation, no order counted
+paid until every part is, `follow_split_payment()` settling parts and
+writing coverage, and the payment_orders guard keeping every other payment
+off an open split's orders.
+
+- **Who:** front of house (owner, manager, staff), checked in every function
+  through `current_restaurant_role()` (`assert_front_of_house()`). Kitchen
+  accounts, diners and outsiders are refused.
+- **Making one:** `create_staff_split()` takes unpaid, uncancelled orders of
+  one restaurant with no payment in progress and no open split. The split
+  has no diner session (`customer_session_id` is now nullable) and records
+  `created_by`. Its share token is never handed out.
+- **Paying parts:** `pay_split_in_person()` (cash or card machine, gated on
+  the restaurant's settings and tipping) inserts the payment pending and then
+  settles it, so the AFTER UPDATE trigger runs. `start_split_terminal_payment()`
+  creates an ordinary pending Terminal payment for the parts (Square
+  restaurants only); attach, check, cancel and `settle_square_payment()` are
+  unchanged. Parts are claimed under row locks (`claim_split_units()`), so
+  two payers can't take the same part.
+- **Seeing and cancelling:** `settle_up_splits()` lists a restaurant's open
+  splits to its members, a diner's phone split included, so staff can take
+  the last part in person. `cancel_staff_split()` cancels only a split with
+  no part paid or in progress.
+- **By-dish parts after adjustments:** `build_split_units()` prices each
+  line at what's still charged for it (voided and comped units out) and
+  spreads the remaining order total across the lines, so parts are never
+  negative and add up exactly. `create_tab_split()` now uses it too.
+
 ## Split bill — (phase J)
 
 `20261002090000_split_bill.sql`. A diner splits their tab into **equal shares** or **one part per

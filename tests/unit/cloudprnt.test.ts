@@ -18,6 +18,7 @@ import {
 } from "@/lib/printing/star-commands";
 import {
   billDoc,
+  partReceiptDoc,
   kitchenTicketDoc,
   receiptDoc,
   testDoc,
@@ -374,6 +375,28 @@ describe("what goes on paper", () => {
     expect(
       docToText(kitchenTicketDoc(adjusted, { restaurant })!, 42),
     ).toContain("1 x Chicken Biryani");
+  });
+
+  it("prints what one guest paid for when the bill was split", () => {
+    const doc = partReceiptDoc(
+      [{ label: "Share 1 of 3", amount: 11.8 }],
+      {
+        method: "cash",
+        cardPresent: false,
+        amount: 11.8,
+        tip: 2,
+        currency: "USD",
+        paidAt: "2026-10-22T23:45:00Z",
+      },
+      { restaurant, openDrawer: true },
+    );
+    const lines = docToText(doc, 48);
+    const row = (left: string, right: string) =>
+      lines.some((l) => l.startsWith(left) && l.endsWith(right));
+    expect(doc.openDrawer).toBe(true);
+    expect(lines.some((l) => l.includes("Part of the bill"))).toBe(true);
+    expect(row("Share 1 of 3", "$11.80")).toBe(true);
+    expect(row("Paid · Cash", "$13.80")).toBe(true);
   });
 
   it("prints a receipt with the tip and how it was paid, opening the drawer for cash", () => {
