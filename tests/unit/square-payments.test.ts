@@ -284,7 +284,7 @@ describe("Square Terminal and cash (phase 3)", () => {
       skip_receipt_screen: false,
       tip_settings: { allow_tipping: true },
     });
-    expect(r.checkout("SQORDER").idempotency_key).toBe("tableside-terminal-p1");
+    expect(r.checkout("SQORDER").idempotency_key).toBe("terminal-p1");
   });
 
   it("turns Terminal tipping off when the restaurant doesn't take tips", async () => {
@@ -327,7 +327,7 @@ describe("Square Terminal and cash (phase 3)", () => {
       amount: 1289,
       currency: "USD",
     });
-    expect(p.idempotency_key).toBe("tableside-cash-p2");
+    expect(p.idempotency_key).toBe("cash-p2");
   });
 
   it("reads a Terminal tip off Square's payment, and treats a missing one as none", () => {
@@ -372,5 +372,71 @@ describe("Square Terminal and cash (phase 3)", () => {
     expect(SQUARE_TEST_TERMINALS.map((t) => t.deviceId)).toContain(
       "22cd266c-6246-4c06-9983-67f0c26346b0",
     );
+  });
+});
+
+describe("Square idempotency key limits", () => {
+  // Found live: a 51-character key made Square reject every cash copy
+  // ("VALUE_TOO_LONG: Field must not be greater than 45 length").
+  const uuid = "0e7b26e0-4629-4504-8cf0-c77b8a8fe3e2";
+  const lines = [
+    {
+      order_id: "o1",
+      item_name: "Samosa (2)",
+      options: null,
+      quantity: 1,
+      unit_amount: "6.50",
+      line_total: "6.50",
+      order_total: "6.50",
+    },
+  ];
+
+  it("keeps every key within Square's limit for its endpoint", async () => {
+    const {
+      buildCashSaleRequests,
+      buildTerminalRequests,
+      buildSquarePaymentLink,
+    } = await import("@/lib/pos/square/checkout-core");
+    const cash = buildCashSaleRequests({
+      paymentId: uuid,
+      locationId: "L",
+      currency: "USD",
+      amount: "6.50",
+      tipAmount: "0",
+      lines,
+    });
+    expect(cash.payment("O").idempotency_key.length).toBeLessThanOrEqual(45); // CreatePayment
+    expect(cash.createOrder.idempotency_key.length).toBeLessThanOrEqual(192); // CreateOrder
+    const terminal = buildTerminalRequests({
+      paymentId: uuid,
+      locationId: "L",
+      currency: "USD",
+      amount: "6.50",
+      lines,
+      deviceId: "D",
+      tippingEnabled: true,
+      appFeeMinorUnits: 0,
+      note: "n",
+    });
+    expect(terminal.checkout("O").idempotency_key.length).toBeLessThanOrEqual(
+      64,
+    ); // CreateTerminalCheckout
+    expect(terminal.createOrder.idempotency_key.length).toBeLessThanOrEqual(
+      192,
+    );
+    const link = buildSquarePaymentLink({
+      paymentId: uuid,
+      locationId: "L",
+      currency: "USD",
+      amount: "6.50",
+      tipAmount: "0",
+      lines,
+      appFeeMinorUnits: 0,
+      redirectUrl: "https://x",
+      note: "n",
+    });
+    expect(link.idempotency_key.length).toBeLessThanOrEqual(192); // CreatePaymentLink
+    // reference_id is capped at 40 on orders and payments.
+    expect(cash.payment("O").reference_id.length).toBeLessThanOrEqual(40);
   });
 });

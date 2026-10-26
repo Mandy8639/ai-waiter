@@ -87,9 +87,10 @@ export function SquareTerminalDialog({
       if (!result.ok) {
         setError(result.error);
       } else if (result.outcome.state === "paid") {
+        // Not refreshed yet: on Settle up the paid table would drop out of
+        // the list and take this confirmation with it. Done refreshes.
         setPaidTip(result.outcome.tip);
         onPaid?.();
-        router.refresh();
         return;
       } else if (result.outcome.state === "cancelled") {
         setPaymentId(null);
@@ -137,6 +138,7 @@ export function SquareTerminalDialog({
       onOpenChange={(next) => {
         if (waiting || sending) return; // finish or cancel on the Terminal first
         if (!next) {
+          if (paidTip !== null) router.refresh();
           setSelected(new Set(orders.map((o) => o.id)));
           setPaymentId(null);
           setPaidTip(null);
@@ -237,7 +239,13 @@ export function SquareTerminalDialog({
 
         <DialogFooter>
           {paidTip !== null ? (
-            <Button type="button" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                router.refresh();
+              }}
+            >
               Done
             </Button>
           ) : waiting ? (
