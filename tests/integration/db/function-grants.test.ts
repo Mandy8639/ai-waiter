@@ -117,6 +117,7 @@ const SIGNED_IN_ONLY = [
   "split_order_into_tickets",
   "start_order_payment",
   "start_refund",
+  "attach_refund_square_id",
   "submit_order",
   "sync_restaurant_payment_account_status",
   "transition_reservation_status",

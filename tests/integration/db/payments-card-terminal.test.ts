@@ -219,21 +219,22 @@ describe("card-machine payments", () => {
       ).rejects.toThrow(/PAYMENT_FORBIDDEN/);
     });
 
-    it("is never refunded through Stripe", async () => {
+    it("is refunded on the machine and only recorded here, never through Stripe", async () => {
       // The money is on the restaurant's machine; a refund happens there.
       const f = await fullOrderFixture(db);
       await settings(db, f.restaurantId, { accept_card_terminal: true });
       const id = await record(db, f.staffUserId, [f.orderId], "card_terminal");
 
-      await expect(
-        db.asUser(f.staffUserId, (c) =>
-          c.query("select * from public.start_refund($1, $2, $3);", [
-            id,
-            null,
-            "dish returned",
-          ]),
+      const { rows } = await db.asUser(f.staffUserId, (c) =>
+        c.query<{ provider: string; stripe_payment_intent_id: string | null }>(
+          "select provider, stripe_payment_intent_id from public.start_refund($1, $2, $3);",
+          [id, null, "dish returned"],
         ),
-      ).rejects.toThrow(/REFUND_NOT_CARD/);
+      );
+      expect(rows[0]).toEqual({
+        provider: "none",
+        stripe_payment_intent_id: null,
+      });
     });
   });
 

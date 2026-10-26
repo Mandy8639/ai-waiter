@@ -1296,6 +1296,26 @@ Migration `20261113090000_order_adjustments.sql`.
 - **Audit:** undone adjustments are kept (`removed_at`, `removed_by`), with
   who applied each one and why.
 
+## Refunds for Square, cash and card machine — (Settle up, batch two)
+
+Migration `20261114090000_square_and_cash_refunds.sql`. `start_refund()`
+keeps every rule it had (owner/manager via `current_restaurant_role()`,
+settled payments only, a reason, never more than was charged, with the
+same `enforce_refund_within_payment()` trigger) and now says where the money
+goes back:
+
+- **Stripe** card payments: unchanged.
+- **Square** card payments (`square_payment_id`, no Stripe charge): sent with
+  Square's Refunds API on the restaurant's own token
+  (`src/lib/pos/square/refunds.ts`, a pinned importer of `api.ts`), keyed on
+  our refund row so a retry can't refund twice. Tableside's fee goes back in
+  proportion (`app_fee_money`, rounded down). `attach_refund_square_id()`
+  records Square's answer; pending refunds are checked again when Reports
+  loads. A refusal or network failure cancels the pending row.
+- **Cash and card machine**: recorded as done at once; no money moves
+  through Tableside. Reversal stays, for a payment recorded by mistake.
+- **Comp** payments charged nothing: `REFUND_NOTHING_CHARGED`.
+
 ## Split bill — (phase J)
 
 `20261002090000_split_bill.sql`. A diner splits their tab into **equal shares** or **one part per

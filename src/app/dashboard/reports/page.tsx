@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/orders/format";
 import { RefundDialog } from "@/components/reports/refund-dialog";
 import { ReverseCashDialog } from "@/components/reports/reverse-cash-dialog";
 import { refundPayment } from "@/lib/payments/refund-actions";
+import { checkPendingSquareRefunds } from "@/lib/pos/square/refunds";
 import { reverseCashPayment } from "@/lib/payments/cash-actions";
 import { formatReservationTime } from "@/lib/reservations/timezone";
 import { getDishFunnel, getReportData } from "@/lib/reports/queries";
@@ -57,6 +58,13 @@ export default async function ReportsPage({
     .eq("id", restaurant.id)
     .maybeSingle();
   const currency = row?.currency ?? "USD";
+
+  // Square settles most refunds at once and the rest a little later; ask
+  // about any still pending so this page shows where they ended up.
+  await checkPendingSquareRefunds(
+    supabase as unknown as Parameters<typeof checkPendingSquareRefunds>[0],
+    restaurant.id,
+  );
 
   const [{ summary, byMethod, payments, items }, funnel] = await Promise.all([
     getReportData(restaurant.id, range),
@@ -346,13 +354,15 @@ export default async function ReportsPage({
                       )}
                     </td>
                     <td className="py-2 text-right">
-                      {/* Only a settled card payment with money left can be
-                          refunded. Cash is reversed instead (below), and an
-                          attempt that never completed took nothing to give
-                          back — start_refund() refuses both anyway, so this
-                          only avoids offering a button that cannot work. */}
+                      {/* A settled payment with money left can be refunded:
+                          a card through Stripe or Square, cash and card
+                          machine recorded as handed back (20261114090000).
+                          An attempt that never completed took nothing, and
+                          a comp payment charged nothing — start_refund()
+                          refuses both anyway, so this only avoids offering
+                          a button that cannot work. */}
                       {p.status === "succeeded" &&
-                        p.method === "card" &&
+                        (p.method === "card" || isInPersonMethod(p.method)) &&
                         Number(p.totalAmount) - Number(p.refunded) > 0 && (
                           <RefundDialog
                             refundAction={refundPayment.bind(null, p.paymentId)}
@@ -365,15 +375,18 @@ export default async function ReportsPage({
                               Number(p.totalAmount) - Number(p.refunded),
                             )}
                             currency={p.currency}
+                            method={
+                              isInPersonMethod(p.method) ? p.method : "card"
+                            }
                           />
                         )}
-                      {/* Cash and card-machine payments are reversed, not
-                          refunded: no money moves here, the record simply
-                          says it was never taken (a card-machine refund
-                          happens on the machine). Only a settled one
-                          qualifies — a reversed one is already done, and
+                      {/* Cash and card-machine payments can also be
+                          reversed: for one recorded by mistake, the record
+                          says it was never taken (money handed back after a
+                          real payment is a refund, above). Only a settled
+                          one qualifies — a reversed one is already done, and
                           reverse_cash_payment() refuses both that and any
-                          Stripe card payment regardless. */}
+                          card payment regardless. */}
                       {p.status === "succeeded" &&
                         isInPersonMethod(p.method) && (
                           <ReverseCashDialog

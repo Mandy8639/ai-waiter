@@ -42,8 +42,11 @@ interface RefundRow {
   refund_id: string;
   amount: string;
   currency: string;
+  provider: string;
   stripe_payment_intent_id: string;
   stripe_account_id: string;
+  square_payment_id: string | null;
+  payment_total: string;
 }
 
 function startRefund(
@@ -217,9 +220,8 @@ describe("refunds", () => {
   });
 
   describe("what can be refunded", () => {
-    it("refuses a cash payment — that is a reversal", async () => {
+    it("records part of a cash payment handed back, at once, with nothing to send", async () => {
       const f = await fullOrderFixture(db);
-      await withAccount(db, f.restaurantId);
       const { rows } = await db.admin.query<{ id: string }>(
         `insert into public.order_payments
            (restaurant_id, status, method, amount, currency, paid_at)
@@ -227,9 +229,66 @@ describe("refunds", () => {
         [f.restaurantId],
       );
 
+      const [refund] = await startRefund(db, f.staffUserId, rows[0].id, 4);
+      expect(refund.provider).toBe("none");
+      const { rows: stored } = await db.admin.query<{
+        status: string;
+        refunded_at: string | null;
+      }>(
+        "select status, refunded_at from public.payment_refunds where id = $1;",
+        [refund.refund_id],
+      );
+      expect(stored[0].status).toBe("succeeded");
+      expect(stored[0].refunded_at).not.toBeNull();
+      // Never more than was taken.
       await expect(
-        startRefund(db, f.staffUserId, rows[0].id, 5),
-      ).rejects.toThrow(/REFUND_NOT_CARD/);
+        startRefund(db, f.staffUserId, rows[0].id, 6.01),
+      ).rejects.toThrow(/REFUND_EXCEEDS_PAYMENT/);
+    });
+
+    it("sends a Square card payment's refund to Square, and settles it on Square's word", async () => {
+      const f = await fullOrderFixture(db);
+      const { rows } = await db.admin.query<{ id: string }>(
+        `insert into public.order_payments
+           (restaurant_id, status, method, amount, currency, paid_at, square_payment_id)
+         values ($1, 'succeeded', 'card', 20, 'USD', now(), 'SQPAY1') returning id;`,
+        [f.restaurantId],
+      );
+
+      const [refund] = await startRefund(db, f.staffUserId, rows[0].id, 5);
+      expect(refund).toMatchObject({
+        provider: "square",
+        square_payment_id: "SQPAY1",
+        payment_total: "20.00",
+      });
+      const attach = (status: string, id = "SQREF1") =>
+        db
+          .asUser(f.staffUserId, (c) =>
+            c.query<{ s: string }>(
+              "select public.attach_refund_square_id($1, $2, $3) as s;",
+              [refund.refund_id, id, status],
+            ),
+          )
+          .then((r) => r.rows[0].s);
+      expect(await attach("PENDING")).toBe("pending");
+      await expect(attach("COMPLETED", "SQREF2")).rejects.toThrow(
+        /REFUND_ALREADY_LINKED/,
+      );
+      expect(await attach("COMPLETED")).toBe("succeeded");
+      expect(await attach("FAILED")).toBe("succeeded"); // settled stays settled
+    });
+
+    it("refuses a comp payment: nothing was charged", async () => {
+      const f = await fullOrderFixture(db);
+      const { rows } = await db.admin.query<{ id: string }>(
+        `insert into public.order_payments
+           (restaurant_id, status, method, amount, currency, paid_at)
+         values ($1, 'succeeded', 'comp', 0, 'USD', now()) returning id;`,
+        [f.restaurantId],
+      );
+      await expect(
+        startRefund(db, f.staffUserId, rows[0].id, null),
+      ).rejects.toThrow(/REFUND_NOTHING_CHARGED/);
     });
 
     it("refuses a payment that never settled", async () => {

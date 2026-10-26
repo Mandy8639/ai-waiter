@@ -439,6 +439,8 @@ describe("who may use the service-key Square token store", () => {
         "lib/pos/square/checkout.ts",
         // Phase 3: Terminal payments and cash copies, on a member's request.
         "lib/pos/square/in-person.ts",
+        // Refunds to a Square card, after start_refund() checked the owner or manager.
+        "lib/pos/square/refunds.ts",
       ].sort(),
     );
   });
