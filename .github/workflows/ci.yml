@@ -3,9 +3,10 @@ name: CI
 # Runs the same five checks documented in
 # docs/development.md#before-opening-a-pr, on every push.
 #
-# Gated on pushes to every branch, not just pull requests: this repo has a
-# history of merging straight to main, and a check that only runs on PRs would
-# leave exactly those merges unprotected.
+# Runs on pull requests, and on pushes to main so a merge straight to main is
+# still checked. Not on pushes to every branch as well: a PR branch would then
+# run twice per push (push + pull_request), doubling the Actions minutes this
+# private repo's free allowance covers. Minutes ran out on 2026-10-26.
 #
 # No secrets are required, by design:
 #   - The test suite builds its own throwaway Postgres per test file
@@ -22,7 +23,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
