@@ -15,6 +15,7 @@ import {
   getActiveOrdersForRestaurant,
   getKitchenStations,
 } from "@/lib/orders/kitchen";
+import { getPrintCapabilities } from "@/lib/printing/capabilities";
 
 export const metadata = {
   title: "Kitchen — Tableside",
@@ -31,10 +32,11 @@ export const metadata = {
  */
 export default async function KitchenPage() {
   const { restaurant } = await requireCurrentRestaurant();
-  const [orders, stations, busy] = await Promise.all([
+  const [orders, stations, busy, print] = await Promise.all([
     getActiveOrdersForRestaurant(restaurant.id),
     getKitchenStations(restaurant.id),
     getKitchenStatusRow(restaurant.id),
+    getPrintCapabilities(restaurant.id),
   ]);
   const canManageStations =
     restaurant.role === "owner" || restaurant.role === "manager";
@@ -56,6 +58,7 @@ export default async function KitchenPage() {
           role={restaurant.role}
           initialOrders={orders}
           stations={stations}
+          kitchenPrinter={print.kitchen}
           toolbar={
             <>
               <BusyModeButton />

@@ -15,6 +15,8 @@ import {
   recordCashPayment,
 } from "@/lib/payments/cash-actions";
 import { getUnpaidOrdersByTable } from "@/lib/payments/unpaid-orders";
+import { getPrintCapabilities } from "@/lib/printing/capabilities";
+import { PrintButton } from "@/components/printing/print-button";
 
 export const metadata = {
   title: "Settle up — Tableside",
@@ -61,6 +63,7 @@ export default async function CheckoutPage() {
     tables,
     { data: cardProvider },
     { data: devices },
+    print,
   ] = await Promise.all([
     supabase
       .from("restaurant_settings")
@@ -74,6 +77,7 @@ export default async function CheckoutPage() {
       .select("device_id, name")
       .eq("restaurant_id", restaurant.id)
       .eq("status", "paired"),
+    getPrintCapabilities(restaurant.id),
   ]);
   // Square restaurants take cards on a paired Square Terminal; Tap to Pay
   // is Stripe's and stays off for them.
@@ -101,6 +105,13 @@ export default async function CheckoutPage() {
             Orders at {restaurant.name} that haven&apos;t been paid for yet.
           </p>
         </div>
+        {print.drawer && (
+          <PrintButton
+            restaurantId={restaurant.id}
+            kind="drawer"
+            label="Open drawer"
+          />
+        )}
         {tables.length > 0 && (
           <div className="text-right">
             <p className="text-muted-foreground text-sm">Outstanding</p>
@@ -176,6 +187,15 @@ export default async function CheckoutPage() {
                     </li>
                   ))}
                 </ul>
+
+                {print.receipt && (
+                  <PrintButton
+                    restaurantId={restaurant.id}
+                    kind="bill"
+                    orderIds={table.orders.map((o) => o.id)}
+                    label="Print bill"
+                  />
+                )}
 
                 {(acceptsCash || acceptsCardTerminal || acceptsCard) && (
                   <div className="flex flex-wrap gap-2">

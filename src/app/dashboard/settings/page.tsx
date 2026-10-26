@@ -266,6 +266,27 @@ export default async function SettingsPage() {
         </Card>
       )}
 
+      {canManage && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Printers</CardTitle>
+            <CardDescription>
+              Star network printers for kitchen tickets, bills and receipts, and
+              the cash drawer. They print on their own, with no tablet or app in
+              between.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              href="/dashboard/settings/printers"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Open printer settings
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
       {restaurant.role === "owner" && (
         <Card>
           <CardHeader>
