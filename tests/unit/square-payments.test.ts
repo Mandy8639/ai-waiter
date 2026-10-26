@@ -131,6 +131,46 @@ describe("Square checkout request", () => {
     expect(requestTotalMinorUnits(req)).toBe(1500);
   });
 
+  it("shows a manager's discount as a discount, with the tax kept on its own line", () => {
+    // $16 dish, $3 off, 10% tax on the $13 left: 13 + 1.30 = 14.30.
+    const req = buildSquarePaymentLink(
+      input({
+        amount: "14.30",
+        appFeeMinorUnits: 14,
+        lines: [line({ order_total: "14.30", order_discount: "3.00" })],
+      }),
+    );
+    expect(req.order.line_items.at(-1)).toEqual({
+      name: "Tax & charges",
+      quantity: "1",
+      base_price_money: { amount: 130, currency: "USD" },
+    });
+    expect(req.order.discounts?.[0]).toMatchObject({
+      amount_money: { amount: 300, currency: "USD" },
+    });
+    expect(requestTotalMinorUnits(req)).toBe(1430);
+  });
+
+  it("lists a comped dish at no charge", () => {
+    const req = buildSquarePaymentLink(
+      input({
+        lines: [
+          line(),
+          line({
+            item_name: "Mango Lassi (comped)",
+            unit_amount: "0.00",
+            line_total: "0.00",
+          }),
+        ],
+      }),
+    );
+    expect(req.order.line_items[1]).toMatchObject({
+      name: "Mango Lassi (comped)",
+      base_price_money: { amount: 0, currency: "USD" },
+    });
+    expect(requestTotalMinorUnits(req)).toBe(1742);
+  });
+
   it("refuses a bill whose orders don't add up to the payment", () => {
     expect(() => buildSquarePaymentLink(input({ amount: "20.00" }))).toThrow(
       BillMismatchError,

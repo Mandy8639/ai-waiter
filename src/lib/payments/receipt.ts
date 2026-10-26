@@ -41,6 +41,8 @@ export interface ReceiptOrder {
   id: string;
   orderNumber: number;
   subtotal: number;
+  /** Voids, comps and discounts a manager took off (20261113090000). */
+  discountTotal: number;
   tax: number;
   serviceCharge: number;
   total: number;
@@ -124,7 +126,9 @@ async function readOrders(orderIds: string[]): Promise<ReceiptOrder[]> {
   const [{ data: orders }, { data: items }] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, order_number, subtotal, tax, service_charge, total")
+      .select(
+        "id, order_number, subtotal, discount_total, tax, service_charge, total" as "id, order_number, subtotal, tax, service_charge, total",
+      )
       .in("id", orderIds)
       .order("order_number", { ascending: true }),
     supabase
@@ -169,6 +173,10 @@ async function readOrders(orderIds: string[]): Promise<ReceiptOrder[]> {
     id: o.id,
     orderNumber: o.order_number,
     subtotal: Number(o.subtotal),
+    discountTotal: Number(
+      (o as unknown as { discount_total?: number | string }).discount_total ??
+        0,
+    ),
     tax: Number(o.tax),
     serviceCharge: Number(o.service_charge),
     total: Number(o.total),

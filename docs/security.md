@@ -1269,6 +1269,33 @@ translated into Hindi, Spanish, Gujarati and Telugu.
 text (buttons and headings stay English). The AI waiter is unchanged; it already replies in the
 diner's language (phase E).
 
+## Voids, comps and discounts — (Settle up)
+
+Migration `20261113090000_order_adjustments.sql`.
+
+- **Who:** owners and managers only, checked inside `adjust_order()` /
+  `remove_order_adjustment()` through `current_restaurant_role()`, so
+  two-step verification applies. Staff and diners get `ADJUST_FORBIDDEN`.
+  `order_adjustments` has a select policy for members and no write policy;
+  the functions are the only writers.
+- **Where the money changes:** the order's own `discount_total`, `tax`,
+  `service_charge` and `total`, rewritten only by
+  `recalculate_order_totals()` (no grants). `enforce_order_immutable_fields()`
+  lets those columns change only while that function's transaction-local
+  `tableside.recalculating_order` setting names the order, and then checks
+  `total = subtotal - discount_total + tax + service_charge`. Every payment
+  path freezes `orders.total` into `payment_orders`, so all of them charge
+  the adjusted amount without their own changes.
+- **Never under a payment:** an order covered by a pending or succeeded
+  payment (other than a comp payment), or frozen in an open split, can't be
+  adjusted (`ADJUST_PAYMENT_STARTED`, `ADJUST_SPLIT_OPEN`).
+- **Brought to zero:** settled by a $0 `order_payments` row with method
+  `comp` (constraint: amount and tip are 0), so every "is this paid?" check
+  agrees. Undoing an adjustment reverses it. Comp payments print nothing,
+  open no drawer, and are left out of the takings reports.
+- **Audit:** undone adjustments are kept (`removed_at`, `removed_by`), with
+  who applied each one and why.
+
 ## Split bill — (phase J)
 
 `20261002090000_split_bill.sql`. A diner splits their tab into **equal shares** or **one part per
