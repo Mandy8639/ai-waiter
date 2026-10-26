@@ -127,6 +127,7 @@ export function KitchenBoard({
   initialOrders,
   stations = NO_STATIONS,
   toolbar,
+  kitchenPrinter = false,
 }: {
   restaurantId: string;
   /** For printed tickets. */
@@ -139,6 +140,8 @@ export function KitchenBoard({
   stations?: KitchenStation[];
   /** The page's own controls (busy mode, alerts, stations), in the header's button row. */
   toolbar?: React.ReactNode;
+  /** A network kitchen printer is set up, so a ticket can be reprinted on it. */
+  kitchenPrinter?: boolean;
 }) {
   const [orders, setOrders] = useState<KitchenOrder[]>(initialOrders);
   const [detailOrder, setDetailOrder] = useState<KitchenOrder | null>(null);
@@ -788,6 +791,7 @@ export function KitchenBoard({
       )}
 
       <OrderDetailDialog
+        networkPrintFor={kitchenPrinter ? restaurantId : undefined}
         onPrint={
           canPrint ? (order) => printTicket(ticketFor(order, true)) : undefined
         }

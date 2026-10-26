@@ -9,7 +9,7 @@ import { reportError } from "@/lib/observability/report";
 /**
  * Setting up network printers and printing by hand. Every rule (who may,
  * which printers, whose orders) lives in the database functions of
- * 20261108090000_cloudprnt_printers.sql; these check shapes and call them.
+ * 20261112090000_cloudprnt_printers.sql; these check shapes and call them.
  *
  * A printer's URL holds its token, shown once here when the printer is
  * added (or its URL is replaced) and never stored in a readable form.

@@ -53,6 +53,7 @@ const SIGNED_IN_ONLY = [
   "delete_printer",
   "rotate_printer_token",
   "request_print",
+  "restaurant_print_capabilities",
   "transition_order_status",
   "get_restaurant_staff",
   "record_in_person_payment",

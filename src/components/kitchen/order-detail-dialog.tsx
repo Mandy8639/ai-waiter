@@ -15,6 +15,7 @@ import { fetchOrderStatusHistory } from "@/lib/orders/kitchen-actions";
 import type { OrderStatusHistoryEntry } from "@/lib/orders/kitchen";
 import { STATUS_LABELS } from "@/lib/orders/status";
 import { pushBackPickup } from "@/lib/pickup/actions";
+import { PrintButton } from "@/components/printing/print-button";
 
 /**
  * Moving a pickup order later: one slot, or two. Later only — moving an
@@ -82,11 +83,14 @@ export function OrderDetailDialog({
   order,
   onOpenChange,
   onPrint,
+  networkPrintFor,
 }: {
   order: KitchenOrder | null;
   onOpenChange: (open: boolean) => void;
   /** Prints this order's ticket again; absent where the device can't print. */
   onPrint?: (order: KitchenOrder) => void;
+  /** The restaurant, when it has a network kitchen printer to reprint on. */
+  networkPrintFor?: string;
 }) {
   // Keyed by order id (rather than a bare "reset then fetch" effect) so a
   // newly-opened order never briefly shows the PREVIOUS order's history —
@@ -161,6 +165,15 @@ export function OrderDetailDialog({
                   <Printer className="size-4" aria-hidden="true" />
                   Print ticket
                 </Button>
+              )}
+              {networkPrintFor && (
+                <PrintButton
+                  restaurantId={networkPrintFor}
+                  kind="kitchen_ticket"
+                  orderIds={[order.id]}
+                  label="Reprint on kitchen printer"
+                  className="min-h-11"
+                />
               )}
 
               {order.customerNote && (

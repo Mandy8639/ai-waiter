@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Network printers (20261108090000): printers, print_jobs, the triggers
+// Network printers (20261112090000): printers, print_jobs, the triggers
 // that queue kitchen tickets and receipts, and request_print().
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb, type TestDb } from "./setup";
@@ -314,5 +314,39 @@ describe("network printers", () => {
       [printer.printer_id],
     );
     expect(after.rows[0].token_hash).not.toBe(before.rows[0].token_hash);
+  });
+
+  it("tells any member which kinds of job have a printer, and outsiders nothing", async () => {
+    const f = await fullOrderFixture(db);
+    const waiter = await db.createAuthUser();
+    await addMember(db, f.restaurantId, waiter, "staff");
+    const caps = (userId: string) =>
+      db
+        .asUser(userId, (c) =>
+          c.query<{ kitchen: boolean; receipt: boolean; drawer: boolean }>(
+            "select * from public.restaurant_print_capabilities($1);",
+            [f.restaurantId],
+          ),
+        )
+        .then((r) => r.rows[0]);
+
+    expect(await caps(waiter)).toEqual({
+      kitchen: false,
+      receipt: false,
+      drawer: false,
+    });
+    await createPrinter(f.staffUserId, f.restaurantId, "kitchen");
+    await createPrinter(f.staffUserId, f.restaurantId, "receipt", true);
+    expect(await caps(waiter)).toEqual({
+      kitchen: true,
+      receipt: true,
+      drawer: true,
+    });
+    const outsider = await db.createAuthUser();
+    expect(await caps(outsider)).toEqual({
+      kitchen: false,
+      receipt: false,
+      drawer: false,
+    });
   });
 });

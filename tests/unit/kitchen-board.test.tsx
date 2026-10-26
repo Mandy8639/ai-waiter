@@ -63,6 +63,9 @@ vi.mock("@/lib/pickup/actions", () => ({
   pushBackPickup: vi.fn(async () => ({})),
 }));
 
+vi.mock("@/lib/printing/actions", () => ({
+  requestPrint: vi.fn(),
+}));
 vi.mock("@/lib/kitchen/station-actions", () => ({
   setStationDone: vi.fn(async () => ({})),
 }));

@@ -20,7 +20,7 @@ import { reportError } from "@/lib/observability/report";
  * Star CloudPRNT: where a restaurant's network printers poll. The URL,
  * https://<host>/api/cloudprnt/<token>, goes into the printer's own
  * CloudPRNT settings; the token is the printer's only credential (see
- * 20261108090000_cloudprnt_printers.sql). An unknown token gets a 404 and
+ * 20261112090000_cloudprnt_printers.sql). An unknown token gets a 404 and
  * nothing else.
  *
  * POST   status poll   -> { jobReady, mediaTypes, jobToken } (cloudprnt-core.ts)

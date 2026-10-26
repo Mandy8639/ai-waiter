@@ -427,3 +427,33 @@ end;
 $$;
 revoke execute on function public.request_print(uuid, text, uuid[], uuid, uuid) from public, anon;
 grant execute on function public.request_print(uuid, text, uuid[], uuid, uuid) to authenticated;
+
+-- What the print buttons need to know without reading the printers table
+-- (owners and managers only): does this restaurant have an active printer
+-- for each kind of job? Any member may ask, so Settle up and the kitchen
+-- board show a button only when it will print somewhere.
+create function public.restaurant_print_capabilities(p_restaurant_id uuid)
+returns table (kitchen boolean, receipt boolean, drawer boolean)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if not public.is_restaurant_member(p_restaurant_id) then
+    return query select false, false, false;
+    return;
+  end if;
+  return query
+  select
+    coalesce(bool_or(p.role = 'kitchen'), false),
+    coalesce(bool_or(p.role = 'receipt'), false),
+    coalesce(bool_or(p.role = 'receipt' and p.opens_drawer), false)
+  from public.printers p
+  where p.restaurant_id = p_restaurant_id
+    and p.is_active;
+end;
+$$;
+
+revoke execute on function public.restaurant_print_capabilities(uuid) from public, anon;
+grant execute on function public.restaurant_print_capabilities(uuid) to authenticated, service_role;
