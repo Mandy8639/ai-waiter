@@ -82,7 +82,8 @@ export function parsePositive(value: string): number | null {
 }
 
 const MESSAGES: Record<string, string> = {
-  ADJUST_FORBIDDEN: "Only an owner or manager can change a bill.",
+  ADJUST_FORBIDDEN:
+    "A manager has to approve this: ask them to enter their PIN.",
   ADJUST_CANCELLED: "That order was cancelled.",
   ADJUST_PAYMENT_STARTED:
     "A payment for this order has already started. Finish or cancel it first.",

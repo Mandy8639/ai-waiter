@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ApprovalPinForm } from "@/components/settings/approval-pin-form";
 import { Download } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { SECURITY_PATH } from "@/lib/legal/security";
@@ -102,6 +103,15 @@ export default async function SettingsPage() {
 
   const canManage =
     restaurant.role === "owner" || restaurant.role === "manager";
+  // 20261117090000 is newer than database.types.ts.
+  const { data: hasPin } = canManage
+    ? await (
+        supabase.rpc as unknown as (
+          fn: string,
+          args: Record<string, unknown>,
+        ) => Promise<{ data: unknown }>
+      )("my_approval_pin_set", { p_restaurant_id: restaurant.id })
+    : { data: false };
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -262,6 +272,25 @@ export default async function SettingsPage() {
             >
               Open point of sale settings
             </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {canManage && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Manager PIN</CardTitle>
+            <CardDescription>
+              Waiters can void, comp and discount on Settle up once a manager
+              types their PIN on the waiter&apos;s tablet. Each change records
+              who approved it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ApprovalPinForm
+              restaurantId={restaurant.id}
+              hasPin={hasPin === true}
+            />
           </CardContent>
         </Card>
       )}

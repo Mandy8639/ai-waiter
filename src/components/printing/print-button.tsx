@@ -14,13 +14,15 @@ export function PrintButton({
   restaurantId,
   kind,
   orderIds,
+  paymentId,
   dayCloseId,
   label,
   className,
 }: {
   restaurantId: string;
-  kind: "kitchen_ticket" | "bill" | "drawer" | "day_close";
+  kind: "kitchen_ticket" | "bill" | "receipt" | "drawer" | "day_close";
   orderIds?: string[];
+  paymentId?: string;
   dayCloseId?: string;
   label: string;
   className?: string;
@@ -37,6 +39,7 @@ export function PrintButton({
         restaurantId,
         kind,
         orderIds,
+        paymentId,
         dayCloseId,
       });
       if (!r.ok) setResult({ ok: false, text: r.error });
