@@ -14,12 +14,14 @@ export function PrintButton({
   restaurantId,
   kind,
   orderIds,
+  dayCloseId,
   label,
   className,
 }: {
   restaurantId: string;
-  kind: "kitchen_ticket" | "bill" | "drawer";
+  kind: "kitchen_ticket" | "bill" | "drawer" | "day_close";
   orderIds?: string[];
+  dayCloseId?: string;
   label: string;
   className?: string;
 }) {
@@ -31,7 +33,12 @@ export function PrintButton({
   function send() {
     setResult(null);
     startTransition(async () => {
-      const r = await requestPrint({ restaurantId, kind, orderIds });
+      const r = await requestPrint({
+        restaurantId,
+        kind,
+        orderIds,
+        dayCloseId,
+      });
       if (!r.ok) setResult({ ok: false, text: r.error });
       else if (r.printers === 0)
         setResult({ ok: false, text: "No printer is set up for that." });

@@ -62,6 +62,8 @@ const SIGNED_IN_ONLY = [
   "pay_split_in_person",
   "start_split_terminal_payment",
   "settle_up_splits",
+  "preview_day_close",
+  "close_day",
   "transition_order_status",
   "get_restaurant_staff",
   "record_in_person_payment",

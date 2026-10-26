@@ -157,10 +157,18 @@ export async function replacePrinterUrl(
 
 const printSchema = z.object({
   restaurantId: z.uuid(),
-  kind: z.enum(["kitchen_ticket", "bill", "receipt", "drawer", "test"]),
+  kind: z.enum([
+    "kitchen_ticket",
+    "bill",
+    "receipt",
+    "drawer",
+    "test",
+    "day_close",
+  ]),
   orderIds: z.array(z.uuid()).max(50).optional(),
   paymentId: z.uuid().optional(),
   printerId: z.uuid().optional(),
+  dayCloseId: z.uuid().optional(),
 });
 
 /**
@@ -182,6 +190,7 @@ export async function requestPrint(
     p_order_ids: p.orderIds ?? null,
     p_payment_id: p.paymentId ?? null,
     p_printer_id: p.printerId ?? null,
+    p_day_close_id: p.dayCloseId ?? null,
   });
   if (error) {
     if (!/^PRINT_/.test(error.message))

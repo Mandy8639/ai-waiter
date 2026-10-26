@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { DayCloseSummary } from "@/lib/reports/day-close-core";
 import { pickupLabel } from "@/lib/pickup/format-core";
 import {
   MAX_ATTEMPTS,
@@ -16,6 +17,7 @@ import {
   kitchenTicketDoc,
   receiptDoc,
   partReceiptDoc,
+  dayCloseDoc,
   testDoc,
   type PrintOrder,
   type PrintPayment,
@@ -45,10 +47,11 @@ export interface PrinterRow {
 
 interface JobRow {
   id: string;
-  kind: "kitchen_ticket" | "receipt" | "bill" | "drawer" | "test";
+  kind: "kitchen_ticket" | "receipt" | "bill" | "drawer" | "test" | "day_close";
   order_id: string | null;
   order_ids: string[] | null;
   payment_id: string | null;
+  day_close_id: string | null;
   reprint: boolean;
   open_drawer: boolean;
   status: string;
@@ -56,7 +59,7 @@ interface JobRow {
 }
 
 const JOB_COLUMNS =
-  "id, kind, order_id, order_ids, payment_id, reprint, open_drawer, status, attempts";
+  "id, kind, order_id, order_ids, payment_id, day_close_id, reprint, open_drawer, status, attempts";
 
 function db(): SupabaseClient {
   return createAdminClient() as unknown as SupabaseClient;
@@ -510,6 +513,43 @@ async function buildDoc(
           paidAt: payment.paid_at ?? now.toISOString(),
         },
         { restaurant, openDrawer: job.open_drawer },
+      );
+    }
+    case "day_close": {
+      if (!job.day_close_id) return null;
+      const { data } = await db()
+        .from("day_closes")
+        .select(
+          "id, period_start, period_end, opening_float, counted_cash, expected_cash, over_short, note, summary",
+        )
+        .eq("id", job.day_close_id)
+        .eq("restaurant_id", printer.restaurant_id)
+        .maybeSingle();
+      const row = data as {
+        id: string;
+        period_start: string;
+        period_end: string;
+        opening_float: number | string;
+        counted_cash: number | string;
+        expected_cash: number | string;
+        over_short: number | string;
+        note: string | null;
+        summary: DayCloseSummary;
+      } | null;
+      if (!row) return null;
+      return dayCloseDoc(
+        {
+          id: row.id,
+          periodStart: row.period_start,
+          periodEnd: row.period_end,
+          openingFloat: Number(row.opening_float),
+          countedCash: Number(row.counted_cash),
+          expectedCash: Number(row.expected_cash),
+          overShort: Number(row.over_short),
+          note: row.note,
+          summary: row.summary,
+        },
+        { restaurant },
       );
     }
     case "drawer":

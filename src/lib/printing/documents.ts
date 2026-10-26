@@ -1,6 +1,11 @@
 import { formatMoney } from "@/lib/orders/format";
 import { SPICE_LABELS, ticketTime } from "@/lib/kitchen/ticket-core";
 import type { DocLine, PrintDoc } from "./star-commands";
+import {
+  dayCloseMethodLabel,
+  overShortLabel,
+  type DayClose,
+} from "@/lib/reports/day-close-core";
 
 /**
  * What goes on paper: kitchen tickets, bills, receipts, a test page. Plain
@@ -305,6 +310,85 @@ export function partReceiptDoc(
   lines.push({ kind: "feed" });
   lines.push(text("Thank you!", { align: "center" }));
   return { lines, openDrawer: options.openDrawer, cut: true };
+}
+
+/** The closing report for a day (20261116090000), as it was frozen at close. */
+export function dayCloseDoc(
+  close: DayClose,
+  options: { restaurant: PrintRestaurant },
+): PrintDoc {
+  const { restaurant } = options;
+  const s = close.summary;
+  const money = (v: number) => formatMoney(v, s.currency);
+  const when = (iso: string) =>
+    new Date(iso).toLocaleString("en-US", {
+      timeZone: restaurant.timeZone,
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  const pair = (left: string, right: string, bold = false): DocLine => ({
+    kind: "pair",
+    left,
+    right,
+    bold,
+  });
+  const lines: DocLine[] = [
+    ...header(restaurant),
+    text("END OF DAY", { align: "center", bold: true }),
+    text(`${when(close.periodStart)} - ${when(close.periodEnd)}`, {
+      align: "center",
+    }),
+    { kind: "rule" },
+    pair("Sales", money(s.payments.sales)),
+    pair("Tips", money(s.payments.tips)),
+  ];
+  if (s.payments.refunds > 0)
+    lines.push(pair("Refunds", `-${money(s.payments.refunds)}`));
+  lines.push(pair("Net", money(s.payments.net), true));
+  lines.push(text(`${s.payments.count} payments · ${s.orders} orders`));
+  lines.push({ kind: "rule" });
+  for (const m of s.by_method)
+    lines.push(
+      pair(`${dayCloseMethodLabel(m.method)} (${m.count})`, money(m.net)),
+    );
+  const adjustments = (
+    [
+      ["Voids", s.adjustments.void],
+      ["Comps", s.adjustments.comp],
+      ["Discounts", s.adjustments.discount],
+    ] as const
+  ).filter(([, line]) => line.count > 0);
+  if (adjustments.length > 0) {
+    lines.push({ kind: "rule" });
+    for (const [label, line] of adjustments)
+      lines.push(pair(`${label} (${line.count})`, `-${money(line.amount)}`));
+  }
+  lines.push({ kind: "rule" });
+  lines.push(text("CASH DRAWER", { bold: true }));
+  lines.push(pair("Starting cash", money(close.openingFloat)));
+  lines.push(pair("Cash taken", money(s.cash.taken)));
+  if (s.cash.refunded > 0)
+    lines.push(pair("Cash refunded", `-${money(s.cash.refunded)}`));
+  lines.push(pair("Expected", money(close.expectedCash)));
+  lines.push(pair("Counted", money(close.countedCash)));
+  lines.push(
+    pair("Over / short", overShortLabel(close.overShort, money), true),
+  );
+  if (s.staff.length > 0) {
+    lines.push({ kind: "rule" });
+    lines.push(text("TAKEN BY", { bold: true }));
+    for (const person of s.staff)
+      lines.push(
+        pair(`${person.email} (${person.count})`, money(person.total)),
+      );
+  }
+  if (close.note) {
+    lines.push({ kind: "rule" });
+    lines.push(text(`Note: ${close.note}`));
+  }
+  return { lines, cut: true };
 }
 
 /** Opens the cash drawer and prints nothing. */

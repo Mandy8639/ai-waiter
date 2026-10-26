@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { createClient } from "@/lib/supabase/server";
@@ -86,6 +87,12 @@ export default async function ReportsPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/dashboard/reports/close"
+            className={buttonVariants({ size: "sm" })}
+          >
+            End of day
+          </Link>
           {/* A plain link, not a button: the response is a file, so letting
               the browser handle the navigation is what makes the download
               work without any client-side code. `preset` rather than the
