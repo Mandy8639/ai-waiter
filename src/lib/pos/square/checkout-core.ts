@@ -29,6 +29,8 @@ export interface BillLine {
   unit_amount: string | number;
   line_total: string | number;
   order_total: string | number;
+  /** The order's own discounts, repeated on each of its lines (20261113090000). Voided dishes are already left out and comped ones priced at nothing. */
+  order_discount?: string | number;
 }
 
 export interface SquareCheckoutInput {
@@ -118,10 +120,15 @@ export function buildSquareOrder(input: {
   // amount the database froze. If they don't, the bill and the charge
   // disagree, and that must stop the checkout rather than be papered over.
   const orderTotals = new Map<string, number>();
+  const orderDiscounts = new Map<string, number>();
   for (const line of input.lines) {
     orderTotals.set(
       line.order_id,
       toMinorUnits(String(line.order_total), currency),
+    );
+    orderDiscounts.set(
+      line.order_id,
+      toMinorUnits(String(line.order_discount ?? 0), currency),
     );
   }
   const ordersMinor = [...orderTotals.values()].reduce((a, b) => a + b, 0);
@@ -141,16 +148,23 @@ export function buildSquareOrder(input: {
     0,
   );
 
-  // Tax, the restaurant's service charge, or a discount: whatever the
-  // orders charged beyond the dishes themselves.
-  const extraMinor = amountMinor - dishesMinor;
-  if (extraMinor > 0) {
+  // Tax and the restaurant's service charge: whatever the orders charged
+  // beyond the dishes, once their own discounts are put back. Should that
+  // ever come out negative, the difference joins the discount, so the
+  // order still adds up to the charge.
+  const discountsMinor = [...orderDiscounts.values()].reduce(
+    (a, b) => a + b,
+    0,
+  );
+  const chargesMinor = amountMinor - dishesMinor + discountsMinor;
+  if (chargesMinor > 0) {
     line_items.push({
       name: "Tax & charges",
       quantity: "1",
-      base_price_money: money(extraMinor),
+      base_price_money: money(chargesMinor),
     });
   }
+  const discountMinor = discountsMinor + Math.max(0, -chargesMinor);
 
   return {
     amountMinor,
@@ -171,13 +185,13 @@ export function buildSquareOrder(input: {
             ],
           }
         : {}),
-      ...(extraMinor < 0
+      ...(discountMinor > 0
         ? {
             discounts: [
               {
                 uid: "tableside-adjustment",
                 name: "Discount",
-                amount_money: money(-extraMinor),
+                amount_money: money(discountMinor),
                 scope: "ORDER" as const,
               },
             ],

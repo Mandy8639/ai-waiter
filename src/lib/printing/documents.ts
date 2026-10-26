@@ -19,6 +19,9 @@ export interface PrintOrderItem {
   quantity: number;
   itemName: string;
   lineTotal: number;
+  /** Units a manager voided (left off the bill and the ticket) or comped (on the bill at no charge). */
+  voided?: number;
+  comped?: number;
   stationId: string | null;
   modifiers: string[];
   spicePreference: string | null;
@@ -32,6 +35,10 @@ export interface PrintOrder {
   placeLabel: string;
   customerNote: string | null;
   subtotal: number;
+  /** Everything taken off before tax: voids, comps and discounts. */
+  discountTotal?: number;
+  /** The order-wide discounts within discountTotal; the rest is voided and comped dishes. */
+  orderDiscount?: number;
   tax: number;
   serviceCharge: number;
   total: number;
@@ -68,9 +75,14 @@ export function kitchenTicketDoc(
     reprint?: boolean;
   },
 ): PrintDoc | null {
-  const items = options.stationId
-    ? order.items.filter((i) => i.stationId === options.stationId)
-    : order.items;
+  // A voided dish isn't to be made, so a reprint leaves it off.
+  const items = (
+    options.stationId
+      ? order.items.filter((i) => i.stationId === options.stationId)
+      : order.items
+  )
+    .map((i) => ({ ...i, quantity: i.quantity - (i.voided ?? 0) }))
+    .filter((i) => i.quantity > 0);
   if (items.length === 0) return null;
 
   const lines: DocLine[] = [];
@@ -127,22 +139,45 @@ function itemsAndTotals(orders: PrintOrder[]): DocLine[] {
   const lines: DocLine[] = [];
   for (const order of orders) {
     for (const item of order.items) {
-      lines.push({
-        kind: "pair",
-        left: `${item.quantity} x ${item.itemName}`,
-        right: money(item.lineTotal),
-      });
-      for (const modifier of item.modifiers) lines.push(text(`   ${modifier}`));
+      const comped = item.comped ?? 0;
+      const charged = item.quantity - (item.voided ?? 0) - comped;
+      const unit = item.quantity > 0 ? item.lineTotal / item.quantity : 0;
+      if (charged > 0)
+        lines.push({
+          kind: "pair",
+          left: `${charged} x ${item.itemName}`,
+          right: money(Math.round(unit * charged * 100) / 100),
+        });
+      if (comped > 0)
+        lines.push({
+          kind: "pair",
+          left: `${comped} x ${item.itemName} (comped)`,
+          right: money(0),
+        });
+      if (charged > 0 || comped > 0)
+        for (const modifier of item.modifiers)
+          lines.push(text(`   ${modifier}`));
     }
   }
   const sum = (pick: (o: PrintOrder) => number) =>
     Math.round(orders.reduce((s, o) => s + pick(o), 0) * 100) / 100;
+  // The dishes as listed above: before the order-wide discount, after the
+  // voided and comped ones.
+  const discount = sum((o) => o.orderDiscount ?? 0);
   lines.push({ kind: "rule" });
   lines.push({
     kind: "pair",
     left: "Subtotal",
-    right: money(sum((o) => o.subtotal)),
+    right: money(
+      sum((o) => o.subtotal - (o.discountTotal ?? 0) + (o.orderDiscount ?? 0)),
+    ),
   });
+  if (discount > 0)
+    lines.push({
+      kind: "pair",
+      left: "Discount",
+      right: `-${money(discount)}`,
+    });
   const tax = sum((o) => o.tax);
   if (tax > 0) lines.push({ kind: "pair", left: "Tax", right: money(tax) });
   const service = sum((o) => o.serviceCharge);

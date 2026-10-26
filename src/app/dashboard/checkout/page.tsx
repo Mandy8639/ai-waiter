@@ -14,9 +14,14 @@ import {
   recordCardTerminalPayment,
   recordCashPayment,
 } from "@/lib/payments/cash-actions";
-import { getUnpaidOrdersByTable } from "@/lib/payments/unpaid-orders";
+import {
+  getUnpaidOrdersByTable,
+  type UnpaidTable,
+} from "@/lib/payments/unpaid-orders";
 import { getPrintCapabilities } from "@/lib/printing/capabilities";
 import { PrintButton } from "@/components/printing/print-button";
+import { AdjustBillDialog } from "@/components/payments/adjust-bill-dialog";
+import { SettleUpSync } from "@/components/payments/settle-up-sync";
 
 export const metadata = {
   title: "Settle up — Tableside",
@@ -32,7 +37,12 @@ export const metadata = {
  * worse than letting a waiter record what they were handed.
  *
  * Reversing a mistake is the part that is owner/manager gated, and it
- * lives on Reports next to refunds, where corrections belong.
+ * lives on Reports next to refunds, where corrections belong. So is
+ * changing a bill before it's paid (voids, comps, discounts: Adjust).
+ *
+ * Unpaid orders older than a day get their own section rather than
+ * dropping off, so a walkout or a forgotten bill is seen and dealt with:
+ * settled late, or written off by a manager.
  */
 export default async function CheckoutPage() {
   const { restaurant } = await requireCurrentRestaurant();
@@ -60,7 +70,7 @@ export default async function CheckoutPage() {
   };
   const [
     { data: settings },
-    tables,
+    { recent: tables, older },
     { data: cardProvider },
     { data: devices },
     print,
@@ -94,15 +104,134 @@ export default async function CheckoutPage() {
   const acceptsCard = settings?.accept_card ?? false;
 
   const outstanding = tables.reduce((sum, t) => sum + t.total, 0);
-  const currency = tables[0]?.currency ?? "USD";
+  const olderOutstanding = older.reduce((sum, t) => sum + t.total, 0);
+  const currency = tables[0]?.currency ?? older[0]?.currency ?? "USD";
+  const canAdjust =
+    restaurant.role === "owner" || restaurant.role === "manager";
+
+  const card = (table: UnpaidTable, showDates: boolean) => (
+    <Card key={table.tableId}>
+      <CardContent className="flex flex-col gap-3 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="font-medium">{table.tableLabel}</p>
+            <p className="text-muted-foreground text-xs">
+              {table.orders.length}{" "}
+              {table.orders.length === 1 ? "order" : "orders"}
+            </p>
+          </div>
+          <p className="text-lg font-semibold tabular-nums">
+            {formatMoney(table.total, table.currency)}
+          </p>
+        </div>
+
+        <ul className="flex flex-col gap-1 text-sm">
+          {table.orders.map((order) => (
+            <li
+              key={order.id}
+              className="flex items-center justify-between gap-2"
+            >
+              <span className="flex items-center gap-2">
+                <span className="font-medium">#{order.orderNumber}</span>
+                <Badge variant="outline">{order.status}</Badge>
+                {showDates && (
+                  <span className="text-muted-foreground text-xs">
+                    {new Date(order.createdAt).toLocaleDateString("en-US", {
+                      timeZone: restaurant.timezone,
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                )}
+              </span>
+              <span className="tabular-nums">
+                {order.discountTotal > 0 && (
+                  <span className="text-muted-foreground mr-1 text-xs">
+                    −{formatMoney(order.discountTotal, order.currency)}
+                  </span>
+                )}
+                {formatMoney(order.total, order.currency)}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        {(print.receipt || canAdjust) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {canAdjust && (
+              <AdjustBillDialog
+                restaurantId={restaurant.id}
+                tableLabel={table.tableLabel}
+                orders={table.orders}
+                currency={table.currency}
+              />
+            )}
+            {print.receipt && (
+              <PrintButton
+                restaurantId={restaurant.id}
+                kind="bill"
+                orderIds={table.orders.map((o) => o.id)}
+                label="Print bill"
+              />
+            )}
+          </div>
+        )}
+
+        {(acceptsCash || acceptsCardTerminal || acceptsCard) && (
+          <div className="flex flex-wrap gap-2">
+            {acceptsCard && terminals.length > 0 && (
+              <SquareTerminalDialog
+                restaurantId={restaurant.id}
+                tableLabel={table.tableLabel}
+                orders={table.orders}
+                currency={table.currency}
+                terminals={terminals}
+              />
+            )}
+            {acceptsCard && !paysThroughSquare && (
+              <TapToPayDialog
+                restaurantId={restaurant.id}
+                tableLabel={table.tableLabel}
+                orders={table.orders}
+                currency={table.currency}
+                tippingEnabled={tippingEnabled}
+              />
+            )}
+            {acceptsCash && (
+              <CashPaymentDialog
+                method="cash"
+                recordAction={recordCashPayment}
+                tableLabel={table.tableLabel}
+                orders={table.orders}
+                currency={table.currency}
+                tippingEnabled={tippingEnabled}
+              />
+            )}
+            {acceptsCardTerminal && (
+              <CashPaymentDialog
+                method="card_terminal"
+                recordAction={recordCardTerminalPayment}
+                tableLabel={table.tableLabel}
+                orders={table.orders}
+                currency={table.currency}
+                tippingEnabled={tippingEnabled}
+              />
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="flex flex-col gap-6">
+      <SettleUpSync restaurantId={restaurant.id} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Settle up</h1>
           <p className="text-muted-foreground text-sm">
             Orders at {restaurant.name} that haven&apos;t been paid for yet.
+            This page updates by itself.
           </p>
         </div>
         {print.drawer && (
@@ -146,103 +275,37 @@ export default async function CheckoutPage() {
         <Card>
           <CardContent className="p-6">
             <p className="text-muted-foreground text-sm">
-              Nothing outstanding. Every order from the last day has been paid
-              for or cancelled.
+              Nothing outstanding from the last day.
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {tables.map((table) => (
-            <Card key={table.tableId}>
-              <CardContent className="flex flex-col gap-3 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">{table.tableLabel}</p>
-                    <p className="text-muted-foreground text-xs">
-                      {table.orders.length}{" "}
-                      {table.orders.length === 1 ? "order" : "orders"}
-                    </p>
-                  </div>
-                  <p className="text-lg font-semibold tabular-nums">
-                    {formatMoney(table.total, table.currency)}
-                  </p>
-                </div>
-
-                <ul className="flex flex-col gap-1 text-sm">
-                  {table.orders.map((order) => (
-                    <li
-                      key={order.id}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="font-medium">
-                          #{order.orderNumber}
-                        </span>
-                        <Badge variant="outline">{order.status}</Badge>
-                      </span>
-                      <span className="tabular-nums">
-                        {formatMoney(order.total, order.currency)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-
-                {print.receipt && (
-                  <PrintButton
-                    restaurantId={restaurant.id}
-                    kind="bill"
-                    orderIds={table.orders.map((o) => o.id)}
-                    label="Print bill"
-                  />
-                )}
-
-                {(acceptsCash || acceptsCardTerminal || acceptsCard) && (
-                  <div className="flex flex-wrap gap-2">
-                    {acceptsCard && terminals.length > 0 && (
-                      <SquareTerminalDialog
-                        restaurantId={restaurant.id}
-                        tableLabel={table.tableLabel}
-                        orders={table.orders}
-                        currency={table.currency}
-                        terminals={terminals}
-                      />
-                    )}
-                    {acceptsCard && !paysThroughSquare && (
-                      <TapToPayDialog
-                        restaurantId={restaurant.id}
-                        tableLabel={table.tableLabel}
-                        orders={table.orders}
-                        currency={table.currency}
-                        tippingEnabled={tippingEnabled}
-                      />
-                    )}
-                    {acceptsCash && (
-                      <CashPaymentDialog
-                        method="cash"
-                        recordAction={recordCashPayment}
-                        tableLabel={table.tableLabel}
-                        orders={table.orders}
-                        currency={table.currency}
-                        tippingEnabled={tippingEnabled}
-                      />
-                    )}
-                    {acceptsCardTerminal && (
-                      <CashPaymentDialog
-                        method="card_terminal"
-                        recordAction={recordCardTerminalPayment}
-                        tableLabel={table.tableLabel}
-                        orders={table.orders}
-                        currency={table.currency}
-                        tippingEnabled={tippingEnabled}
-                      />
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+          {tables.map((table) => card(table, false))}
         </div>
+      )}
+
+      {older.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">
+                Unpaid for more than a day
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                {canAdjust
+                  ? "Settle these if they were paid and not recorded, or write off a table that walked out (Adjust → Write off)."
+                  : "Settle these if they were paid and not recorded. An owner or manager can write off a table that walked out."}
+              </p>
+            </div>
+            <p className="text-lg font-semibold tabular-nums">
+              {formatMoney(olderOutstanding, currency)}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {older.map((table) => card(table, true))}
+          </div>
+        </section>
       )}
     </div>
   );

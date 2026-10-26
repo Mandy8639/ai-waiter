@@ -144,12 +144,20 @@ export default async function ReceiptPage({
               </div>
             ))}
           </div>
-          {(order.tax > 0 || order.serviceCharge > 0) && (
+          {(order.tax > 0 ||
+            order.serviceCharge > 0 ||
+            order.discountTotal > 0) && (
             <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
               <div className="flex justify-between">
                 <span>Subtotal</span>
                 <span>{money(order.subtotal)}</span>
               </div>
+              {order.discountTotal > 0 && (
+                <div className="flex justify-between">
+                  <span>Discounts</span>
+                  <span>-{money(order.discountTotal)}</span>
+                </div>
+              )}
               {order.tax > 0 && (
                 <div className="flex justify-between">
                   <span>Tax</span>

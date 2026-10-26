@@ -26,6 +26,8 @@ export interface OrderView {
   orderNumber: number;
   status: string;
   subtotal: number;
+  /** Voids, comps and discounts a manager took off (20261113090000). */
+  discountTotal: number;
   tax: number;
   serviceCharge: number;
   total: number;
@@ -58,7 +60,7 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
     .from("orders")
     .select(
       // pickup_*: 20261022090000, newer than database.types.ts.
-      "id, order_number, status, subtotal, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id, pickup_at, pickup_name" as "id, order_number, status, subtotal, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id",
+      "id, order_number, status, subtotal, discount_total, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id, pickup_at, pickup_name" as "id, order_number, status, subtotal, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -149,6 +151,10 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
     orderNumber: order.order_number,
     status: order.status,
     subtotal: Number(order.subtotal),
+    discountTotal: Number(
+      (order as unknown as { discount_total?: number | string })
+        .discount_total ?? 0,
+    ),
     tax: Number(order.tax),
     serviceCharge: Number(order.service_charge),
     total: Number(order.total),

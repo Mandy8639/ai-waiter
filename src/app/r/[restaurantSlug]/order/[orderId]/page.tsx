@@ -174,6 +174,12 @@ export default async function OrderConfirmationPage({
           <span className="text-muted-foreground">Subtotal</span>
           <span>{money(order.subtotal)}</span>
         </div>
+        {order.discountTotal > 0 && (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Discounts</span>
+            <span>-{money(order.discountTotal)}</span>
+          </div>
+        )}
         {order.tax > 0 && (
           <div className="flex justify-between">
             <span className="text-muted-foreground">Tax</span>

@@ -347,6 +347,35 @@ describe("what goes on paper", () => {
     expect(lines.some((l) => l.includes("Thank you!"))).toBe(true);
   });
 
+  it("leaves voided dishes off, shows comped ones free, and lists the discount", () => {
+    // One biryani voided, the lassi comped, $2 off: 12.50 - 2 = 10.50.
+    const adjusted: PrintOrder = {
+      ...order,
+      discountTotal: 22,
+      orderDiscount: 2,
+      tax: 0.93,
+      total: 11.43,
+      items: [
+        { ...order.items[0], voided: 1 },
+        { ...order.items[1], comped: 1 },
+      ],
+    };
+    const lines = docToText(
+      billDoc([adjusted], { restaurant, now: new Date(order.createdAt) }),
+      48,
+    );
+    const row = (left: string, right: string) =>
+      lines.some((l) => l.startsWith(left) && l.endsWith(right));
+    expect(row("1 x Chicken Biryani", "$12.50")).toBe(true);
+    expect(row("1 x Mango Lassi (comped)", "$0.00")).toBe(true);
+    expect(row("Subtotal", "$12.50")).toBe(true);
+    expect(row("Discount", "-$2.00")).toBe(true);
+    expect(row("Total", "$11.43")).toBe(true);
+    expect(
+      docToText(kitchenTicketDoc(adjusted, { restaurant })!, 42),
+    ).toContain("1 x Chicken Biryani");
+  });
+
   it("prints a receipt with the tip and how it was paid, opening the drawer for cash", () => {
     const doc = receiptDoc(
       [order],

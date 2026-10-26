@@ -7,6 +7,8 @@
  *   cash           notes taken by staff and recorded on Settle up.
  *   card_terminal  the restaurant's own card machine at the register,
  *                  recorded on Settle up. Nothing went through Stripe.
+ *   comp           $0, recorded by the database when a manager's voids,
+ *                  comps or discounts leave nothing to pay (20261113090000).
  */
 export type InPersonMethod = "cash" | "card_terminal";
 
@@ -14,6 +16,7 @@ const LABELS: Record<string, string> = {
   card: "Card",
   cash: "Cash",
   card_terminal: "Card machine",
+  comp: "Comped",
 };
 
 export function paymentMethodLabel(method: string): string {

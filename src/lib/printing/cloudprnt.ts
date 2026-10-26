@@ -256,7 +256,7 @@ async function loadOrders(
   const { data: orderRows } = await client
     .from("orders")
     .select(
-      "id, order_number, status, created_at, customer_note, subtotal, tax, service_charge, total, currency, table_id, pickup_at, pickup_name",
+      "id, order_number, status, created_at, customer_note, subtotal, discount_total, tax, service_charge, total, currency, table_id, pickup_at, pickup_name",
     )
     .eq("restaurant_id", restaurantId)
     .in("id", orderIds)
@@ -268,6 +268,7 @@ async function loadOrders(
     created_at: string;
     customer_note: string | null;
     subtotal: number | string;
+    discount_total: number | string;
     tax: number | string;
     service_charge: number | string;
     total: number | string;
@@ -278,22 +279,43 @@ async function loadOrders(
   }[];
   if (orders.length === 0) return [];
 
-  const [{ data: itemRows }, { data: tableRows }] = await Promise.all([
-    client
-      .from("order_items")
-      .select(
-        "id, order_id, quantity, item_name, line_total, station_id, spice_preference, notes, created_at",
-      )
-      .in(
-        "order_id",
-        orders.map((o) => o.id),
-      )
-      .order("created_at", { ascending: true }),
-    client
-      .from("tables")
-      .select("id, table_number, display_name, kind")
-      .in("id", [...new Set(orders.map((o) => o.table_id))]),
-  ]);
+  const [{ data: itemRows }, { data: tableRows }, { data: adjustmentRows }] =
+    await Promise.all([
+      client
+        .from("order_items")
+        .select(
+          "id, order_id, quantity, item_name, line_total, station_id, spice_preference, notes, created_at",
+        )
+        .in(
+          "order_id",
+          orders.map((o) => o.id),
+        )
+        .order("created_at", { ascending: true }),
+      client
+        .from("tables")
+        .select("id, table_number, display_name, kind")
+        .in("id", [...new Set(orders.map((o) => o.table_id))]),
+      // Voids, comps and discounts (20261113090000).
+      client
+        .from("order_adjustments")
+        .select("order_id, order_item_id, kind, quantity, amount")
+        .in(
+          "order_id",
+          orders.map((o) => o.id),
+        )
+        .is("removed_at", null),
+    ]);
+  const adjustments = (adjustmentRows ?? []) as {
+    order_id: string;
+    order_item_id: string | null;
+    kind: "void" | "comp" | "discount";
+    quantity: number | null;
+    amount: number | string;
+  }[];
+  const unitsOf = (itemId: string, kind: "void" | "comp") =>
+    adjustments
+      .filter((a) => a.order_item_id === itemId && a.kind === kind)
+      .reduce((sum, a) => sum + (a.quantity ?? 0), 0);
   const items = (itemRows ?? []) as {
     id: string;
     order_id: string;
@@ -349,6 +371,10 @@ async function loadOrders(
       placeLabel,
       customerNote: o.customer_note,
       subtotal: Number(o.subtotal),
+      discountTotal: Number(o.discount_total),
+      orderDiscount: adjustments
+        .filter((a) => a.order_id === o.id && a.kind === "discount")
+        .reduce((sum, a) => sum + Number(a.amount), 0),
       tax: Number(o.tax),
       serviceCharge: Number(o.service_charge),
       total: Number(o.total),
@@ -359,6 +385,8 @@ async function loadOrders(
           quantity: i.quantity,
           itemName: i.item_name,
           lineTotal: Number(i.line_total),
+          voided: unitsOf(i.id, "void"),
+          comped: unitsOf(i.id, "comp"),
           stationId: i.station_id,
           modifiers: modifiersByItem.get(i.id) ?? [],
           spicePreference: i.spice_preference,
