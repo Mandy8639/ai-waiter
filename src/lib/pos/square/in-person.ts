@@ -399,42 +399,79 @@ export async function cancelTerminal(args: {
  * in Tableside whatever happens here, and a failure is reported, not shown
  * to the staff member mid-service.
  */
-export async function copyCashSaleToSquare(args: {
+/**
+ * Copies a cash or card-machine payment into Square's reports
+ * (20261118090000): the itemised orders, or, for part of a split bill,
+ * one line for exactly that part. Best effort; returns whether it reached
+ * Square, and anything that didn't is listed on Settings → Point of sale
+ * (square_unsynced()) to send again.
+ */
+export async function copyInPersonSaleToSquare(args: {
   supabase: unknown;
   paymentId: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const supabase = args.supabase as SupabaseClient;
   try {
     const { data: payment } = await supabase
       .from("order_payments")
       .select(
-        "restaurant_id, amount, tip_amount, currency, method, square_payment_id",
+        "restaurant_id, amount, tip_amount, currency, method, square_payment_id, split_id",
       )
       .eq("id", args.paymentId)
       .maybeSingle();
-    if (!payment || payment.method !== "cash" || payment.square_payment_id)
-      return;
-    // Only restaurants taking payments through Square copy cash there.
+    if (
+      !payment ||
+      (payment.method !== "cash" && payment.method !== "card_terminal")
+    )
+      return false;
+    if (payment.square_payment_id) return true;
+    // Only restaurants taking payments through Square copy sales there.
     const { data: provider } = await supabase.rpc("restaurant_card_provider", {
       p_restaurant_id: payment.restaurant_id,
     });
-    if (provider !== "square") return;
+    if (provider !== "square") return false;
     const restaurantId: string = payment.restaurant_id;
 
-    const { data: lines, error: linesError } = await supabase.rpc(
-      "payment_bill_lines",
-      {
-        p_payment_id: args.paymentId,
-      },
-    );
-    if (linesError) throw linesError;
+    let lines: BillLine[];
+    if (payment.split_id) {
+      // A split part's payment covers no orders until the whole bill is
+      // paid, and then covers whole orders it paid only part of: one line
+      // for what this part came to.
+      const { data: parts } = await supabase
+        .from("tab_split_units")
+        .select("label, position")
+        .eq("payment_id", args.paymentId)
+        .order("position");
+      const label = ((parts ?? []) as { label: string }[])
+        .map((p) => p.label)
+        .join(", ");
+      lines = [
+        {
+          order_id: args.paymentId,
+          item_name: `Part of a split bill${label ? `: ${label}` : ""}`,
+          options: null,
+          quantity: 1,
+          unit_amount: payment.amount,
+          line_total: payment.amount,
+          order_total: payment.amount,
+        },
+      ];
+    } else {
+      const { data, error: linesError } = await supabase.rpc(
+        "payment_bill_lines",
+        { p_payment_id: args.paymentId },
+      );
+      if (linesError) throw linesError;
+      lines = (data ?? []) as BillLine[];
+    }
     const requests = buildCashSaleRequests({
       paymentId: args.paymentId,
       locationId: await squareLocationFor(restaurantId),
       currency: payment.currency,
       amount: payment.amount,
       tipAmount: payment.tip_amount,
-      lines: (lines ?? []) as BillLine[],
+      lines,
+      method: payment.method,
     });
     const squareOrderId = await createOrder(restaurantId, requests.createOrder);
     const squarePaymentId = await createCashPayment(
@@ -447,7 +484,9 @@ export async function copyCashSaleToSquare(args: {
       p_square_payment_id: squarePaymentId,
     });
     if (error) throw error;
+    return true;
   } catch (e) {
-    report(e, "square.cash.copy", { paymentId: args.paymentId });
+    report(e, "square.in_person.copy", { paymentId: args.paymentId });
+    return false;
   }
 }

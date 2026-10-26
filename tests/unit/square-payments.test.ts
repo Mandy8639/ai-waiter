@@ -363,11 +363,35 @@ describe("Square Terminal and cash (phase 3)", () => {
     const p = r.payment("SQORDER");
     expect(p.source_id).toBe("CASH");
     expect(p.amount_money).toEqual({ amount: 1289, currency: "USD" });
-    expect(p.cash_details.buyer_supplied_money).toEqual({
+    expect(p.cash_details?.buyer_supplied_money).toEqual({
       amount: 1289,
       currency: "USD",
     });
     expect(p.idempotency_key).toBe("cash-p2");
+  });
+
+  it("records a card-machine sale as an EXTERNAL card payment, keyed apart from cash", async () => {
+    const { buildCashSaleRequests } =
+      await import("@/lib/pos/square/checkout-core");
+    const r = buildCashSaleRequests({
+      paymentId: "11111111-2222-4333-8444-555555555555",
+      locationId: "LOC1",
+      currency: "USD",
+      amount: "10.89",
+      tipAmount: "0",
+      lines,
+      method: "card_terminal",
+    });
+    const p = r.payment("SQORDER");
+    expect(p.source_id).toBe("EXTERNAL");
+    expect(p.external_details).toEqual({
+      type: "CARD",
+      source: "Card machine",
+    });
+    expect(p.cash_details).toBeUndefined();
+    expect(p.idempotency_key).toBe("ext-11111111-2222-4333-8444-555555555555");
+    expect(p.idempotency_key.length).toBeLessThanOrEqual(45);
+    expect(r.createOrder.idempotency_key).toMatch(/^tableside-ext-order-/);
   });
 
   it("reads a Terminal tip off Square's payment, and treats a missing one as none", () => {

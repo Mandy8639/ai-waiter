@@ -68,6 +68,8 @@ const SIGNED_IN_ONLY = [
   "clear_approval_pin",
   "my_approval_pin_set",
   "verify_approval_pin",
+  "attach_copied_refund",
+  "square_unsynced",
   "transition_order_status",
   "get_restaurant_staff",
   "record_in_person_payment",

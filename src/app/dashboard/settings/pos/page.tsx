@@ -27,6 +27,7 @@ import {
   SquareTerminals,
   type TerminalRow,
 } from "@/components/pos/square-terminals";
+import { SquareSyncPanel } from "@/components/pos/square-sync-panel";
 import {
   chooseSquareLocation,
   disconnectSquare,
@@ -134,6 +135,20 @@ export default async function PointOfSalePage({
     }));
     canPair = canPairTerminals(scopes);
   }
+  // Cash and card-machine sales (and their refunds) that didn't reach
+  // Square's reports (20261118090000).
+  let unsynced = { payments: 0, refunds: 0 };
+  if (connected && row?.payments_enabled) {
+    const { data } = await supabase.rpc("square_unsynced", {
+      p_restaurant_id: restaurant.id,
+    });
+    const u = data as { payments?: unknown[]; refunds?: unknown[] } | null;
+    unsynced = {
+      payments: u?.payments?.length ?? 0,
+      refunds: u?.refunds?.length ?? 0,
+    };
+  }
+
   const testTerminals =
     squareConfig()?.environment === "sandbox"
       ? SQUARE_TEST_TERMINALS.map((t) => ({ ...t }))
@@ -181,6 +196,25 @@ export default async function PointOfSalePage({
           />
         </CardContent>
       </Card>
+
+      {unsynced.payments + unsynced.refunds > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Not yet in Square</CardTitle>
+            <CardDescription>
+              Cash and card-machine sales, and refunds of them, are copied into
+              Square so its reports match Tableside&apos;s.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SquareSyncPanel
+              restaurantId={restaurant.id}
+              payments={unsynced.payments}
+              refunds={unsynced.refunds}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {connected && (
         <Card>

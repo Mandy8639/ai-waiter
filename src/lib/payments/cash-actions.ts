@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { copyCashSaleToSquare } from "@/lib/pos/square/in-person";
+import { copyInPersonSaleToSquare } from "@/lib/pos/square/in-person";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/orders/format";
 import { parsePaymentError } from "./errors";
@@ -82,13 +82,12 @@ async function recordInPersonPayment(
   if (!data)
     return { error: "Couldn't record that payment. Please try again." };
 
-  // A restaurant taking payments through Square also gets the cash sale in
-  // Square's reports. After the response, and best effort: the cash is
-  // recorded in Tableside either way (src/lib/pos/square/in-person.ts).
-  if (method === "cash") {
-    const paymentId = String(data);
-    after(() => copyCashSaleToSquare({ supabase, paymentId }));
-  }
+  // A restaurant taking payments through Square also gets the sale (cash or
+  // card machine) in Square's reports. After the response, and best effort:
+  // the payment is recorded in Tableside either way, and one that didn't
+  // reach Square can be sent again (src/lib/pos/square/in-person.ts).
+  const paymentId = String(data);
+  after(() => copyInPersonSaleToSquare({ supabase, paymentId }));
 
   revalidatePath("/dashboard/checkout");
   revalidatePath("/dashboard/reports");

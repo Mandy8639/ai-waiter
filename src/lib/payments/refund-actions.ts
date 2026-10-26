@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "./stripe";
@@ -9,7 +10,7 @@ import { formatMoney } from "@/lib/orders/format";
 import { parsePaymentError } from "./errors";
 import { parseRefundReason, parseRefundAmount } from "./refund-reason";
 import { reportError } from "@/lib/observability/report";
-import { sendSquareRefund } from "@/lib/pos/square/refunds";
+import { copyRefundToSquare, sendSquareRefund } from "@/lib/pos/square/refunds";
 
 /**
  * Refunding a payment.
@@ -96,6 +97,22 @@ export async function refundPayment(
   // Cash or a card machine: the restaurant hands the money back itself;
   // start_refund() has already recorded it as done.
   if (refund.provider === "none") {
+    // A sale copied into Square gets the refund there too (20261118090000).
+    if (refund.square_payment_id) {
+      const squarePaymentId = refund.square_payment_id;
+      const client = supabase as unknown as SupabaseClient;
+      after(() =>
+        copyRefundToSquare({
+          supabase: client,
+          restaurantId: refund.restaurant_id,
+          refundId: refund.refund_id,
+          squarePaymentId,
+          amount: refund.amount,
+          currency: refund.currency,
+          reason: reason.storedReason,
+        }),
+      );
+    }
     revalidatePath("/dashboard/reports");
     return {
       success: `Recorded a refund of ${formatted}.`,

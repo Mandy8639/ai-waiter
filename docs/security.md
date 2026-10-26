@@ -1391,6 +1391,19 @@ access (RLS), checked to be the restaurant's payment, and sent with Resend.
 A repeat within the same minute is dropped by Resend's idempotency key.
 Nothing about the guest is stored.
 
+## Copying in-person sales to Square — (Square restaurants)
+
+Migration `20261118090000_square_sync.sql`. For restaurants taking cards
+through Square, every cash and card-machine sale is copied into Square after
+the response (`copyInPersonSaleToSquare()`): cash as a CASH payment, card
+machine as an EXTERNAL payment of type CARD, and a split part as one line
+for exactly its amount. A refund of a copied sale is mirrored as a Square
+refund (`copyRefundToSquare()`, linked by `attach_copied_refund()`, owner or
+manager). Each request is keyed on our own row, so a retry records once.
+Failed copies aren't lost: `square_unsynced()` (owner or manager) lists them,
+and Settings → Point of sale sends them again. Square card payments are
+never copied; Square already has them.
+
 ## Split bill — (phase J)
 
 `20261002090000_split_bill.sql`. A diner splits their tab into **equal shares** or **one part per

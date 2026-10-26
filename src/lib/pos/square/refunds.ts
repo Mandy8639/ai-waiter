@@ -131,3 +131,47 @@ export async function checkPendingSquareRefunds(
     }
   }
 }
+
+/**
+ * Mirrors a cash or card-machine refund in Square (20261118090000), when
+ * the sale it refunds was copied there. The money was handed back at the
+ * table; this only keeps Square's reports matching. Best effort: one that
+ * doesn't get through is listed on Settings → Point of sale to send again.
+ */
+export async function copyRefundToSquare(input: {
+  supabase: SupabaseClient;
+  restaurantId: string;
+  refundId: string;
+  squarePaymentId: string;
+  amount: string | number;
+  currency: string;
+  reason: string;
+}): Promise<boolean> {
+  try {
+    const refund = await refundSquarePayment(
+      input.restaurantId,
+      buildSquareRefund({
+        refundId: input.refundId,
+        squarePaymentId: input.squarePaymentId,
+        amountMinorUnits: toMinorUnits(String(input.amount), input.currency),
+        currency: input.currency,
+        // No Tableside fee on a payment taken outside Square.
+        paymentTotalMinorUnits: 0,
+        appFeeMinorUnits: 0,
+        reason: input.reason,
+      }),
+    );
+    const { error } = await rpcOf(input.supabase)("attach_copied_refund", {
+      p_refund_id: input.refundId,
+      p_square_refund_id: refund.id,
+    });
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    reportError(error, {
+      scope: "payments.refund.square.copy",
+      extra: { refundId: input.refundId },
+    });
+    return false;
+  }
+}

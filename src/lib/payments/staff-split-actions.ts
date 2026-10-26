@@ -1,10 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { reportError } from "@/lib/observability/report";
-import { sendSplitToTerminal } from "@/lib/pos/square/in-person";
+import {
+  copyInPersonSaleToSquare,
+  sendSplitToTerminal,
+} from "@/lib/pos/square/in-person";
 import { parsePaymentError } from "./errors";
 import { parseTip } from "./tip";
 
@@ -112,13 +116,17 @@ export async function paySplitInPerson(
 
   const auth = await authorized(restaurantId);
   if (!auth.ok) return { ok: false, error: auth.error };
-  const { error } = await auth.rpc("pay_split_in_person", {
+  const { data, error } = await auth.rpc("pay_split_in_person", {
     p_split_id: splitId,
     p_unit_ids: units.data,
     p_method: method,
     p_tip_amount: parsedTip.value,
   });
   if (error) return failed(error, "payments.split.pay");
+  // Into Square's reports too, for a Square restaurant (20261118090000).
+  const paymentId = String(data);
+  const supabase = auth.supabase;
+  after(() => copyInPersonSaleToSquare({ supabase, paymentId }));
   revalidatePath("/dashboard/reports");
   return done();
 }
