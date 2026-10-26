@@ -312,3 +312,78 @@ ${reason}
 `,
   };
 }
+
+// A guest's receipt, sent from Settle up or Reports ---------------------------
+
+export interface ReceiptEmailData {
+  restaurantName: string;
+  /** "12 Main St, Newark, NJ", if the restaurant has one. */
+  restaurantAddress: string | null;
+  currency: string;
+  /** "Oct 26, 2026, 7:45 PM", already in the restaurant's time zone. */
+  paidLabel: string;
+  /** "Cash", "Card", "Card machine". */
+  methodLabel: string;
+  lines: Array<{ name: string; quantity: number; amount: number }>;
+  /** The dishes' total, before tip. */
+  amount: number;
+  tip: number;
+  refunded: number;
+  /** What the guest paid, less anything refunded. */
+  net: number;
+}
+
+/**
+ * The receipt itself, in the email: a guest who paid cash has no link to a
+ * receipt page, so nothing here depends on one.
+ */
+export function renderReceiptEmail(data: ReceiptEmailData): EmailMessage {
+  const money = (v: number) => formatMoney(v, data.currency);
+  const row = (left: string, right: string, bold = false) =>
+    `<tr><td style="padding:4px 0;${bold ? "font-weight:600;" : ""}">${escapeHtml(left)}</td><td style="padding:4px 0;text-align:right;${bold ? "font-weight:600;" : ""}">${escapeHtml(right)}</td></tr>`;
+  const dishRows = data.lines
+    .map((l) => row(`${l.quantity} × ${l.name}`, money(l.amount)))
+    .join("");
+  const totals = [
+    data.lines.length > 0 ? row("Bill", money(data.amount)) : "",
+    data.tip > 0 ? row("Tip", money(data.tip)) : "",
+    data.refunded > 0 ? row("Refunded", `-${money(data.refunded)}`) : "",
+    row(`Paid · ${data.methodLabel}`, money(data.net), true),
+  ].join("");
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#faf8f5;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f1a17;">
+    <div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #ece6df;border-radius:12px;padding:24px;">
+      <h1 style="margin:0 0 4px;font-size:20px;line-height:1.3;">${escapeHtml(data.restaurantName)}</h1>
+      ${data.restaurantAddress ? `<p style="margin:0 0 4px;font-size:13px;color:#7a716a;">${escapeHtml(data.restaurantAddress)}</p>` : ""}
+      <p style="margin:0 0 16px;font-size:13px;color:#7a716a;">Receipt · ${escapeHtml(data.paidLabel)}</p>
+      <table style="width:100%;border-collapse:collapse;font-size:15px;">
+        ${dishRows}
+        ${dishRows ? '<tr><td colspan="2" style="border-top:1px solid #ece6df;padding:0;"></td></tr>' : ""}
+        ${totals}
+      </table>
+      <p style="margin:24px 0 0;font-size:13px;color:#7a716a;">Thank you for dining with us.</p>
+    </div>
+  </body>
+</html>`;
+  const text = [
+    data.restaurantName,
+    data.restaurantAddress ?? "",
+    `Receipt · ${data.paidLabel}`,
+    "",
+    ...data.lines.map((l) => `${l.quantity} x ${l.name}  ${money(l.amount)}`),
+    data.lines.length > 0 ? `Bill  ${money(data.amount)}` : "",
+    data.tip > 0 ? `Tip  ${money(data.tip)}` : "",
+    data.refunded > 0 ? `Refunded  -${money(data.refunded)}` : "",
+    `Paid · ${data.methodLabel}  ${money(data.net)}`,
+    "",
+    "Thank you for dining with us.",
+  ]
+    .filter((line, i, all) => line !== "" || all[i - 1] !== "")
+    .join("\n");
+  return {
+    subject: `Your receipt from ${data.restaurantName}`,
+    html,
+    text,
+  };
+}

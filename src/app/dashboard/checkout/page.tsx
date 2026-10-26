@@ -24,6 +24,9 @@ import { AdjustBillDialog } from "@/components/payments/adjust-bill-dialog";
 import { SettleUpSync } from "@/components/payments/settle-up-sync";
 import { SplitBillDialog } from "@/components/payments/split-bill-dialog";
 import { SplitPanel } from "@/components/payments/split-panel";
+import { ReceiptActions } from "@/components/payments/receipt-actions";
+import { getRecentPayments } from "@/lib/payments/recent-payments";
+import { paymentMethodLabel } from "@/lib/payments/method";
 
 export const metadata = {
   title: "Settle up — Tableside",
@@ -76,6 +79,7 @@ export default async function CheckoutPage() {
     { data: cardProvider },
     { data: devices },
     print,
+    recentPayments,
   ] = await Promise.all([
     supabase
       .from("restaurant_settings")
@@ -90,6 +94,7 @@ export default async function CheckoutPage() {
       .eq("restaurant_id", restaurant.id)
       .eq("status", "paired"),
     getPrintCapabilities(restaurant.id),
+    getRecentPayments(restaurant.id),
   ]);
   // Square restaurants take cards on a paired Square Terminal; Tap to Pay
   // is Stripe's and stays off for them.
@@ -108,8 +113,13 @@ export default async function CheckoutPage() {
   const outstanding = tables.reduce((sum, t) => sum + t.total, 0);
   const olderOutstanding = older.reduce((sum, t) => sum + t.total, 0);
   const currency = tables[0]?.currency ?? older[0]?.currency ?? "USD";
+  // Owners and managers adjust directly; a waiter with a manager's PIN
+  // (20261117090000).
   const canAdjust =
-    restaurant.role === "owner" || restaurant.role === "manager";
+    restaurant.role === "owner" ||
+    restaurant.role === "manager" ||
+    restaurant.role === "staff";
+  const adjustNeedsApproval = restaurant.role === "staff";
 
   const card = (table: UnpaidTable, showDates: boolean) => {
     // A split (staff's, or a diner's on their phone) holds its orders until
@@ -186,6 +196,7 @@ export default async function CheckoutPage() {
                 tableLabel={table.tableLabel}
                 orders={table.orders}
                 currency={table.currency}
+                needsApproval={adjustNeedsApproval}
               />
             )}
             {!split && table.total > 0 && (
@@ -337,6 +348,54 @@ export default async function CheckoutPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {older.map((table) => card(table, true))}
           </div>
+        </section>
+      )}
+
+      {recentPayments.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Paid recently
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              Print or email a guest their receipt.
+            </p>
+          </div>
+          <ul className="divide-y rounded-md border text-sm">
+            {recentPayments.map((p) => (
+              <li
+                key={p.id}
+                className="flex flex-wrap items-center justify-between gap-2 p-3"
+              >
+                <span className="flex flex-col">
+                  <span className="font-medium">
+                    {p.orderNumbers.length > 0
+                      ? p.orderNumbers.map((n) => `#${n}`).join(", ")
+                      : p.splitPart
+                        ? "Part of a split bill"
+                        : "Payment"}{" "}
+                    · {formatMoney(p.total, p.currency)}
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    {p.method === "card" && p.cardPresent
+                      ? "Card (in person)"
+                      : paymentMethodLabel(p.method)}{" "}
+                    ·{" "}
+                    {new Date(p.paidAt).toLocaleTimeString("en-US", {
+                      timeZone: restaurant.timezone,
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </span>
+                <ReceiptActions
+                  restaurantId={restaurant.id}
+                  paymentId={p.id}
+                  canPrint={print.receipt}
+                />
+              </li>
+            ))}
+          </ul>
         </section>
       )}
     </div>

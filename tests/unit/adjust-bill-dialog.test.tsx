@@ -56,13 +56,14 @@ const order: BillOrder = {
   ],
 };
 
-function openDialog() {
+function openDialog(needsApproval = false) {
   render(
     <AdjustBillDialog
       restaurantId={RESTAURANT}
       tableLabel="Table 4"
       orders={[order]}
       currency="USD"
+      needsApproval={needsApproval}
     />,
   );
   fireEvent.click(screen.getByRole("button", { name: /adjust/i }));
@@ -85,14 +86,17 @@ describe("AdjustBillDialog", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() =>
-      expect(adjustOrder).toHaveBeenCalledWith({
-        kind: "comp",
-        restaurantId: RESTAURANT,
-        orderId: order.id,
-        itemId: order.items[0].id,
-        quantity: 2,
-        reason: "Quality issue",
-      }),
+      expect(adjustOrder).toHaveBeenCalledWith(
+        {
+          kind: "comp",
+          restaurantId: RESTAURANT,
+          orderId: order.id,
+          itemId: order.items[0].id,
+          quantity: 2,
+          reason: "Quality issue",
+        },
+        undefined,
+      ),
     );
   });
 
@@ -108,6 +112,7 @@ describe("AdjustBillDialog", () => {
           amount: null,
           reason: "Walked out",
         }),
+        undefined,
       ),
     );
   });
@@ -135,6 +140,30 @@ describe("AdjustBillDialog", () => {
       expect(removeAdjustment).toHaveBeenCalledWith(
         RESTAURANT,
         order.adjustments[0].id,
+        undefined,
+      ),
+    );
+  });
+
+  it("asks a waiter for a manager's PIN, and sends it with the change", async () => {
+    openDialog(true);
+    fireEvent.click(await screen.findByRole("button", { name: "Write off" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(
+      await screen.findByText(
+        "A manager enters their PIN above to approve this.",
+      ),
+    ).toBeTruthy();
+    expect(adjustOrder).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Manager PIN"), {
+      target: { value: "48a21" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() =>
+      expect(adjustOrder).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "discount", percent: 100 }),
+        "4821",
       ),
     );
   });

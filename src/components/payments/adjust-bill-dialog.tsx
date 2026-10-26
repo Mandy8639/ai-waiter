@@ -37,20 +37,25 @@ type Editing =
 /**
  * Settle up → Adjust, for owners and managers: void or comp dishes, take
  * money off an order, or write it off, each with a reason, and undo any of
- * them until the table pays. The database (adjust_order()) re-checks the
- * role and refuses an order a payment has started on; the new totals reach
- * every way of paying from there.
+ * them until the table pays. A waiter's changes need a manager's PIN
+ * (20261117090000), typed once per dialog and checked for each change. The
+ * database (adjust_order()) re-checks the role or approval and refuses an
+ * order a payment has started on; the new totals reach every way of paying
+ * from there.
  */
 export function AdjustBillDialog({
   restaurantId,
   tableLabel,
   orders,
   currency,
+  needsApproval = false,
 }: {
   restaurantId: string;
   tableLabel: string;
   orders: BillOrder[];
   currency: string;
+  /** A waiter: each change needs a manager's PIN. */
+  needsApproval?: boolean;
 }) {
   const money = (v: number) => formatMoney(v, currency);
   const [open, setOpen] = useState(false);
@@ -60,8 +65,16 @@ export function AdjustBillDialog({
   const [reasonText, setReasonText] = useState("");
   const [mode, setMode] = useState<"percent" | "amount">("percent");
   const [value, setValue] = useState("");
+  const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  /** False (and says so) when a waiter hasn't had a manager enter a PIN. */
+  function approvalReady(): boolean {
+    if (!needsApproval || /^[0-9]{4,6}$/.test(pin)) return true;
+    setError("A manager enters their PIN above to approve this.");
+    return false;
+  }
 
   function start(next: Editing) {
     setEditing(next);
@@ -79,7 +92,7 @@ export function AdjustBillDialog({
   }
 
   function apply() {
-    if (!editing) return;
+    if (!editing || !approvalReady()) return;
     const reason = chosenReason(reasonPick, reasonText);
     if (!reason) {
       setError("Say what the reason is.");
@@ -116,7 +129,10 @@ export function AdjustBillDialog({
     }
     setError(null);
     startTransition(async () => {
-      const result = await adjustOrder(request);
+      const result = await adjustOrder(
+        request,
+        needsApproval ? pin : undefined,
+      );
       if (result.ok) setEditing(null);
       else setError(result.error);
     });
@@ -124,8 +140,13 @@ export function AdjustBillDialog({
 
   function undo(adjustmentId: string) {
     setError(null);
+    if (!approvalReady()) return;
     startTransition(async () => {
-      const result = await removeAdjustment(restaurantId, adjustmentId);
+      const result = await removeAdjustment(
+        restaurantId,
+        adjustmentId,
+        needsApproval ? pin : undefined,
+      );
       if (!result.ok) setError(result.error);
     });
   }
@@ -238,6 +259,7 @@ export function AdjustBillDialog({
         if (!next) {
           setEditing(null);
           setError(null);
+          setPin("");
         }
         setOpen(next);
       }}
@@ -259,6 +281,25 @@ export function AdjustBillDialog({
             undone until the table pays.
           </DialogDescription>
         </DialogHeader>
+
+        {needsApproval && (
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="adjust-pin">Manager PIN</Label>
+            <Input
+              id="adjust-pin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={6}
+              className="w-32"
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ""))}
+            />
+            <p className="text-muted-foreground text-xs">
+              A manager types their PIN to approve the changes you make here.
+            </p>
+          </div>
+        )}
 
         {error && (
           <Alert variant="destructive" role="alert">

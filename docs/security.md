@@ -1365,6 +1365,32 @@ Migration `20261116090000_day_closes.sql`.
 - **Printing:** print job kind `day_close` (with `day_close_id`) through
   `request_print()`, for owners and managers, to receipt printers.
 
+## Manager PIN approval — (Settle up)
+
+Migration `20261117090000_approval_pins.sql`.
+
+- **PINs:** 4 to 6 digits, set by an owner or manager for themselves
+  (`set_approval_pin()`), stored as `sha256(salt || pin)` with a per-row salt
+  in `approval_pins`, which has RLS and no policies. Two managers at one
+  restaurant can't share a PIN, so a match names one approver.
+- **Guessing:** `verify_approval_pin()` never raises for a wrong PIN, so its
+  count of failures commits. Five wrong PINs within 15 minutes lock that
+  waiter out for 15 minutes. A match returns a single-use token, bound to
+  the waiter and the restaurant, that expires in 2 minutes.
+- **Using it:** `adjust_order()` and `remove_order_adjustment()` accept a
+  waiter (role `staff`) only with a valid token, which they consume
+  (`adjustment_approver()`), and record `approved_by`. Owners and managers
+  need no token. The PIN itself never reaches either function.
+
+## Receipts after payment
+
+Front-of-house staff can print a receipt again (`request_print()` kind
+`receipt`) or email it from Settle up's "Paid recently" or Reports. The
+email is built from `getReceipt()` read through the staff member's own
+access (RLS), checked to be the restaurant's payment, and sent with Resend.
+A repeat within the same minute is dropped by Resend's idempotency key.
+Nothing about the guest is stored.
+
 ## Split bill — (phase J)
 
 `20261002090000_split_bill.sql`. A diner splits their tab into **equal shares** or **one part per

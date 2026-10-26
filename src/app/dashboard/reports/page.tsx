@@ -10,6 +10,8 @@ import { RefundDialog } from "@/components/reports/refund-dialog";
 import { ReverseCashDialog } from "@/components/reports/reverse-cash-dialog";
 import { refundPayment } from "@/lib/payments/refund-actions";
 import { checkPendingSquareRefunds } from "@/lib/pos/square/refunds";
+import { ReceiptActions } from "@/components/payments/receipt-actions";
+import { getPrintCapabilities } from "@/lib/printing/capabilities";
 import { reverseCashPayment } from "@/lib/payments/cash-actions";
 import { formatReservationTime } from "@/lib/reservations/timezone";
 import { getDishFunnel, getReportData } from "@/lib/reports/queries";
@@ -67,10 +69,12 @@ export default async function ReportsPage({
     restaurant.id,
   );
 
-  const [{ summary, byMethod, payments, items }, funnel] = await Promise.all([
-    getReportData(restaurant.id, range),
-    getDishFunnel(restaurant.id, range),
-  ]);
+  const [{ summary, byMethod, payments, items }, funnel, print] =
+    await Promise.all([
+      getReportData(restaurant.id, range),
+      getDishFunnel(restaurant.id, range),
+      getPrintCapabilities(restaurant.id),
+    ]);
 
   const money = (value: string | number) =>
     formatMoney(Number(value), currency);
@@ -361,6 +365,15 @@ export default async function ReportsPage({
                       )}
                     </td>
                     <td className="py-2 text-right">
+                      {p.status === "succeeded" && p.method !== "comp" && (
+                        <div className="mb-1">
+                          <ReceiptActions
+                            restaurantId={restaurant.id}
+                            paymentId={p.paymentId}
+                            canPrint={print.receipt}
+                          />
+                        </div>
+                      )}
                       {/* A settled payment with money left can be refunded:
                           a card through Stripe or Square, cash and card
                           machine recorded as handed back (20261114090000).
