@@ -311,36 +311,49 @@ export function buildCashSaleRequests(input: {
   amount: string | number;
   tipAmount: string | number;
   lines: BillLine[];
+  /** A card-machine payment goes to Square as an EXTERNAL card payment (20261118090000). */
+  method?: "cash" | "card_terminal";
 }): {
   createOrder: { idempotency_key: string; order: SquareOrder };
   payment: (squareOrderId: string) => {
     idempotency_key: string;
-    source_id: "CASH";
+    source_id: "CASH" | "EXTERNAL";
     amount_money: SquareMoney;
     order_id: string;
     reference_id: string;
-    cash_details: { buyer_supplied_money: SquareMoney };
+    cash_details?: { buyer_supplied_money: SquareMoney };
+    external_details?: { type: "CARD"; source: string };
   };
 } {
   const currency = input.currency.toUpperCase();
   const { order } = buildSquareOrder(input);
   const total = orderTotalMinorUnits(order);
+  const cash = (input.method ?? "cash") === "cash";
   return {
     createOrder: {
-      idempotency_key: `tableside-cash-order-${input.paymentId}`,
+      idempotency_key: `tableside-${cash ? "cash" : "ext"}-order-${input.paymentId}`,
       order,
     },
     payment: (squareOrderId) => ({
       // Square caps CreatePayment idempotency keys at 45 characters; a
       // UUID is 36, so the prefix must stay short.
-      idempotency_key: `cash-${input.paymentId}`,
-      source_id: "CASH",
+      idempotency_key: `${cash ? "cash" : "ext"}-${input.paymentId}`,
+      source_id: cash ? "CASH" : "EXTERNAL",
       amount_money: { amount: total, currency },
       order_id: squareOrderId,
       reference_id: input.paymentId,
-      // Tableside doesn't record what the diner handed over, so this says
-      // exact change; Square only needs it to be at least the amount.
-      cash_details: { buyer_supplied_money: { amount: total, currency } },
+      ...(cash
+        ? {
+            // Tableside doesn't record what the diner handed over, so this
+            // says exact change; Square only needs it to be at least the
+            // amount.
+            cash_details: { buyer_supplied_money: { amount: total, currency } },
+          }
+        : {
+            // A card reader that isn't Square's: Square reports it as
+            // "other card" so the day's total still matches.
+            external_details: { type: "CARD" as const, source: "Card machine" },
+          }),
     }),
   };
 }

@@ -81,6 +81,8 @@ const PAYMENT_MESSAGES: Record<string, string> = {
     "Cash isn't switched on for this restaurant. Turn it on in Payments settings first.",
   PAYMENT_CARD_TERMINAL_NOT_ACCEPTED:
     "Card-machine payments aren't switched on for this restaurant. Turn them on in Payments settings first.",
+  PAYMENT_NOT_IN_PERSON:
+    "Only a cash or card-machine payment can be copied to Square.",
   PAYMENT_INVALID_METHOD: "Record either cash or a card-machine payment.",
   PAYMENT_NOT_FOUND: "We couldn't find that payment.",
   PAYMENT_NOT_CASH:
@@ -108,6 +110,8 @@ const PAYMENT_MESSAGES: Record<string, string> = {
   REFUND_EXCEEDS_PAYMENT: "That's more than is left to refund on this payment.",
   REFUND_NOTHING_LEFT: "This payment has already been fully refunded.",
   REFUND_INVALID: "Square didn't confirm that refund. Check it in Square.",
+  REFUND_NOT_IN_PERSON:
+    "Only a cash or card-machine refund is copied to Square.",
   REFUND_NOTHING_CHARGED:
     "Nothing was charged for this order, so there's nothing to refund.",
   REFUND_REASON_REQUIRED: "Say why this is being refunded.",
