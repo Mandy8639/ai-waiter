@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "./stripe";
 import { toMinorUnits } from "./money";
@@ -8,6 +9,7 @@ import { formatMoney } from "@/lib/orders/format";
 import { parsePaymentError } from "./errors";
 import { parseRefundReason, parseRefundAmount } from "./refund-reason";
 import { reportError } from "@/lib/observability/report";
+import { sendSquareRefund } from "@/lib/pos/square/refunds";
 
 /**
  * Refunding a payment.
@@ -42,8 +44,12 @@ interface StartRefundRow {
   refund_id: string;
   amount: string;
   currency: string;
-  stripe_payment_intent_id: string;
-  stripe_account_id: string;
+  /** Where the money goes back through (20261114090000). */
+  provider: "stripe" | "square" | "none";
+  stripe_payment_intent_id: string | null;
+  stripe_account_id: string | null;
+  square_payment_id: string | null;
+  restaurant_id: string;
 }
 
 export async function refundPayment(
@@ -51,10 +57,6 @@ export async function refundPayment(
   _prevState: RefundState,
   formData: FormData,
 ): Promise<RefundState> {
-  if (!isStripeConfigured()) {
-    return { error: "Stripe isn't configured, so refunds can't be issued." };
-  }
-
   const reason = parseRefundReason(
     formData.get("category"),
     formData.get("note"),
@@ -86,13 +88,56 @@ export async function refundPayment(
     return { error: "Couldn't start that refund. Please try again." };
   }
 
+  // Formatted through the same helper the rest of the app uses, so the
+  // confirmation reads in the currency the staff member has been looking
+  // at all along rather than a raw code and an unpadded number.
+  const formatted = formatMoney(Number(refund.amount), refund.currency);
+
+  // Cash or a card machine: the restaurant hands the money back itself;
+  // start_refund() has already recorded it as done.
+  if (refund.provider === "none") {
+    revalidatePath("/dashboard/reports");
+    return {
+      success: `Recorded a refund of ${formatted}.`,
+    };
+  }
+
+  if (refund.provider === "square") {
+    const outcome = await sendSquareRefund({
+      supabase: supabase as unknown as SupabaseClient,
+      restaurantId: refund.restaurant_id,
+      refundId: refund.refund_id,
+      squarePaymentId: refund.square_payment_id!,
+      amount: refund.amount,
+      currency: refund.currency,
+      reason: reason.storedReason,
+    });
+    revalidatePath("/dashboard/reports");
+    if (!outcome.ok) return { error: outcome.error };
+    if (outcome.status === "failed")
+      return { error: "Square declined that refund. Nothing was sent." };
+    return {
+      success:
+        outcome.status === "succeeded"
+          ? `Refunded ${formatted} to the guest's card.`
+          : `Refund of ${formatted} sent. Square is finishing it; Reports will show when it's done.`,
+    };
+  }
+
+  if (!isStripeConfigured()) {
+    await supabase.rpc("cancel_pending_refund", {
+      p_refund_id: refund.refund_id,
+    });
+    return { error: "Stripe isn't configured, so refunds can't be issued." };
+  }
+
   // Step 2 — ask Stripe.
   let succeeded = false;
   let stripeRefundId: string;
   try {
     const created = await getStripe().refunds.create(
       {
-        payment_intent: refund.stripe_payment_intent_id,
+        payment_intent: refund.stripe_payment_intent_id!,
         amount: toMinorUnits(refund.amount, refund.currency),
         reason: reason.category,
         // Our own row id travels with it, so a Stripe-side investigation
@@ -103,7 +148,7 @@ export async function refundPayment(
         // The refund must go back through the account the charge was made
         // on — a direct charge lives on the restaurant's account, not the
         // platform's.
-        stripeAccount: refund.stripe_account_id,
+        stripeAccount: refund.stripe_account_id!,
         // Keyed on our row, so a double-submitted form returns the same
         // Stripe refund instead of sending the money twice.
         idempotencyKey: `refund:${refund.refund_id}`,
@@ -152,11 +197,6 @@ export async function refundPayment(
   }
 
   revalidatePath("/dashboard/reports");
-
-  // Formatted through the same helper the rest of the app uses, so the
-  // confirmation reads in the currency the staff member has been looking
-  // at all along rather than a raw code and an unpadded number.
-  const formatted = formatMoney(Number(refund.amount), refund.currency);
 
   return {
     success: succeeded

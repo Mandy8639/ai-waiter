@@ -47,6 +47,7 @@ export function RefundDialog({
   paymentLabel,
   refundableAmount,
   currency,
+  method = "card",
 }: {
   refundAction: Action;
   /** e.g. "#12" — what the payment settled, so the right one is obvious. */
@@ -54,6 +55,8 @@ export function RefundDialog({
   /** What is left to refund, after anything already returned. */
   refundableAmount: string;
   currency: string;
+  /** How it was paid: a card refund moves money; cash and a card machine are refunded by the restaurant and recorded here. */
+  method?: "card" | "cash" | "card_terminal";
 }) {
   const [state, submit, pending] = useActionState(refundAction, initialState);
   const [open, setOpen] = useState(false);
@@ -79,8 +82,12 @@ export function RefundDialog({
           <DialogHeader>
             <DialogTitle>Refund {paymentLabel}</DialogTitle>
             <DialogDescription>
-              {format(remaining)} can still be refunded. The money goes back to
-              the card it came from, and this cannot be undone.
+              {format(remaining)} can still be refunded.{" "}
+              {method === "cash"
+                ? "Hand the cash back to the guest and record it here, so the day's takings match. This cannot be undone."
+                : method === "card_terminal"
+                  ? "Refund it on your card machine first, then record it here so the day's takings match. This cannot be undone."
+                  : "The money goes back to the card it came from, and this cannot be undone."}
             </DialogDescription>
           </DialogHeader>
 

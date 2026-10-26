@@ -107,6 +107,9 @@ const PAYMENT_MESSAGES: Record<string, string> = {
     "Only a card payment can be refunded. Reverse a cash or card-machine payment instead.",
   REFUND_EXCEEDS_PAYMENT: "That's more than is left to refund on this payment.",
   REFUND_NOTHING_LEFT: "This payment has already been fully refunded.",
+  REFUND_INVALID: "Square didn't confirm that refund. Check it in Square.",
+  REFUND_NOTHING_CHARGED:
+    "Nothing was charged for this order, so there's nothing to refund.",
   REFUND_REASON_REQUIRED: "Say why this is being refunded.",
   REFUND_NO_ACCOUNT:
     "This restaurant's Stripe account is no longer connected, so the money can't be sent back.",

@@ -483,6 +483,8 @@ export interface SquarePaymentState {
   orderId: string | null;
   totalMinorUnits: number;
   tipMinorUnits: number;
+  /** Tableside's fee on the payment (app_fee_money), 0 if none. */
+  appFeeMinorUnits: number;
   currency: string;
 }
 
@@ -499,6 +501,7 @@ export async function getPayment(
   const total = p?.total_money as
     { amount?: number; currency?: string } | undefined;
   const tip = p?.tip_money as { amount?: number } | undefined;
+  const fee = p?.app_fee_money as { amount?: number } | undefined;
   if (!p || typeof p.id !== "string" || typeof total?.amount !== "number") {
     throw new SquareError("Square didn't return the payment.");
   }
@@ -508,8 +511,48 @@ export async function getPayment(
     orderId: typeof p.order_id === "string" ? p.order_id : null,
     totalMinorUnits: total.amount,
     tipMinorUnits: typeof tip?.amount === "number" ? tip.amount : 0,
+    appFeeMinorUnits: typeof fee?.amount === "number" ? fee.amount : 0,
     currency: String(total.currency ?? ""),
   };
+}
+
+export interface SquareRefundState {
+  id: string;
+  /** PENDING, COMPLETED, REJECTED or FAILED. */
+  status: string;
+}
+
+const toRefund = (
+  r: Record<string, unknown> | undefined,
+): SquareRefundState => {
+  if (!r || typeof r.id !== "string")
+    throw new SquareError("Square didn't return the refund.");
+  return { id: r.id, status: String(r.status ?? "PENDING") };
+};
+
+/** Refunds part or all of a Square payment, back to the card it came from. */
+export async function refundSquarePayment(
+  restaurantId: string,
+  request: unknown,
+): Promise<SquareRefundState> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{ refund?: Record<string, unknown> }>(
+    "/v2/refunds",
+    { method: "POST", token, body: request },
+  );
+  return toRefund(body.refund);
+}
+
+export async function getSquareRefund(
+  restaurantId: string,
+  refundId: string,
+): Promise<SquareRefundState> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{ refund?: Record<string, unknown> }>(
+    `/v2/refunds/${encodeURIComponent(refundId)}`,
+    { token },
+  );
+  return toRefund(body.refund);
 }
 
 export async function createCashPayment(
