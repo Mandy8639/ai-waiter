@@ -30,6 +30,9 @@ const PAYMENT_MESSAGES: Record<string, string> = {
   PAYMENT_TIPPING_DISABLED: "This restaurant isn't accepting tips.",
   PAYMENT_ACCOUNT_NOT_READY:
     "Card payments aren't ready here yet. Please ask your server.",
+  // Square phase 3 (20261111090000), staff-facing.
+  PAYMENT_NOT_SQUARE:
+    "This restaurant doesn't take cards through Square. Turn it on in Settings → Point of sale.",
   PAYMENT_NOT_PENDING: "That payment has already been started.",
   PAYMENT_IN_PROGRESS:
     "A payment for this order is already open. Finish it, or reload the page to start again.",

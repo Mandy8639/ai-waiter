@@ -17,6 +17,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CashPaymentDialog } from "@/components/payments/cash-payment-dialog";
 import { TapToPayDialog } from "@/components/payments/tap-to-pay-dialog";
+import {
+  SquareTerminalDialog,
+  type PairedTerminal,
+} from "@/components/payments/square-terminal-dialog";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/orders/format";
 import {
@@ -78,6 +82,8 @@ export function PosScreen({
     cardMachine: boolean;
     card: boolean;
     tipping: boolean;
+    /** Square restaurants: their paired Terminals (Tap to Pay is Stripe's). Null otherwise. */
+    squareTerminals: PairedTerminal[] | null;
   };
 }) {
   const [tableId, setTableId] = useState<string | null>(null);
@@ -395,7 +401,17 @@ export function PosScreen({
                 </p>
               ) : sent.counter ? (
                 <div className="flex flex-wrap gap-2">
-                  {payments.card && (
+                  {payments.card && payments.squareTerminals && (
+                    <SquareTerminalDialog
+                      restaurantId={restaurantId}
+                      tableLabel={sent.where}
+                      orders={[sent.order]}
+                      currency={sent.order.currency}
+                      terminals={payments.squareTerminals}
+                      onPaid={() => markPaid("card")}
+                    />
+                  )}
+                  {payments.card && !payments.squareTerminals && (
                     <TapToPayDialog
                       restaurantId={restaurantId}
                       tableLabel={sent.where}

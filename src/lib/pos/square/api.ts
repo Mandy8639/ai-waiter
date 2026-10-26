@@ -136,6 +136,8 @@ function untilTypesRegenerated(): SupabaseClient {
 export async function saveTokens(
   restaurantId: string,
   tokens: SquareTokens,
+  /** The scopes just granted. Given on a new connection; omitted on a refresh, which keeps them. */
+  scopes?: readonly string[],
 ): Promise<void> {
   const key = parseTokenKey(process.env.POS_TOKEN_ENCRYPTION_KEY);
   const { error } = await untilTypesRegenerated()
@@ -149,6 +151,7 @@ export async function saveTokens(
         ? encryptToken(tokens.refreshToken, key)
         : null,
       expires_at: tokens.expiresAt,
+      ...(scopes ? { scopes: scopes.join(" ") } : {}),
     });
   if (error)
     throw new SquareError(
@@ -370,4 +373,244 @@ export async function createPaymentLink(
     throw new SquareError("Square didn't return a checkout page.");
   }
   return { url, orderId: link.order_id };
+}
+
+// ── In person (phase 3) ───────────────────────────────────────────────
+//
+// Called from staff actions (src/lib/pos/square/in-person.ts) after the
+// member's own call to start_square_terminal_payment() /
+// record_in_person_payment() succeeded for that restaurant, and from the
+// Point of sale settings actions after authorizeSquare().
+
+export async function squareLocationFor(restaurantId: string): Promise<string> {
+  const { data } = await untilTypesRegenerated()
+    .from("restaurant_pos_integrations")
+    .select("provider, external_location_id, is_enabled")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+  if (
+    data?.provider !== "square" ||
+    !data.is_enabled ||
+    !data.external_location_id
+  ) {
+    throw new SquareError("Square isn't connected with a location here.");
+  }
+  return data.external_location_id;
+}
+
+export async function grantedScopes(
+  restaurantId: string,
+): Promise<string | null> {
+  const { data } = await untilTypesRegenerated()
+    .from("pos_credentials")
+    .select("scopes")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+  return data?.scopes ?? null;
+}
+
+export async function createOrder(
+  restaurantId: string,
+  request: unknown,
+): Promise<string> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{ order?: { id?: string } }>("/v2/orders", {
+    method: "POST",
+    token,
+    body: request,
+  });
+  if (!body.order?.id) throw new SquareError("Square didn't create the order.");
+  return body.order.id;
+}
+
+export interface TerminalCheckoutState {
+  id: string;
+  status: string;
+  paymentIds: string[];
+}
+
+const toCheckout = (
+  c: Record<string, unknown> | undefined,
+): TerminalCheckoutState => {
+  if (!c || typeof c.id !== "string")
+    throw new SquareError("Square didn't return the checkout.");
+  return {
+    id: c.id,
+    status: String(c.status ?? "PENDING"),
+    paymentIds: Array.isArray(c.payment_ids) ? c.payment_ids.map(String) : [],
+  };
+};
+
+export async function createTerminalCheckout(
+  restaurantId: string,
+  request: unknown,
+): Promise<TerminalCheckoutState> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{ checkout?: Record<string, unknown> }>(
+    "/v2/terminals/checkouts",
+    { method: "POST", token, body: request },
+  );
+  return toCheckout(body.checkout);
+}
+
+export async function getTerminalCheckout(
+  restaurantId: string,
+  checkoutId: string,
+): Promise<TerminalCheckoutState> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{ checkout?: Record<string, unknown> }>(
+    `/v2/terminals/checkouts/${encodeURIComponent(checkoutId)}`,
+    { token },
+  );
+  return toCheckout(body.checkout);
+}
+
+export async function cancelTerminalCheckout(
+  restaurantId: string,
+  checkoutId: string,
+): Promise<TerminalCheckoutState> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{ checkout?: Record<string, unknown> }>(
+    `/v2/terminals/checkouts/${encodeURIComponent(checkoutId)}/cancel`,
+    { method: "POST", token },
+  );
+  return toCheckout(body.checkout);
+}
+
+export interface SquarePaymentState {
+  id: string;
+  status: string;
+  orderId: string | null;
+  totalMinorUnits: number;
+  tipMinorUnits: number;
+  currency: string;
+}
+
+export async function getPayment(
+  restaurantId: string,
+  paymentId: string,
+): Promise<SquarePaymentState> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{ payment?: Record<string, unknown> }>(
+    `/v2/payments/${encodeURIComponent(paymentId)}`,
+    { token },
+  );
+  const p = body.payment;
+  const total = p?.total_money as
+    { amount?: number; currency?: string } | undefined;
+  const tip = p?.tip_money as { amount?: number } | undefined;
+  if (!p || typeof p.id !== "string" || typeof total?.amount !== "number") {
+    throw new SquareError("Square didn't return the payment.");
+  }
+  return {
+    id: p.id,
+    status: String(p.status ?? ""),
+    orderId: typeof p.order_id === "string" ? p.order_id : null,
+    totalMinorUnits: total.amount,
+    tipMinorUnits: typeof tip?.amount === "number" ? tip.amount : 0,
+    currency: String(total.currency ?? ""),
+  };
+}
+
+export async function createCashPayment(
+  restaurantId: string,
+  request: unknown,
+): Promise<string> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{ payment?: { id?: string } }>(
+    "/v2/payments",
+    {
+      method: "POST",
+      token,
+      body: request,
+    },
+  );
+  if (!body.payment?.id)
+    throw new SquareError("Square didn't record the cash sale.");
+  return body.payment.id;
+}
+
+export interface DeviceCodeState {
+  id: string;
+  code: string;
+  status: string;
+  deviceId: string | null;
+  pairBy: string | null;
+}
+
+const toDeviceCode = (
+  d: Record<string, unknown> | undefined,
+): DeviceCodeState => {
+  if (!d || typeof d.id !== "string")
+    throw new SquareError("Square didn't return a device code.");
+  return {
+    id: d.id,
+    code: String(d.code ?? ""),
+    status: String(d.status ?? "UNKNOWN"),
+    deviceId: typeof d.device_id === "string" ? d.device_id : null,
+    pairBy: typeof d.pair_by === "string" ? d.pair_by : null,
+  };
+};
+
+/** A code the seller types on a Square Terminal to pair it (Devices API, TERMINAL_API). */
+export async function createDeviceCode(
+  restaurantId: string,
+  name: string,
+  idempotencyKey: string,
+): Promise<DeviceCodeState> {
+  const token = await accessTokenFor(restaurantId);
+  const locationId = await squareLocationFor(restaurantId);
+  const body = await squareFetch<{ device_code?: Record<string, unknown> }>(
+    "/v2/devices/codes",
+    {
+      method: "POST",
+      token,
+      body: {
+        idempotency_key: idempotencyKey,
+        device_code: {
+          name,
+          product_type: "TERMINAL_API",
+          location_id: locationId,
+        },
+      },
+    },
+  );
+  return toDeviceCode(body.device_code);
+}
+
+export async function getDeviceCode(
+  restaurantId: string,
+  deviceCodeId: string,
+): Promise<DeviceCodeState> {
+  const token = await accessTokenFor(restaurantId);
+  const body = await squareFetch<{ device_code?: Record<string, unknown> }>(
+    `/v2/devices/codes/${encodeURIComponent(deviceCodeId)}`,
+    { token },
+  );
+  return toDeviceCode(body.device_code);
+}
+
+/**
+ * Settle a Square payment after the server has just read it from Square
+ * (a Terminal checkout the staff member is waiting on). The webhook does
+ * the same as a backstop. settle_square_payment() is service_role only and
+ * refuses any amount that doesn't match the bill.
+ */
+export async function settleFromSquare(
+  payment: SquarePaymentState,
+): Promise<string> {
+  if (!payment.orderId) return "unknown";
+  const { data, error } = await untilTypesRegenerated().rpc(
+    "settle_square_payment",
+    {
+      p_square_order_id: payment.orderId,
+      p_square_payment_id: payment.id,
+      p_total_minor_units: payment.totalMinorUnits,
+      p_tip_minor_units: payment.tipMinorUnits,
+      p_currency: payment.currency,
+    },
+  );
+  if (error)
+    throw new SquareError("Couldn't record the payment.", error.message);
+  return String(data);
 }

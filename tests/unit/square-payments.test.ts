@@ -216,6 +216,7 @@ describe("Square webhook", () => {
       paymentId: "PAY1",
       orderId: "SQORDER1",
       totalMinorUnits: 2042,
+      tipMinorUnits: 0,
       currency: "USD",
     });
     expect(
@@ -240,6 +241,136 @@ describe("Square webhook", () => {
     ).toBe(true);
     expect(squareWebhookReady({ SQUARE_WEBHOOK_SIGNATURE_KEY: "k" })).toBe(
       false,
+    );
+  });
+});
+
+describe("Square Terminal and cash (phase 3)", () => {
+  const lines = [
+    {
+      order_id: "o1",
+      item_name: "Mango Lassi",
+      options: null,
+      quantity: 2,
+      unit_amount: "5.00",
+      line_total: "10.00",
+      order_total: "10.89",
+    },
+  ];
+
+  it("sends an itemised order to the Terminal for exactly the bill, tip left to the device", async () => {
+    const { buildTerminalRequests, orderTotalMinorUnits } =
+      await import("@/lib/pos/square/checkout-core");
+    const r = buildTerminalRequests({
+      paymentId: "p1",
+      locationId: "LOC1",
+      currency: "usd",
+      amount: "10.89",
+      lines,
+      deviceId: "DEV1",
+      tippingEnabled: true,
+      appFeeMinorUnits: 11,
+      note: "Tableside: Demo",
+    });
+    expect(r.createOrder.order.service_charges).toBeUndefined();
+    expect(orderTotalMinorUnits(r.createOrder.order)).toBe(1089);
+    const c = r.checkout("SQORDER").checkout;
+    expect(c.amount_money).toEqual({ amount: 1089, currency: "USD" });
+    expect(c.order_id).toBe("SQORDER");
+    expect(c.app_fee_money).toEqual({ amount: 11, currency: "USD" });
+    expect(c.device_options).toEqual({
+      device_id: "DEV1",
+      show_itemized_cart: true,
+      skip_receipt_screen: false,
+      tip_settings: { allow_tipping: true },
+    });
+    expect(r.checkout("SQORDER").idempotency_key).toBe("tableside-terminal-p1");
+  });
+
+  it("turns Terminal tipping off when the restaurant doesn't take tips", async () => {
+    const { buildTerminalRequests } =
+      await import("@/lib/pos/square/checkout-core");
+    const r = buildTerminalRequests({
+      paymentId: "p1",
+      locationId: "LOC1",
+      currency: "USD",
+      amount: "10.89",
+      lines,
+      deviceId: "DEV1",
+      tippingEnabled: false,
+      appFeeMinorUnits: 0,
+      note: "n",
+    });
+    const c = r.checkout("O").checkout;
+    expect(c.device_options.tip_settings.allow_tipping).toBe(false);
+    expect(c.app_fee_money).toBeUndefined();
+  });
+
+  it("records cash as a CASH payment for the order total including the tip", async () => {
+    const { buildCashSaleRequests } =
+      await import("@/lib/pos/square/checkout-core");
+    const r = buildCashSaleRequests({
+      paymentId: "p2",
+      locationId: "LOC1",
+      currency: "USD",
+      amount: "10.89",
+      tipAmount: "2.00",
+      lines,
+    });
+    expect(r.createOrder.order.service_charges?.[0].amount_money.amount).toBe(
+      200,
+    );
+    const p = r.payment("SQORDER");
+    expect(p.source_id).toBe("CASH");
+    expect(p.amount_money).toEqual({ amount: 1289, currency: "USD" });
+    expect(p.cash_details.buyer_supplied_money).toEqual({
+      amount: 1289,
+      currency: "USD",
+    });
+    expect(p.idempotency_key).toBe("tableside-cash-p2");
+  });
+
+  it("reads a Terminal tip off Square's payment, and treats a missing one as none", () => {
+    const withTip = completedPaymentFrom({
+      type: "payment.updated",
+      data: {
+        object: {
+          payment: {
+            id: "P",
+            order_id: "O",
+            status: "COMPLETED",
+            total_money: { amount: 1307, currency: "USD" },
+            tip_money: { amount: 218, currency: "USD" },
+          },
+        },
+      },
+    });
+    expect(withTip?.tipMinorUnits).toBe(218);
+    expect(
+      completedPaymentFrom({
+        type: "payment.updated",
+        data: {
+          object: {
+            payment: {
+              id: "P",
+              order_id: "O",
+              status: "COMPLETED",
+              total_money: { amount: 5, currency: "USD" },
+            },
+          },
+        },
+      })?.tipMinorUnits,
+    ).toBe(0);
+  });
+
+  it("knows which connections can pair a Terminal", async () => {
+    const { canPairTerminals, SQUARE_SCOPES, SQUARE_TEST_TERMINALS } =
+      await import("@/lib/pos/square/oauth-core");
+    expect(canPairTerminals(SQUARE_SCOPES.join(" "))).toBe(true);
+    expect(canPairTerminals("ITEMS_READ ORDERS_WRITE")).toBe(false);
+    expect(canPairTerminals(null)).toBe(false);
+    expect(SQUARE_TEST_TERMINALS.map((t) => t.deviceId)).toContain(
+      "22cd266c-6246-4c06-9983-67f0c26346b0",
     );
   });
 });

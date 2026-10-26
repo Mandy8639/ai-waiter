@@ -3,6 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CashPaymentDialog } from "@/components/payments/cash-payment-dialog";
 import { TapToPayDialog } from "@/components/payments/tap-to-pay-dialog";
+import {
+  SquareTerminalDialog,
+  type PairedTerminal,
+} from "@/components/payments/square-terminal-dialog";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/orders/format";
@@ -32,14 +36,51 @@ export default async function CheckoutPage() {
   const { restaurant } = await requireCurrentRestaurant();
 
   const supabase = await createClient();
-  const [{ data: settings }, tables] = await Promise.all([
+  // Square phase 3 (20261111090000) is newer than database.types.ts.
+  const loose = supabase as unknown as {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: unknown }>;
+    from: (table: string) => {
+      select: (columns: string) => {
+        eq: (
+          column: string,
+          value: string,
+        ) => {
+          eq: (
+            column: string,
+            value: string,
+          ) => Promise<{ data: { device_id: string; name: string }[] | null }>;
+        };
+      };
+    };
+  };
+  const [
+    { data: settings },
+    tables,
+    { data: cardProvider },
+    { data: devices },
+  ] = await Promise.all([
     supabase
       .from("restaurant_settings")
       .select("accept_cash, accept_card_terminal, accept_card, tipping_enabled")
       .eq("restaurant_id", restaurant.id)
       .maybeSingle(),
     getUnpaidOrdersByTable(restaurant.id),
+    loose.rpc("restaurant_card_provider", { p_restaurant_id: restaurant.id }),
+    loose
+      .from("pos_devices")
+      .select("device_id, name")
+      .eq("restaurant_id", restaurant.id)
+      .eq("status", "paired"),
   ]);
+  // Square restaurants take cards on a paired Square Terminal; Tap to Pay
+  // is Stripe's and stays off for them.
+  const paysThroughSquare = cardProvider === "square";
+  const terminals: PairedTerminal[] = paysThroughSquare
+    ? (devices ?? []).map((d) => ({ deviceId: d.device_id, name: d.name }))
+    : [];
 
   const acceptsCash = settings?.accept_cash ?? false;
   const acceptsCardTerminal = settings?.accept_card_terminal ?? false;
@@ -138,7 +179,16 @@ export default async function CheckoutPage() {
 
                 {(acceptsCash || acceptsCardTerminal || acceptsCard) && (
                   <div className="flex flex-wrap gap-2">
-                    {acceptsCard && (
+                    {acceptsCard && terminals.length > 0 && (
+                      <SquareTerminalDialog
+                        restaurantId={restaurant.id}
+                        tableLabel={table.tableLabel}
+                        orders={table.orders}
+                        currency={table.currency}
+                        terminals={terminals}
+                      />
+                    )}
+                    {acceptsCard && !paysThroughSquare && (
                       <TapToPayDialog
                         restaurantId={restaurant.id}
                         tableLabel={table.tableLabel}

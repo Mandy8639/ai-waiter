@@ -24,8 +24,10 @@ export function squareBaseUrl(environment: SquareEnvironment): string {
  * - PAYMENTS_READ / PAYMENTS_WRITE: take diners' payments through Square.
  * - PAYMENTS_WRITE_ADDITIONAL_RECIPIENTS: collect Tableside's fee on those
  *   payments (app_fee_money), which Square requires its own permission for.
- * Asked for up front so phases 2 and 3 don't send every owner back
- * through Square's consent screen.
+ * - DEVICE_CREDENTIAL_MANAGEMENT: pair a Square Terminal (phase 3), which
+ *   the Devices API won't do without it.
+ * Connections made before phase 3 lack the last one; the settings page
+ * asks those owners to reconnect before pairing a Terminal.
  */
 export const SQUARE_SCOPES = [
   "MERCHANT_PROFILE_READ",
@@ -35,6 +37,29 @@ export const SQUARE_SCOPES = [
   "PAYMENTS_READ",
   "PAYMENTS_WRITE",
   "PAYMENTS_WRITE_ADDITIONAL_RECIPIENTS",
+  "DEVICE_CREDENTIAL_MANAGEMENT",
+] as const;
+
+/** Whether a connection's recorded scopes allow pairing a Terminal. */
+export function canPairTerminals(scopes: string | null | undefined): boolean {
+  return (scopes ?? "").split(" ").includes("DEVICE_CREDENTIAL_MANAGEMENT");
+}
+
+/**
+ * Square's sandbox Terminals: fake device ids that complete a checkout
+ * without hardware (developer.squareup.com/docs/devtools/sandbox/testing).
+ * Offered on the settings page only when SQUARE_ENVIRONMENT is sandbox.
+ * Square only completes sandbox Terminal checkouts up to $25.
+ */
+export const SQUARE_TEST_TERMINALS = [
+  {
+    deviceId: "9fa747a2-25ff-48ee-b078-04381f7c828f",
+    name: "Square test Terminal (card, no tip)",
+  },
+  {
+    deviceId: "22cd266c-6246-4c06-9983-67f0c26346b0",
+    name: "Square test Terminal (card + 20% tip)",
+  },
 ] as const;
 
 export function squareAuthorizeUrl(args: {
