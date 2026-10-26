@@ -264,7 +264,8 @@ export function buildTerminalRequests(input: {
       order,
     },
     checkout: (squareOrderId) => ({
-      idempotency_key: `tableside-terminal-${input.paymentId}`,
+      // CreateTerminalCheckout allows 64; kept short like the cash key.
+      idempotency_key: `terminal-${input.paymentId}`,
       checkout: {
         amount_money: { amount: orderTotalMinorUnits(order), currency },
         order_id: squareOrderId,
@@ -316,7 +317,9 @@ export function buildCashSaleRequests(input: {
       order,
     },
     payment: (squareOrderId) => ({
-      idempotency_key: `tableside-cash-${input.paymentId}`,
+      // Square caps CreatePayment idempotency keys at 45 characters; a
+      // UUID is 36, so the prefix must stay short.
+      idempotency_key: `cash-${input.paymentId}`,
       source_id: "CASH",
       amount_money: { amount: total, currency },
       order_id: squareOrderId,
