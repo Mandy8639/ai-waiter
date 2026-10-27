@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { openAuthorizedChannel } from "@/lib/supabase/realtime";
 import {
   resolvePollIntervalMs,
   shouldPollNow,
@@ -49,30 +50,32 @@ export function SettleUpSync({ restaurantId }: { restaurantId: string }) {
   useEffect(() => {
     const supabase = createClient();
     const filter = `restaurant_id=eq.${restaurantId}`;
-    const channel = supabase
-      .channel(`settle-up:${restaurantId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders", filter },
-        () => scheduleResync(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "order_payments", filter },
-        () => scheduleResync(),
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setConnected(true);
-          scheduleResync();
-        } else if (
-          status === "CLOSED" ||
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT"
-        ) {
-          setConnected(false);
-        }
-      });
+    const closeChannel = openAuthorizedChannel(supabase, () =>
+      supabase
+        .channel(`settle-up:${restaurantId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "orders", filter },
+          () => scheduleResync(),
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "order_payments", filter },
+          () => scheduleResync(),
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            setConnected(true);
+            scheduleResync();
+          } else if (
+            status === "CLOSED" ||
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT"
+          ) {
+            setConnected(false);
+          }
+        }),
+    );
 
     function handleWake() {
       if (document.visibilityState === "visible") scheduleResync();
@@ -84,7 +87,7 @@ export function SettleUpSync({ restaurantId }: { restaurantId: string }) {
       document.removeEventListener("visibilitychange", handleWake);
       window.removeEventListener("online", handleWake);
       if (timerRef.current) clearTimeout(timerRef.current);
-      void supabase.removeChannel(channel);
+      closeChannel();
     };
   }, [restaurantId, scheduleResync]);
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { openAuthorizedChannel } from "@/lib/supabase/realtime";
 import {
   resolvePollIntervalMs,
   shouldPollNow,
@@ -50,30 +51,32 @@ export function OrderStatusSync({ orderId }: { orderId: string }) {
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`orders:order:${orderId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "orders",
-          filter: `id=eq.${orderId}`,
-        },
-        () => scheduleResync(),
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setConnected(true);
-          scheduleResync();
-        } else if (
-          status === "CLOSED" ||
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT"
-        ) {
-          setConnected(false);
-        }
-      });
+    const closeChannel = openAuthorizedChannel(supabase, () =>
+      supabase
+        .channel(`orders:order:${orderId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "orders",
+            filter: `id=eq.${orderId}`,
+          },
+          () => scheduleResync(),
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            setConnected(true);
+            scheduleResync();
+          } else if (
+            status === "CLOSED" ||
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT"
+          ) {
+            setConnected(false);
+          }
+        }),
+    );
 
     function handleWake() {
       if (document.visibilityState === "visible") scheduleResync();
@@ -85,7 +88,7 @@ export function OrderStatusSync({ orderId }: { orderId: string }) {
       document.removeEventListener("visibilitychange", handleWake);
       window.removeEventListener("online", handleWake);
       if (resyncTimerRef.current) clearTimeout(resyncTimerRef.current);
-      void supabase.removeChannel(channel);
+      closeChannel();
     };
   }, [orderId, scheduleResync]);
 

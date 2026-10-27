@@ -27,6 +27,18 @@ const { mockFetchActiveOrders, realtimeState, removeChannelSpy } = vi.hoisted(
   }),
 );
 
+// The token-first join is openAuthorizedChannel's own test
+// (realtime-authorized-channel.test.ts); here the channel opens at once.
+vi.mock("@/lib/supabase/realtime", () => ({
+  openAuthorizedChannel: (
+    supabase: { removeChannel: (channel: unknown) => unknown },
+    open: () => unknown,
+  ) => {
+    const channel = open();
+    return () => void supabase.removeChannel(channel);
+  },
+}));
+
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => {
     const channelObj = {
