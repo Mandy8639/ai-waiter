@@ -14,6 +14,14 @@ import { buildMenuGraph, type MenuGraph } from "./core";
 export async function loadMenuGraph(
   supabase: SupabaseClient,
   restaurantId: string,
+  options: {
+    /**
+     * Every dish, served now or not and available or not: the owner's
+     * view, for allergen suggestions. The waiter's view is what a guest
+     * can order right now.
+     */
+    wholeMenu?: boolean;
+  } = {},
 ): Promise<{ graph: MenuGraph; currency: string }> {
   const [{ data: categories }, menus, { data: restaurant }] = await Promise.all(
     [
@@ -30,7 +38,7 @@ export async function loadMenuGraph(
         .maybeSingle<{ currency: string }>(),
     ],
   );
-  const onNow = onNowFilter(menus);
+  const onNow = options.wholeMenu ? null : onNowFilter(menus);
   const sections = (
     (categories ?? []) as { id: string; name: string }[]
   ).filter((c) => !onNow || onNow.has(c.id));
@@ -42,7 +50,7 @@ export async function loadMenuGraph(
       "id, name, price, category_id, is_vegetarian, is_vegan, is_halal, is_kosher, is_spicy, contains_nuts, contains_dairy, contains_gluten",
     )
     .eq("restaurant_id", restaurantId)
-    .eq("is_available", true);
+    .in("is_available", options.wholeMenu ? [true, false] : [true]);
   type ItemRow = {
     id: string;
     name: string;
@@ -58,7 +66,8 @@ export async function loadMenuGraph(
     contains_gluten: boolean;
   };
   const items = ((itemRows ?? []) as ItemRow[]).filter(
-    (i) => i.category_id && sectionIds.has(i.category_id),
+    (i) =>
+      options.wholeMenu || (i.category_id && sectionIds.has(i.category_id)),
   );
   const ids = items.map((i) => i.id);
   if (ids.length === 0) {

@@ -20,7 +20,12 @@ export interface PendingItem {
   menuItemId: string;
   itemName: string;
   /** The whole vocabulary. `suggested` only decides what starts ticked. */
-  options: { name: string; suggested: boolean }[];
+  options: {
+    name: string;
+    suggested: boolean;
+    /** Why the menu knowledge graph suggested it: "its name mentions paneer". */
+    reason?: string;
+  }[];
 }
 
 /**
@@ -212,7 +217,9 @@ export function AllergenConfirmList({
                       */}
                       {option.suggested && (
                         <span className="text-muted-foreground text-xs">
-                          (suggested)
+                          {option.reason
+                            ? `(suggested: ${option.reason})`
+                            : "(suggested)"}
                         </span>
                       )}
                     </label>

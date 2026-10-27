@@ -153,12 +153,16 @@ export default async function MenuPage() {
               reminder a restaurant would never learn there was anything
               waiting, and would assume its allergen data was live.
             */}
-            {(pendingAllergens ?? 0) > 0 && (
+            {/* Always there: with nothing waiting, it's where "Find likely
+                allergens" (the menu knowledge graph) is. */}
+            {totalItems > 0 && (
               <Link
                 href="/dashboard/menu/allergen-review"
                 className={buttonVariants({ variant: "outline" })}
               >
-                Confirm allergens ({pendingAllergens})
+                {(pendingAllergens ?? 0) > 0
+                  ? `Confirm allergens (${pendingAllergens})`
+                  : "Check allergens"}
               </Link>
             )}
             {(withoutPhoto ?? 0) > 0 && totalItems > 0 && (

@@ -10,6 +10,7 @@ import {
   pairingsFor,
   type MenuGraphInput,
 } from "@/lib/menu-graph/core";
+import { allergenSuggestions } from "@/lib/menu-graph/suggest-core";
 import { hasAllergenSource } from "@/lib/ai/tools/menu-fact-detection";
 import { collectToolMenuItems } from "@/lib/ai/recommendations";
 import type { LoopToolOutcome } from "@/lib/ai/loop";
@@ -185,5 +186,50 @@ describe("the waiter's guards and dish cards", () => {
       }),
     ]);
     expect(items.map((i) => i.id)).toEqual(["chana", "naan"]);
+  });
+});
+
+describe("allergen suggestions for the owner's review", () => {
+  it("suggests what the graph infers and nothing the restaurant already stated", () => {
+    const byDish = new Map<
+      string,
+      { allergen_name: string; reason: string }[]
+    >();
+    for (const s of allergenSuggestions(graph)) {
+      byDish.set(s.menu_item_id, [...(byDish.get(s.menu_item_id) ?? []), s]);
+    }
+    expect(byDish.get("palak")).toEqual([
+      {
+        menu_item_id: "palak",
+        allergen_name: "Milk",
+        reason: "its name mentions paneer",
+      },
+    ]);
+    expect(byDish.get("dal")).toEqual([
+      { menu_item_id: "dal", allergen_name: "Milk", reason: "made with Ghee" },
+    ]);
+    expect(byDish.get("naan")?.map((s) => s.allergen_name)).toEqual(["Wheat"]);
+    expect(byDish.get("korma")?.map((s) => s.allergen_name)).toEqual([
+      "Tree nuts",
+    ]);
+    // Butter Chicken is marked "contains dairy"; the drink has a confirmed
+    // Milk: nothing to ask about either.
+    expect(byDish.has("butter")).toBe(false);
+    expect(byDish.has("lassi")).toBe(false);
+    expect(byDish.has("chana")).toBe(false);
+  });
+
+  it("asks once per allergen even when the name and an ingredient both point to it", () => {
+    const g = buildMenuGraph({
+      currency: "USD",
+      sections: [],
+      dishes: [dish("pbm", "Paneer Butter Masala")],
+      ingredients: [{ dishId: "pbm", name: "Cream" }],
+      allergens: [],
+      pairings: [],
+    });
+    expect(allergenSuggestions(g).map((s) => s.allergen_name)).toEqual([
+      "Milk",
+    ]);
   });
 });
