@@ -203,4 +203,51 @@ describe("Tap to Pay", () => {
     const p = (await start(f.staffUserId, [f.orderId])).rows[0];
     expect(p.terminal_location_id).toBe("tml_abc");
   });
+
+  it("settles through settle_tap_to_pay(), and refunds rather than fails a double payment (20261124090000)", async () => {
+    const f = await fullOrderFixture(db);
+    await enableCardPayments(db, f.restaurantId);
+    const pi = `pi_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+    const { rows } = await start(f.staffUserId, [f.orderId]);
+    await attach(f.staffUserId, rows[0].payment_id, pi);
+
+    // The table is settled with cash while the tap is still going through.
+    await db.admin.query(
+      "update public.restaurant_settings set accept_cash = true where restaurant_id = $1;",
+      [f.restaurantId],
+    );
+    await db.asUser(f.staffUserId, (c) =>
+      c.query("select public.record_cash_payment($1::uuid[], 0);", [
+        [f.orderId],
+      ]),
+    );
+
+    const settle = (intent: string) =>
+      db.admin
+        .query<{ r: string }>("select public.settle_tap_to_pay($1) as r;", [
+          intent,
+        ])
+        .then((r) => r.rows[0].r);
+    expect(await settle(pi)).toBe("double_paid");
+    expect((await payment(rows[0].payment_id)).status).toBe("cancelled");
+    // The webhook arriving after the staff app's check: still one conflict.
+    expect(await settle(pi)).toBe("double_paid");
+    const { rows: conflicts } = await db.admin.query<{
+      provider: string;
+      refund_status: string;
+    }>(
+      "select provider, refund_status from public.payment_conflicts where provider_payment_id = $1;",
+      [pi],
+    );
+    expect(conflicts).toEqual([
+      { provider: "stripe", refund_status: "pending" },
+    ]);
+    expect(await settle("pi_nobody")).toBe("unknown");
+
+    await expect(
+      db.asUser(f.staffUserId, (c) =>
+        c.query("select public.settle_tap_to_pay($1);", [pi]),
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
 });
