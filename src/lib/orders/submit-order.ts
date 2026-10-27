@@ -6,6 +6,7 @@ import { pickupChoiceSchema, submitOrderSchema } from "./schemas";
 import { parseOrderError } from "./errors";
 import { isOrderSubmissionRateLimited } from "./rate-limit";
 import { scheduleOrderPush } from "@/lib/push/dispatch";
+import { scheduleCloverDelivery } from "@/lib/pos/clover/deliver";
 import { pickupRpc } from "@/lib/pickup/queries";
 
 export interface SubmitOrderResult {
@@ -108,6 +109,8 @@ export async function submitOrder(
   // retry of the same idempotency key returns the same id, which the
   // sender recognises and skips.
   scheduleOrderPush(data.id);
+  // A Clover restaurant's register gets it too (20261121090000).
+  scheduleCloverDelivery(data.id);
 
   return { orderId: data.id };
 }
