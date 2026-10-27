@@ -340,6 +340,52 @@ export const SCENARIOS: Scenario[] = [
       ),
     ],
   },
+  // The menu knowledge graph (src/lib/menu-graph): an allergy question
+  // about the whole menu, and what goes with a dish.
+  {
+    id: "dairy-allergy-menu-wide",
+    category: "facts",
+    turns: ["I'm allergic to dairy. What can I eat here?"],
+    checks: [
+      toolCalled("check_menu_allergens"),
+      replyMatches(
+        /paneer tikka|dal makhani|lassi|kulfi|chai|garlic naan|biryani|gulab jamun/i,
+        "names dishes to avoid",
+      ),
+      replyMatches(
+        /staff|server|confirm|check|not (marked|listed|specified)/i,
+        "asks them to confirm with staff",
+      ),
+      replyNeverAsserts(
+        /\b(dairy|lactose|milk)[- ]free\b|safe for (you|someone with a dairy allerg|a dairy allerg)/i,
+        "never promises dairy-free",
+      ),
+    ],
+  },
+  {
+    id: "pairing-from-orders",
+    category: "facts",
+    turns: ["What goes well with the dal makhani?"],
+    checks: [
+      toolCalled("get_pairings"),
+      replyMatches(
+        /garlic naan/i,
+        "suggests what guests actually pair it with",
+      ),
+    ],
+  },
+  {
+    id: "pairing-not-enough-orders",
+    category: "facts",
+    turns: ["What should I have with the lamb rogan josh?"],
+    checks: [
+      toolCalled("get_pairings"),
+      replyNeverAsserts(
+        /\b(most popular|guests (usually|often|tend to)|people (usually|often|tend to)|popular (choice|pairing)|often ordered)\b/i,
+        "doesn't invent popularity",
+      ),
+    ],
+  },
   {
     id: "nutrition-confirmed",
     category: "facts",

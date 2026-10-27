@@ -59,6 +59,35 @@ export const getMenuItemSchema = z
   })
   .strict();
 
+/** The menu knowledge graph (src/lib/menu-graph): an allergy check across the menu. */
+export const checkMenuAllergensSchema = z
+  .object({
+    allergens: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .describe(
+        "The allergens the guest must avoid, in their own words (e.g. 'dairy', 'milk and peanuts', 'gluten').",
+      ),
+    dietary: z
+      .enum(["vegetarian", "vegan", "halal", "kosher"])
+      .optional()
+      .describe("Only dishes the restaurant marks with this claim."),
+    notSpicy: z
+      .boolean()
+      .optional()
+      .describe("Leave out dishes the restaurant marks as spicy."),
+  })
+  .strict();
+
+/** The menu knowledge graph: what guests order with a dish. */
+export const getPairingsSchema = z
+  .object({
+    menuItemId: menuItemIdField,
+  })
+  .strict();
+
 export const getRestaurantInfoSchema = z.object({}).strict();
 
 export const getCartSchema = z.object({}).strict();

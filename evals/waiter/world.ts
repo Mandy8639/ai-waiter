@@ -11,7 +11,19 @@ import {
 } from "@/lib/ai/tools/cancel-confirmation";
 import { assertedClaims, statedAllergens } from "@/lib/menu/diet-filters";
 import { DINER_CONFIRMATIONS } from "@/lib/table-requests/core";
-import { DISH, HOUSE_FAVORITES, MENU, RESTAURANT, dishById } from "./menu";
+import { buildMenuGraph, type MenuGraph } from "@/lib/menu-graph/core";
+import {
+  allergenCheckResult,
+  pairingsResult,
+} from "@/lib/menu-graph/tool-results";
+import {
+  DISH,
+  HOUSE_FAVORITES,
+  MENU,
+  PAIRINGS,
+  RESTAURANT,
+  dishById,
+} from "./menu";
 
 /**
  * One diner's visit, in memory: the cart, their orders, the table
@@ -55,6 +67,41 @@ export interface ToolCallRecord {
 type ToolSchemas = Map<string, z.ZodType>;
 
 const round = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * The fixture restaurant as a menu knowledge graph, built by the same
+ * code production uses (src/lib/menu-graph/core.ts). Fixture allergens are
+ * the restaurant's confirmed ones.
+ */
+let fixtureGraph: MenuGraph | null = null;
+function menuGraph(): MenuGraph {
+  fixtureGraph ??= buildMenuGraph({
+    currency: RESTAURANT.currency,
+    sections: RESTAURANT.categories.map((c) => ({ id: c, name: c })),
+    dishes: MENU.filter((d) => d.available).map((d) => ({
+      id: d.id,
+      name: d.name,
+      price: d.price,
+      sectionId: d.category,
+      isVegetarian: d.isVegetarian,
+      isVegan: d.isVegan,
+      isHalal: d.isHalal,
+      isKosher: false,
+      isSpicy: d.isSpicy,
+      containsNuts: d.containsNuts,
+      containsDairy: d.containsDairy,
+      containsGluten: d.containsGluten,
+    })),
+    ingredients: MENU.flatMap((d) =>
+      d.ingredients.map((name) => ({ dishId: d.id, name })),
+    ),
+    allergens: MENU.flatMap((d) =>
+      d.allergens.map((name) => ({ dishId: d.id, name })),
+    ),
+    pairings: PAIRINGS,
+  });
+  return fixtureGraph;
+}
 
 export class World {
   cart: CartLine[] = [];
@@ -370,6 +417,20 @@ export class World {
           },
         };
       }
+
+      case "check_menu_allergens":
+        return allergenCheckResult(menuGraph(), RESTAURANT.currency, {
+          allergens: String(a.allergens ?? ""),
+          dietary: typeof a.dietary === "string" ? a.dietary : undefined,
+          notSpicy: a.notSpicy === true,
+        });
+
+      case "get_pairings":
+        return pairingsResult(
+          menuGraph(),
+          RESTAURANT.currency,
+          String(a.menuItemId ?? ""),
+        );
 
       case "get_cart":
         return { ok: true, data: this.cartSummary() };

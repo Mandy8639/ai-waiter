@@ -89,7 +89,15 @@ export function collectToolMenuItems(
         ? (data.items as ToolMenuItem[])
         : outcome.toolName === "get_menu_item"
           ? [data as ToolMenuItem]
-          : [];
+          : // The menu knowledge graph: what guests pair a dish with, and,
+            // from an allergy check, only the dishes NOT marked as
+            // containing the allergen — never a card for one to avoid.
+            outcome.toolName === "get_pairings" && Array.isArray(data.pairings)
+            ? (data.pairings as ToolMenuItem[])
+            : outcome.toolName === "check_menu_allergens" &&
+                Array.isArray(data.notMarkedAsContaining)
+              ? (data.notMarkedAsContaining as ToolMenuItem[])
+              : [];
 
     for (const raw of raws) {
       const item = toItem(raw, currency);

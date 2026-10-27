@@ -293,6 +293,18 @@ export const MENU: FixtureDish[] = [
 
 export const HOUSE_FAVORITES = [DISH.biryani, DISH.dosa];
 
+/**
+ * What guests here order together (menu_pairings() in production): visits
+ * that ordered both. Rogan josh has none, for the "not enough orders yet"
+ * answer.
+ */
+export const PAIRINGS: { dishId: string; otherId: string; orders: number }[] = [
+  { dishId: DISH.dalMakhani, otherId: DISH.garlicNaan, orders: 14 },
+  { dishId: DISH.dalMakhani, otherId: DISH.lassi, orders: 6 },
+  { dishId: DISH.biryani, otherId: DISH.lassi, orders: 9 },
+  { dishId: DISH.biryani, otherId: DISH.chicken65, orders: 5 },
+];
+
 export function dishById(dishId: string): FixtureDish | undefined {
   return MENU.find((d) => d.id === dishId);
 }
