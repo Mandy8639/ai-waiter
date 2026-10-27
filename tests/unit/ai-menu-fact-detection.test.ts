@@ -116,9 +116,16 @@ describe("hasAuthoritativeMenuFactSource", () => {
     ).toBe(true);
   });
 
-  it("AUTHORITATIVE_MENU_TOOL_NAMES contains exactly the three authoritative tools", () => {
+  it("AUTHORITATIVE_MENU_TOOL_NAMES contains exactly the authoritative tools", () => {
     expect([...AUTHORITATIVE_MENU_TOOL_NAMES].sort()).toEqual(
-      ["get_menu_item", "get_restaurant_info", "search_menu"].sort(),
+      [
+        "get_menu_item",
+        "get_restaurant_info",
+        "search_menu",
+        // The menu knowledge graph (src/lib/menu-graph).
+        "check_menu_allergens",
+        "get_pairings",
+      ].sort(),
     );
   });
 

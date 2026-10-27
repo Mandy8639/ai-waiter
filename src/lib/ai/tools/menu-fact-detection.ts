@@ -143,17 +143,25 @@ export function looksLikeAllergenQuestion(message: string): boolean {
  */
 export function hasAllergenSource(toolOutcomes: LoopToolOutcome[]): boolean {
   return toolOutcomes.some(
-    (outcome) => outcome.toolName === "get_menu_item" && outcome.result.ok,
+    (outcome) =>
+      // check_menu_allergens reads the same confirmed allergens across the
+      // whole menu (the menu knowledge graph, src/lib/menu-graph).
+      (outcome.toolName === "get_menu_item" ||
+        outcome.toolName === "check_menu_allergens") &&
+      outcome.result.ok,
   );
 }
 
 export const ALLERGEN_SOURCE_CORRECTIVE_INSTRUCTION =
-  "[System note: the customer asked about allergens or ingredients. Only get_menu_item returns a dish's declared allergens and ingredients — search_menu does not, so a search result showing no allergens tells you nothing. Call get_menu_item for the dish (or, for a question about the whole menu, the likeliest dishes) and answer from what it returns. If it lists none, say the menu doesn't specify and suggest checking with staff.]";
+  "[System note: the customer asked about allergens or ingredients. Only get_menu_item (one dish) and check_menu_allergens (the whole menu) return declared allergens — search_menu does not, so a search result showing no allergens tells you nothing. Call the right one and answer from what it returns. If it lists none, say the menu doesn't specify and suggest checking with staff.]";
 
 export const AUTHORITATIVE_MENU_TOOL_NAMES = new Set([
   "search_menu",
   "get_menu_item",
   "get_restaurant_info",
+  // The menu knowledge graph's tools return menu rows too, prices included.
+  "check_menu_allergens",
+  "get_pairings",
 ]);
 
 /**

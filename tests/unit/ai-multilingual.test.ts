@@ -178,7 +178,7 @@ describe("replaying the phase E baseline failure", () => {
         (m) =>
           m.role === "user" &&
           typeof m.content === "string" &&
-          m.content.includes("Only get_menu_item returns"),
+          m.content.includes("Only get_menu_item"),
       );
       if (step === 1) {
         return {
