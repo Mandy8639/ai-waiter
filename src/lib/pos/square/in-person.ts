@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { toMinorUnits } from "@/lib/payments/money";
 import { parsePaymentError } from "@/lib/payments/errors";
+import { refundDoubleCharge } from "@/lib/payments/double-charge";
 import { reportError } from "@/lib/observability/report";
 import {
   SquareError,
@@ -332,6 +333,15 @@ export async function checkTerminal(args: {
       return {
         ok: true,
         outcome: { state: "paid", tip: payment.tipMinorUnits / minor },
+      };
+    }
+    if (result === "double_paid") {
+      // Settled another way while the reader waited: the card is refunded.
+      await refundDoubleCharge("square", payment.id);
+      return {
+        ok: false,
+        error:
+          "This bill was already paid another way, so Square's card payment has been refunded.",
       };
     }
     report(

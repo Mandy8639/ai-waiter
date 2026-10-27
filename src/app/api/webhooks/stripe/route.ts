@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { getStripe, isStripeConfigured } from "@/lib/payments/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report";
+import { refundDoubleCharge } from "@/lib/payments/double-charge";
 import {
   alertCardPaymentsDisabled,
   alertDinerPaymentFailed,
@@ -111,19 +112,30 @@ export async function POST(request: Request) {
     // `complete` alone does not mean funds are captured — an async method
     // can complete the session while still unpaid. Only `paid` settles.
     if (session.payment_status === "paid") {
-      const { error } = await admin.rpc("mark_order_payment_succeeded", {
-        p_checkout_session_id: session.id,
-        p_payment_intent_id:
-          typeof session.payment_intent === "string"
-            ? session.payment_intent
-            : (session.payment_intent?.id ?? null),
-      });
+      const paymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : (session.payment_intent?.id ?? null);
+      const { data, error } = await admin.rpc(
+        // database.types.ts predates 20261120090000.
+        "settle_stripe_checkout" as never,
+        {
+          p_checkout_session_id: session.id,
+          p_payment_intent_id: paymentIntentId,
+        } as never,
+      );
 
       if (error) {
         return NextResponse.json(
           { error: "could not apply event" },
           { status: 500 },
         );
+      }
+      // The guest paid on their phone after the bill was settled another
+      // way: refunded, and shown to the restaurant on Settle up. A retry
+      // can't settle it, so the event is acknowledged either way.
+      if (String(data) === "double_paid") {
+        await refundDoubleCharge("stripe", paymentIntentId ?? session.id);
       }
     }
   }

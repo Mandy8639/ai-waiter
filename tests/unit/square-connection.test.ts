@@ -441,6 +441,10 @@ describe("who may use the service-key Square token store", () => {
         "lib/pos/square/in-person.ts",
         // Refunds to a Square card, after start_refund() checked the owner or manager.
         "lib/pos/square/refunds.ts",
+        // Refunding a guest who paid twice: only for a payment_conflicts row
+        // the service-role settle function recorded from a payment Square
+        // itself reported, for that row's restaurant (20261120090000).
+        "lib/payments/double-charge.ts",
       ].sort(),
     );
   });

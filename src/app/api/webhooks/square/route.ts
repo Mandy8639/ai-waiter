@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report";
+import { refundDoubleCharge } from "@/lib/payments/double-charge";
 import {
   completedPaymentFrom,
   verifySquareSignature,
@@ -98,6 +99,11 @@ export async function POST(request: Request) {
         currency: payment.currency,
       },
     });
+  }
+  // Paid on the phone after the bill was settled another way: refunded,
+  // and shown to the restaurant on Settle up (20261120090000).
+  if (result === "double_paid") {
+    await refundDoubleCharge("square", payment.paymentId);
   }
   // 'unknown' is usually a payment the restaurant took in Square itself,
   // not through Tableside: nothing to do.
