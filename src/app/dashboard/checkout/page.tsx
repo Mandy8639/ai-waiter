@@ -27,6 +27,11 @@ import { SplitPanel } from "@/components/payments/split-panel";
 import { ReceiptActions } from "@/components/payments/receipt-actions";
 import { getRecentPayments } from "@/lib/payments/recent-payments";
 import { paymentMethodLabel } from "@/lib/payments/method";
+import {
+  getOpenPaymentConflicts,
+  getOrdersPayingOnPhone,
+} from "@/lib/payments/payment-conflicts";
+import { PaymentConflictsNotice } from "@/components/payments/payment-conflicts-notice";
 
 export const metadata = {
   title: "Settle up — Tableside",
@@ -80,6 +85,8 @@ export default async function CheckoutPage() {
     { data: devices },
     print,
     recentPayments,
+    conflicts,
+    payingOnPhone,
   ] = await Promise.all([
     supabase
       .from("restaurant_settings")
@@ -95,6 +102,8 @@ export default async function CheckoutPage() {
       .eq("status", "paired"),
     getPrintCapabilities(restaurant.id),
     getRecentPayments(restaurant.id),
+    getOpenPaymentConflicts(restaurant.id),
+    getOrdersPayingOnPhone(restaurant.id),
   ]);
   // Square restaurants take cards on a paired Square Terminal; Tap to Pay
   // is Stripe's and stays off for them.
@@ -130,6 +139,8 @@ export default async function CheckoutPage() {
     const payable = split
       ? table.orders.filter((o) => !split.orderIds.includes(o.id))
       : table.orders;
+    // Taking cash now could charge the guest twice (20261120090000).
+    const onPhone = table.orders.some((o) => payingOnPhone.has(o.id));
     return (
       <Card key={table.tableId}>
         <CardContent className="flex flex-col gap-3 p-4">
@@ -145,6 +156,16 @@ export default async function CheckoutPage() {
               {formatMoney(table.total, table.currency)}
             </p>
           </div>
+
+          {onPhone && (
+            <p className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge>Paying on phone</Badge>
+              <span className="text-muted-foreground">
+                A guest is paying for this on their phone. Check with the table
+                before taking payment, or they could pay twice.
+              </span>
+            </p>
+          )}
 
           <ul className="flex flex-col gap-1 text-sm">
             {table.orders.map((order) => (
@@ -269,6 +290,10 @@ export default async function CheckoutPage() {
   return (
     <div className="flex flex-col gap-6">
       <SettleUpSync restaurantId={restaurant.id} />
+      <PaymentConflictsNotice
+        conflicts={conflicts}
+        canClose={restaurant.role === "owner" || restaurant.role === "manager"}
+      />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Settle up</h1>
