@@ -1,7 +1,6 @@
 # Connecting a restaurant's POS
 
-**Square is connected** (phase 1: connect an account and import its menu; see "Square" below).
-Toast and Clover are not. Underneath is the **seam** any connector plugs into — the three things
+**Square and Clover are connected** (see "Square" and "Clover" below). Toast is not. Underneath is the **seam** any connector plugs into — the three things
 that are expensive to retrofit and cheap to add before anyone needs them.
 
 ## Why a seam and not a connector
@@ -217,3 +216,59 @@ paid; a cancelled payment is never settled later (`mismatch`, reported).
 with `attach_square_cash_sale()` so it's sent once. Best effort: the cash is recorded in Tableside
 regardless, and a failure is reported. Card-machine records ("paid on your own card machine") are not
 copied: Square would count them as external payments, which cost the app maker 1%.
+
+## Clover
+
+Settings → Point of sale, offered to the restaurants `CLOVER_RESTAURANTS` names (Clover talks to its
+sandbox until Clover approves the app for production). One POS per restaurant: the Clover card hides
+while Square is connected, and the other way round. Phase 1: connect, import the menu, and every
+Tableside order created on the Clover register. Phase 2 (next): diners pay through Clover.
+
+### Two Clover facts that shape everything
+
+- **No per-transaction app fee.** Clover's Ecommerce API can't take a platform cut on each payment
+  (Clover Developer Relations, 2026-10-27), unlike Stripe's `application_fee_amount` or Square's
+  `app_fee_money`. A Clover restaurant pays Tableside by subscription (App Market billing).
+- **Orders go to Clover as they're placed.** Unlike Square, Clover shows an API order on the register
+  straight away, so the pos_outbox seam above finally has a deliverer.
+
+### Connecting
+
+`startCloverConnect` → Clover's `/oauth/v2/authorize` → `/api/pos/clover/callback` (the app's
+Alternate Launch Path). Clover returns `code` and `merchant_id`; `/oauth/v2/token` gives an expiring
+access token and a single-use refresh token, stored like Square's (ciphertext in `pos_credentials`,
+`src/lib/pos/clover/api.ts` the only reader, importers pinned by
+`tests/unit/clover-connection.test.ts`). Tokens refresh five minutes before expiry and the new pair
+is saved at once. The state is an httpOnly cookie (Clover doesn't document echoing `state`; if it
+does, it must match). A Clover merchant is one location, so the connection is enabled on connect.
+Disconnecting forgets the tokens; uninstalling the app in Clover revokes them there.
+
+### Importing the menu
+
+`listCloverInventory` (items with categories and modifier groups, modifier groups with modifiers,
+categories; every page) → `mapCloverInventory` (`catalog-core.ts`, pure, unit-tested) →
+`apply_pos_menu_sync()`, the same function and the same keep-what-Tableside-added rules as Square.
+
+| Clover         | Tableside                           | `external_id`             |
+| -------------- | ----------------------------------- | ------------------------- |
+| Category       | Section, by Clover's sortOrder      | category id               |
+| Item           | Dish (hidden/unavailable → hidden)  | item id                   |
+| Modifier group | A group on every dish it's attached | `mg:<group id>:<item id>` |
+| Modifier       | Option                              | modifier id               |
+
+Variable and per-unit priced items are skipped and named.
+
+### Orders on the register
+
+`enqueue_pos_order_created()` writes a `pos_outbox` row in the order's own transaction, now for Clover
+connections only. Right after an order is placed (`scheduleCloverDelivery`, next to the kitchen push,
+from both `submitOrder` and the POS), `deliverCloverOrders` claims the restaurant's due rows
+(`claim_pos_outbox()`, service role, leased two minutes so two workers never push one sale twice),
+builds each order (`order-core.ts`) and creates it with `POST /v3/merchants/{mId}/atomic_order/orders`:
+
+- Imported dishes point at their Clover item and modifiers, priced as Tableside charged; dishes added
+  in Tableside go as named custom lines. One line per unit. A dine-in order type if the merchant has
+  one. The order's note names the Tableside order and table.
+- The Clover order id is kept on the outbox row. Failures retry with `outbox-core.ts`'s backoff (about
+  an hour); one that gives up is listed on Settings → Point of sale so staff ring it up by hand.
+- Retries also go out with the restaurant's next order: there is no per-minute cron on this plan.

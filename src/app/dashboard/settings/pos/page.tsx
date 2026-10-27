@@ -29,6 +29,18 @@ import {
 } from "@/components/pos/square-terminals";
 import { SquareSyncPanel } from "@/components/pos/square-sync-panel";
 import {
+  CloverConnection,
+  type CloverConnectionView,
+} from "@/components/pos/clover-connection";
+import { cloverConfig } from "@/lib/pos/clover/api";
+import { cloverOfferedTo } from "@/lib/pos/clover/oauth-core";
+import { getCloverOrderStats } from "@/lib/pos/clover/order-stats";
+import {
+  disconnectCloverAction,
+  startCloverConnect,
+  syncCloverMenu,
+} from "@/lib/pos/clover/actions";
+import {
   chooseSquareLocation,
   disconnectSquare,
   addTestTerminal,
@@ -65,20 +77,46 @@ const RETURN_MESSAGES: Record<string, { tone: "ok" | "error"; text: string }> =
     },
   };
 
+const CLOVER_RETURN_MESSAGES: Record<
+  string,
+  { tone: "ok" | "error"; text: string }
+> = {
+  connected: {
+    tone: "ok",
+    text: "Clover is connected. New orders now go to your Clover register; import your menu next.",
+  },
+  cancelled: {
+    tone: "error",
+    text: "Clover wasn't connected: the request was cancelled on Clover's screen.",
+  },
+  expired: {
+    tone: "error",
+    text: "That connection link expired. Press Connect Clover again.",
+  },
+  forbidden: {
+    tone: "error",
+    text: "Only an owner or manager (with two-step verification, if your restaurant requires it) can connect Clover.",
+  },
+  error: {
+    tone: "error",
+    text: "Clover didn't finish connecting. Try again in a minute.",
+  },
+};
+
 export default async function PointOfSalePage({
   searchParams,
 }: {
-  searchParams: Promise<{ square?: string }>;
+  searchParams: Promise<{ square?: string; clover?: string }>;
 }) {
   const { restaurant } = await requireCurrentRestaurant();
-  const { square } = await searchParams;
+  const { square, clover } = await searchParams;
   const supabase = (await createClient()) as unknown as SupabaseClient;
 
   // Owners and managers only, by RLS: anyone else reads no row.
   const { data: row } = await supabase
     .from("restaurant_pos_integrations")
     .select(
-      "provider, external_location_id, is_enabled, payments_enabled, connected_at, menu_synced_at, last_sync_summary",
+      "provider, external_location_id, external_merchant_id, is_enabled, payments_enabled, connected_at, menu_synced_at, last_sync_summary",
     )
     .eq("restaurant_id", restaurant.id)
     .maybeSingle();
@@ -110,7 +148,35 @@ export default async function PointOfSalePage({
     lastSync: row?.last_sync_summary ?? null,
     paymentsEnabled: Boolean(row?.payments_enabled),
   };
-  const message = square ? RETURN_MESSAGES[square] : undefined;
+  const message = square
+    ? RETURN_MESSAGES[square]
+    : clover
+      ? CLOVER_RETURN_MESSAGES[clover]
+      : undefined;
+
+  // Clover (20261121090000): offered to the restaurants CLOVER_RESTAURANTS
+  // names, and never alongside a Square connection (one POS each).
+  const cloverConnected =
+    row?.provider === "clover" && Boolean(row.connected_at);
+  const showClover =
+    cloverConnected ||
+    (!connected &&
+      cloverOfferedTo(restaurant.slug, process.env.CLOVER_RESTAURANTS));
+  let cloverView: CloverConnectionView | null = null;
+  if (showClover) {
+    const orders = cloverConnected
+      ? await getCloverOrderStats(supabase, restaurant.id)
+      : { delivered: 0, retrying: 0, failed: [] };
+    cloverView = {
+      configured: cloverConfig() !== null,
+      connected: cloverConnected,
+      merchantId: cloverConnected ? (row?.external_merchant_id ?? null) : null,
+      sandbox: cloverConfig()?.environment !== "production",
+      menuSyncedAt: cloverConnected ? (row?.menu_synced_at ?? null) : null,
+      lastSync: cloverConnected ? (row?.last_sync_summary ?? null) : null,
+      orders,
+    };
+  }
 
   // Terminals (phase 3): the owner's RLS view of pos_devices, and whether
   // this connection may pair one.
@@ -165,8 +231,8 @@ export default async function PointOfSalePage({
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Point of sale</h1>
         <p className="text-muted-foreground text-sm">
-          Connect the restaurant&apos;s Square account so Tableside uses the
-          same menu.
+          Connect the restaurant&apos;s point of sale so Tableside uses the same
+          menu.
         </p>
       </div>
 
@@ -176,26 +242,52 @@ export default async function PointOfSalePage({
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Square</CardTitle>
-          <CardDescription>
-            Square stays in charge of names, prices, sections and sold-out
-            items. Photos, allergens and dietary details you add in Tableside
-            are kept when you import again.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SquareConnection
-            view={view}
-            connectAction={startSquareConnect.bind(null, restaurant.id)}
-            locationAction={chooseSquareLocation.bind(null, restaurant.id)}
-            syncAction={syncSquareMenu.bind(null, restaurant.id)}
-            disconnectAction={disconnectSquare.bind(null, restaurant.id)}
-            paymentsAction={setSquarePayments.bind(null, restaurant.id)}
-          />
-        </CardContent>
-      </Card>
+      {cloverView && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Clover</CardTitle>
+            <CardDescription>
+              Clover stays in charge of names, prices, sections and sold-out
+              items. Photos, allergens and dietary details you add in Tableside
+              are kept when you import again.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CloverConnection
+              view={cloverView}
+              connectAction={startCloverConnect.bind(null, restaurant.id)}
+              syncAction={syncCloverMenu.bind(null, restaurant.id)}
+              disconnectAction={disconnectCloverAction.bind(
+                null,
+                restaurant.id,
+              )}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {!cloverConnected && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Square</CardTitle>
+            <CardDescription>
+              Square stays in charge of names, prices, sections and sold-out
+              items. Photos, allergens and dietary details you add in Tableside
+              are kept when you import again.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SquareConnection
+              view={view}
+              connectAction={startSquareConnect.bind(null, restaurant.id)}
+              locationAction={chooseSquareLocation.bind(null, restaurant.id)}
+              syncAction={syncSquareMenu.bind(null, restaurant.id)}
+              disconnectAction={disconnectSquare.bind(null, restaurant.id)}
+              paymentsAction={setSquarePayments.bind(null, restaurant.id)}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {unsynced.payments + unsynced.refunds > 0 && (
         <Card>

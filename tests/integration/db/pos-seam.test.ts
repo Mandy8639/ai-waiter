@@ -24,7 +24,7 @@ describe("POS integration seam", () => {
     await db.admin.query(
       `insert into public.restaurant_pos_integrations
          (restaurant_id, provider, external_location_id, credentials_ref, is_enabled)
-       values ($1, 'square', 'LOC-123', 'square/acme', true);`,
+       values ($1, 'clover', 'MERCHANT123', null, true);`,
       [restaurantId],
     );
   }
@@ -112,6 +112,50 @@ describe("POS integration seam", () => {
       [b.restaurantId],
     );
     expect(Number(rows[0].count)).toBe(0);
+  });
+
+  it("queues nothing for Square, which takes the sale with its payment (20261121090000)", async () => {
+    const fx = await fullCustomerFixture(db);
+    await db.admin.query(
+      `insert into public.restaurant_pos_integrations
+         (restaurant_id, provider, external_location_id, is_enabled)
+       values ($1, 'square', 'LOC-1', true);`,
+      [fx.restaurantId],
+    );
+    await addCartItem(db, fx.userId, fx.cartId, fx.restaurantId, fx.menuItemId);
+    await submitOrder(db, fx.userId, "pos-square-1");
+
+    const { rows } = await db.admin.query<{ count: string }>(
+      "select count(*) from public.pos_outbox where restaurant_id = $1;",
+      [fx.restaurantId],
+    );
+    expect(Number(rows[0].count)).toBe(0);
+  });
+
+  it("lets one worker claim a delivery at a time, service key only", async () => {
+    const fx = await fullCustomerFixture(db);
+    await enablePos(fx.restaurantId);
+    await addCartItem(db, fx.userId, fx.cartId, fx.restaurantId, fx.menuItemId);
+    await submitOrder(db, fx.userId, "pos-claim-1");
+
+    const claim = () =>
+      db.admin
+        .query<{ id: string }>(
+          "select id from public.claim_pos_outbox($1, 10);",
+          [fx.restaurantId],
+        )
+        .then((r) => r.rows);
+    expect(await claim()).toHaveLength(1);
+    // Leased for two minutes: a second worker gets nothing.
+    expect(await claim()).toHaveLength(0);
+
+    await expect(
+      db.asUser(fx.userId, (c) =>
+        c.query("select * from public.claim_pos_outbox($1, 10);", [
+          fx.restaurantId,
+        ]),
+      ),
+    ).rejects.toThrow(/permission denied/);
   });
 
   it("refuses to enable an integration with nowhere to push to", async () => {

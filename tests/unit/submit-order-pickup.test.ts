@@ -15,6 +15,9 @@ vi.mock("@/lib/orders/rate-limit", () => ({
   isOrderSubmissionRateLimited: async () => false,
 }));
 vi.mock("@/lib/push/dispatch", () => ({ scheduleOrderPush: vi.fn() }));
+vi.mock("@/lib/pos/clover/deliver", () => ({
+  scheduleCloverDelivery: vi.fn(),
+}));
 
 const pickupRpc = vi.fn();
 vi.mock("@/lib/pickup/queries", () => ({

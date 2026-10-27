@@ -5,6 +5,7 @@ import { z } from "zod";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { parseOrderError } from "@/lib/orders/errors";
 import { scheduleOrderPush } from "@/lib/push/dispatch";
+import { scheduleCloverDelivery } from "@/lib/pos/clover/deliver";
 import { reportError } from "@/lib/observability/report";
 
 /**
@@ -114,6 +115,8 @@ export async function sendTicket(
   // Same hook as a diner's order; a retry returns the same id, which the
   // sender recognises and skips.
   scheduleOrderPush(row.id);
+  // A Clover restaurant's register gets it too (20261121090000).
+  scheduleCloverDelivery(row.id);
   revalidatePath("/dashboard/checkout");
 
   return {
