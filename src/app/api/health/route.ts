@@ -3,6 +3,7 @@ import { env } from "@/lib/env";
 import { isAiConfigured } from "@/lib/ai/client";
 import { apnsReady } from "@/lib/push/apns-core";
 import { squareReady, squareWebhookReady } from "@/lib/pos/square/oauth-core";
+import { cloverReady } from "@/lib/pos/clover/oauth-core";
 
 /**
  * High-level readiness signal for uptime monitoring/deployment checks
@@ -34,5 +35,7 @@ export async function GET() {
     squareConfigured: squareReady(process.env),
     // Square payments can settle: its webhook signature key and URL are set.
     squareWebhookConfigured: squareWebhookReady(process.env),
+    // Clover connection: app id, app secret and the token key are set.
+    cloverConfigured: cloverReady(process.env),
   });
 }

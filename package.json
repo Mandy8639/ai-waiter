@@ -26,7 +26,9 @@
     "db:backup": "tsx --env-file=.env.local scripts/backup-database.ts",
     "db:verify-backup": "tsx scripts/verify-backup.ts",
     "storage:cleanup": "tsx scripts/storage-cleanup.ts",
-    "eval:waiter": "sh evals/run.sh"
+    "eval:waiter": "sh evals/run.sh",
+    "eval:compare": "tsx scripts/watch/compare-evals.ts",
+    "watch:health": "tsx scripts/watch/prod-health.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

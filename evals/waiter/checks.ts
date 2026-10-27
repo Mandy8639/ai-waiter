@@ -268,7 +268,10 @@ export function replyNeverAsserts(pattern: RegExp, label?: string): Check {
           m.index ?? 0,
         );
         if (
-          !/\b(can'?t|cannot|can not|not|n'?t|unable to|no way to|wouldn'?t)\b[^.!?]*$/i.test(
+          // Any "-n't" contraction (hasn't, doesn't, isn't), straight or
+          // curly apostrophe: "the restaurant hasn't confirmed they're
+          // dairy-free" is the right answer, not a promise.
+          !/(\b(cannot|can not|not|never|unable to|no way to)\b|\w+n['’]t\b)[^.!?]*$/i.test(
             before,
           )
         ) {
