@@ -31,6 +31,7 @@ const WEBHOOK_ONLY = [
  */
 const SERVER_ONLY = [
   "mark_tap_to_pay_succeeded",
+  "settle_tap_to_pay",
   "set_terminal_location",
   "save_platform_models",
   "clear_platform_models",

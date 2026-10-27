@@ -148,22 +148,21 @@ export async function POST(request: Request) {
   if (event.type === "payment_intent.succeeded") {
     const intent = event.data.object as Stripe.PaymentIntent;
     if (intent.metadata?.source === "tap_to_pay") {
-      const { error } = await admin.rpc(
-        "mark_tap_to_pay_succeeded" as never,
+      const { data, error } = await admin.rpc(
+        "settle_tap_to_pay" as never,
         { p_payment_intent_id: intent.id } as never,
       );
-      // Charged, but the table was settled another way meanwhile: no retry
-      // can fix that, so it's reported for a refund and acknowledged.
-      if (error && /ALREADY_SETTLED|ALREADY_PAID/.test(error.message)) {
-        reportError(new Error(error.message), {
-          scope: "tap_to_pay.webhook.double_payment",
-          extra: { paymentIntentId: intent.id },
-        });
-      } else if (error) {
+      if (error) {
         return NextResponse.json(
           { error: "could not apply event" },
           { status: 500 },
         );
+      }
+      // Charged, but the table was settled another way meanwhile: refunded
+      // and shown on Settle up (20261124090000). The staff app may already
+      // have refunded it; the refund is keyed, so it happens once.
+      if (String(data) === "double_paid") {
+        await refundDoubleCharge("stripe", intent.id);
       }
     }
   }

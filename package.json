@@ -28,7 +28,8 @@
     "storage:cleanup": "tsx scripts/storage-cleanup.ts",
     "eval:waiter": "sh evals/run.sh",
     "eval:compare": "tsx scripts/watch/compare-evals.ts",
-    "watch:health": "tsx scripts/watch/prod-health.ts"
+    "watch:health": "tsx scripts/watch/prod-health.ts",
+    "vet:models": "tsx scripts/watch/vet-models.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

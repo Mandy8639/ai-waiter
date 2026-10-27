@@ -106,8 +106,10 @@ price or allergen from an unproven model costs more than a short delay.
 - **The waiter: vetted models only.** The waiter's net holds only models in its catalogue list,
   i.e. ones that passed `npm run eval:waiter` (`VETTED_ONLY_JOBS`). In the 2026-10-26 busy-Saturday
   simulation its net reached unvetted free models, a 2.6B one among them, and a diner got "didn't
-  quite catch that". To widen it, run the evals on a candidate (free models share the live
-  waiter's daily OpenRouter allowance, so run them off-peak) and add it to the catalogue.
+  quite catch that". The nightly watch (`agents/nightly-watch.md`) widens it: each night it runs the
+  full evaluation on one untried free model (`npm run vet:models`, off-peak, since free models share
+  the live waiter's daily OpenRouter allowance) and opens a draft pull request adding any that pass
+  to the catalogue. Merging it is the decision.
 - **Known-bad models are dropped from saved lists too.** A waiter list saved on `/admin` (platform,
   plan or restaurant) skips any `NEVER_USE` model, unless that would leave no model at all.
 - **When it is used.** Only when OpenRouter answers busy (429), an HTTP error or a timeout for the

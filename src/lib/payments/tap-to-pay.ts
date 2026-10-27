@@ -5,6 +5,7 @@ import { z } from "zod";
 import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report";
+import { refundDoubleCharge } from "./double-charge";
 import { getStripe, isStripeConfigured } from "./stripe";
 import { toMinorUnits } from "./money";
 import { parsePaymentError } from "./errors";
@@ -314,20 +315,26 @@ export async function finishTapToPay(
     );
     const outcome = tapOutcome(intent.status);
     if (outcome === "paid") {
-      const { error } = await (
+      const { data, error } = await (
         createAdminClient().rpc.bind(createAdminClient()) as unknown as Rpc
-      )("mark_tap_to_pay_succeeded", { p_payment_intent_id: intent.id });
+      )("settle_tap_to_pay", { p_payment_intent_id: intent.id });
       if (error) {
-        // Money was taken but the table was already settled another way
-        // (e.g. the diner paid online at the same moment).
         reportError(new Error(error.message), {
           scope: "tap_to_pay.settle",
           extra: { paymentId },
         });
+        return { ok: false, error: "Couldn't record the payment. Try again." };
+      }
+      if (String(data) === "double_paid") {
+        // Charged, but the table was settled another way meanwhile (a
+        // guest paid on their phone at the same moment): the card gets its
+        // money back now, and Settle up shows it (20261124090000).
+        await refundDoubleCharge("stripe", intent.id);
+        revalidatePath("/dashboard/checkout");
         return {
           ok: false,
           error:
-            "The card was charged, but this table was already paid another way. Refund this payment from Reports.",
+            "This table was already paid another way, so this card payment has been refunded.",
         };
       }
       revalidatePath("/dashboard/checkout");
