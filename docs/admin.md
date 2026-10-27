@@ -103,6 +103,13 @@ price or allergen from an unproven model costs more than a short delay.
 - **Order.** Models vetted for the job (its catalogue list) first, then the rest, fastest passing
   Test first. Speed only breaks ties among the unvetted, because it favours small models, which
   hold a conversation worst.
+- **The waiter: vetted models only.** The waiter's net holds only models in its catalogue list,
+  i.e. ones that passed `npm run eval:waiter` (`VETTED_ONLY_JOBS`). In the 2026-10-26 busy-Saturday
+  simulation its net reached unvetted free models, a 2.6B one among them, and a diner got "didn't
+  quite catch that". To widen it, run the evals on a candidate (free models share the live
+  waiter's daily OpenRouter allowance, so run them off-peak) and add it to the catalogue.
+- **Known-bad models are dropped from saved lists too.** A waiter list saved on `/admin` (platform,
+  plan or restaurant) skips any `NEVER_USE` model, unless that would leave no model at all.
 - **When it is used.** Only when OpenRouter answers busy (429), an HTTP error or a timeout for the
   job's whole saved list. The job then makes one more try with the top three models in its net,
   skipping any already in its own list. Logged as `waiter_safety_net_used` or

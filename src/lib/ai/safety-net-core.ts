@@ -21,6 +21,15 @@ export const PASS_VALID_MS = 3 * 24 * 60 * 60 * 1000;
 export const SAFETY_NET_JOBS = ["waiter", "staff_assistant"] as const;
 export type SafetyNetJob = (typeof SAFETY_NET_JOBS)[number];
 
+/**
+ * Jobs whose net holds only models vetted for them (the Admin catalogue,
+ * i.e. ones that passed the job's evals). A diner reads the waiter's every
+ * word: in the busy-Saturday run its net reached for unvetted free models,
+ * a 2.6-billion-parameter one among them, and a guest got "didn't quite
+ * catch that". Better a clear "try again" than a model nobody checked.
+ */
+export const VETTED_ONLY_JOBS: ReadonlySet<SafetyNetJob> = new Set(["waiter"]);
+
 /** The platform_switches row that turns a job's net off. */
 export function switchName(job: SafetyNetJob): string {
   return `${job}_safety_net`;
@@ -117,13 +126,18 @@ export function rankSafetyNet(
   checks: readonly FreeModelCheck[],
   now: Date,
   preferred: readonly string[] = [],
+  /** Nothing but `preferred`: the unvetted are never used (the waiter). */
+  onlyPreferred = false,
 ): string[] {
   const order = (model: string) => {
     const i = preferred.indexOf(model);
     return i === -1 ? preferred.length : i;
   };
   return checks
-    .filter((c) => isEligible(c, now))
+    .filter(
+      (c) =>
+        isEligible(c, now) && (!onlyPreferred || preferred.includes(c.model)),
+    )
     .sort(
       (a, b) =>
         order(a.model) - order(b.model) ||

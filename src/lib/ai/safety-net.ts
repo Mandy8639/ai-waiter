@@ -3,6 +3,7 @@ import { TESTED_MODELS } from "@/lib/admin/model-catalogue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   rankSafetyNet,
+  VETTED_ONLY_JOBS,
   SAFETY_NET_JOBS,
   switchName,
   type CheckStatus,
@@ -111,10 +112,15 @@ export function checksFor(
   return state.checks.filter((c) => c.job === job);
 }
 
-/** The models a job falls back to, vetted ones first; empty when switched off. */
+/** The models a job falls back to, vetted ones first (only vetted ones, for the waiter); empty when switched off. */
 export async function getSafetyNetModels(job: SafetyNetJob): Promise<string[]> {
   const state = await getSafetyNetState();
   return state.enabled[job]
-    ? rankSafetyNet(checksFor(state, job), new Date(), preferredFor(job))
+    ? rankSafetyNet(
+        checksFor(state, job),
+        new Date(),
+        preferredFor(job),
+        VETTED_ONLY_JOBS.has(job),
+      )
     : [];
 }

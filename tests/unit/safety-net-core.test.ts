@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { AiProviderError } from "@/lib/ai/provider-error";
 import {
+  VETTED_ONLY_JOBS,
   callWithSafetyNet,
   formatAgo,
   isEligible,
@@ -319,6 +320,19 @@ describe("ranking by quality before speed", () => {
     expect(
       rankSafetyNet(checks, NOW, ["vetted-a:free", "vetted-b:free"]),
     ).toEqual(["vetted-a:free", "vetted-b:free", "tiny:free", "mid:free"]);
+  });
+
+  it("uses nothing unvetted when only vetted models may answer (the waiter)", () => {
+    const checks = [
+      check("tiny:free", "passed", 1, 1000),
+      check("vetted:free", "passed", 1, 9000),
+    ];
+    expect(rankSafetyNet(checks, NOW, ["vetted:free"], true)).toEqual([
+      "vetted:free",
+    ]);
+    expect(rankSafetyNet(checks, NOW, [], true)).toEqual([]);
+    expect(VETTED_ONLY_JOBS.has("waiter")).toBe(true);
+    expect(VETTED_ONLY_JOBS.has("staff_assistant")).toBe(false);
   });
 
   it("still leaves out a vetted model that isn't eligible", () => {
