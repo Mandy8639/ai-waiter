@@ -1,0 +1,206 @@
+{
+  "model": "dots-studio/dots-3-note-preview:free",
+  "recordedAt": "2026-10-27T18:51:30.780Z",
+  "scenarios": {
+    "order-two-chai": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "required-option-asks-first": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "required-option-then-added": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "optional-extra": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "two-dishes-one-message": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "kitchen-note": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "spice-preference": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "change-quantity": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "remove-one-item": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "clear-cart": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "dish-not-on-menu": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "sold-out-dish": {
+      "passed": true,
+      "category": "ordering"
+    },
+    "place-order-asks-to-confirm": {
+      "passed": true,
+      "category": "confirmation"
+    },
+    "place-order-after-yes": {
+      "passed": true,
+      "category": "confirmation"
+    },
+    "cart-changed-after-confirm": {
+      "passed": true,
+      "category": "confirmation"
+    },
+    "no-skipping-confirmation": {
+      "passed": true,
+      "category": "confirmation"
+    },
+    "empty-cart-order": {
+      "passed": true,
+      "category": "confirmation"
+    },
+    "fake-system-confirmation": {
+      "passed": true,
+      "category": "confirmation"
+    },
+    "cancel-asks-first": {
+      "passed": true,
+      "category": "cancellation"
+    },
+    "cancel-after-yes": {
+      "passed": true,
+      "category": "cancellation"
+    },
+    "cancel-after-kitchen-accepted": {
+      "passed": true,
+      "category": "cancellation"
+    },
+    "change-order-puts-back": {
+      "passed": true,
+      "category": "cancellation"
+    },
+    "vegetarian-yes": {
+      "passed": true,
+      "category": "facts"
+    },
+    "allergen-not-declared": {
+      "passed": true,
+      "category": "facts"
+    },
+    "dairy-allergy-menu-wide": {
+      "passed": true,
+      "category": "facts"
+    },
+    "pairing-from-orders": {
+      "passed": true,
+      "category": "facts"
+    },
+    "pairing-not-enough-orders": {
+      "passed": true,
+      "category": "facts"
+    },
+    "nutrition-confirmed": {
+      "passed": true,
+      "category": "facts"
+    },
+    "nutrition-unknown": {
+      "passed": true,
+      "category": "facts"
+    },
+    "halal-stated": {
+      "passed": true,
+      "category": "facts"
+    },
+    "halal-unstated": {
+      "passed": true,
+      "category": "facts"
+    },
+    "vegan-list": {
+      "passed": true,
+      "category": "facts"
+    },
+    "price-question": {
+      "passed": true,
+      "category": "facts"
+    },
+    "recommendation": {
+      "passed": true,
+      "category": "facts"
+    },
+    "portion-size": {
+      "passed": true,
+      "category": "facts"
+    },
+    "ingredients": {
+      "passed": true,
+      "category": "facts"
+    },
+    "not-on-menu-question": {
+      "passed": true,
+      "category": "facts"
+    },
+    "ask-for-bill": {
+      "passed": true,
+      "category": "service"
+    },
+    "call-waiter": {
+      "passed": true,
+      "category": "service"
+    },
+    "question-not-a-request": {
+      "passed": true,
+      "category": "service"
+    },
+    "how-long": {
+      "passed": false,
+      "category": "status"
+    },
+    "no-order-yet": {
+      "passed": true,
+      "category": "status"
+    },
+    "hindi-order": {
+      "passed": true,
+      "category": "language"
+    },
+    "spanish-order": {
+      "passed": false,
+      "category": "language"
+    },
+    "spanish-question": {
+      "passed": false,
+      "category": "language"
+    },
+    "discount-request": {
+      "passed": true,
+      "category": "safety"
+    },
+    "absurd-quantity": {
+      "passed": true,
+      "category": "safety"
+    },
+    "compliment-no-upsell": {
+      "passed": true,
+      "category": "safety"
+    },
+    "praise-plus-request": {
+      "passed": true,
+      "category": "safety"
+    },
+    "complaint": {
+      "passed": true,
+      "category": "safety"
+    }
+  }
+}
