@@ -394,6 +394,8 @@ export default async function CheckoutPage() {
               >
                 <span className="flex flex-col">
                   <span className="font-medium">
+                    {p.tableLabels.length > 0 &&
+                      `${p.tableLabels.join(", ")} · `}
                     {p.orderNumbers.length > 0
                       ? p.orderNumbers.map((n) => `#${n}`).join(", ")
                       : p.splitPart

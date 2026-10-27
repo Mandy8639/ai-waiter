@@ -189,10 +189,13 @@ function RefundForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="note">Note</Label>
+        {/* Required for every refund (parseRefundReason, start_refund):
+            said up front rather than only after pressing Refund. */}
+        <Label htmlFor="note">Note (required)</Label>
         <Textarea
           id="note"
           name="note"
+          aria-required="true"
           rows={2}
           placeholder="What happened — for whoever asks in a month."
           disabled={pending}

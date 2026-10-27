@@ -21,6 +21,8 @@ export interface RecentPayment {
   currency: string;
   paidAt: string;
   orderNumbers: number[];
+  /** Where it was paid: "Table 4", a table's own name, or the pickup name. Staff think in tables. */
+  tableLabels: string[];
   /** Part of a split bill that isn't fully paid yet: it covers no orders. */
   splitPart: boolean;
 }
@@ -55,24 +57,66 @@ export async function getRecentPayments(
 
   const { data: links } = await supabase
     .from("payment_orders")
-    .select("payment_id, orders!inner(order_number)")
+    .select("payment_id, orders!inner(order_number, table_id, pickup_name)")
     .in(
       "payment_id",
       payments.map((p) => p.id),
     );
-  const numbers = new Map<string, number[]>();
+  type LinkedOrder = {
+    order_number: number;
+    table_id: string | null;
+    pickup_name: string | null;
+  };
+  const linked = new Map<string, LinkedOrder[]>();
   for (const link of (links ?? []) as unknown as {
     payment_id: string;
-    orders: { order_number: number } | { order_number: number }[];
+    orders: LinkedOrder | LinkedOrder[];
   }[]) {
     const orders = Array.isArray(link.orders) ? link.orders : [link.orders];
-    const list = numbers.get(link.payment_id) ?? [];
-    list.push(...orders.map((o) => o.order_number));
-    numbers.set(link.payment_id, list);
+    linked.set(link.payment_id, [
+      ...(linked.get(link.payment_id) ?? []),
+      ...orders,
+    ]);
   }
 
+  const tableIds = [
+    ...new Set(
+      [...linked.values()]
+        .flat()
+        .map((o) => o.table_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const { data: tables } =
+    tableIds.length > 0
+      ? await supabase
+          .from("tables")
+          .select("id, table_number, display_name")
+          .in("id", tableIds)
+      : { data: [] };
+  const tableName = new Map(
+    (
+      (tables ?? []) as {
+        id: string;
+        table_number: string;
+        display_name: string | null;
+      }[]
+    ).map((t) => [t.id, t.display_name || `Table ${t.table_number}`]),
+  );
+  // As Settle up labels a bill: a pickup by its name, else the table.
+  const label = (o: LinkedOrder) =>
+    o.pickup_name
+      ? `Pickup: ${o.pickup_name}`
+      : ((o.table_id && tableName.get(o.table_id)) ?? null);
+
   return payments.map((p) => {
-    const orderNumbers = (numbers.get(p.id) ?? []).sort((a, b) => a - b);
+    const orders = linked.get(p.id) ?? [];
+    const orderNumbers = orders
+      .map((o) => o.order_number)
+      .sort((a, b) => a - b);
+    const tableLabels = [
+      ...new Set(orders.map(label).filter((l): l is string => Boolean(l))),
+    ];
     return {
       id: p.id,
       method: p.method,
@@ -81,6 +125,7 @@ export async function getRecentPayments(
       currency: p.currency,
       paidAt: p.paid_at,
       orderNumbers,
+      tableLabels,
       splitPart: p.split_id !== null && orderNumbers.length === 0,
     };
   });
