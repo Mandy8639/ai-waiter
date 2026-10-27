@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { openAuthorizedChannel } from "@/lib/supabase/realtime";
 import {
-  resolvePollIntervalMs,
+  resolvePagePollIntervalMs,
   shouldPollNow,
 } from "@/components/kitchen/kds-reconciliation";
 
@@ -21,10 +21,10 @@ import {
  * postgres_changes delivery is not always reliable): a normal-interval
  * poll acts as a safety net while Realtime is healthy, a faster
  * degraded-interval poll takes over while it's disconnected. Both
- * intervals and the tab-hidden rule come from kds-reconciliation.ts —
- * the exact same pure logic and constants the kitchen board already
- * uses and already has its own dedicated tests for, not reimplemented
- * here. There's no dedup/staleness concern to port over from that
+ * intervals and the tab-hidden rule come from kds-reconciliation.ts, the
+ * same pure logic the kitchen board uses, at the slower full-page
+ * intervals (resolvePagePollIntervalMs): each tick here re-renders the
+ * whole page. There's no dedup/staleness concern to port over from that
  * file's list-reconciliation logic: `router.refresh()` always re-fetches
  * current truth server-side, so redundant triggers are harmless, just
  * debounced (see scheduleResync) to avoid firing it needlessly often.
@@ -92,12 +92,12 @@ export function OrderStatusSync({ orderId }: { orderId: string }) {
     };
   }, [orderId, scheduleResync]);
 
-  // Polling safety net (Supabase ticket SU-452145) — see kitchen-board.tsx's
-  // identical pattern. A separate effect from the Realtime subscription
+  // Polling safety net — kitchen-board.tsx's pattern, at the full-page
+  // intervals. A separate effect from the Realtime subscription
   // above so `connected` flipping never tears down/rebuilds the channel,
   // only restarts this timer.
   useEffect(() => {
-    const intervalMs = resolvePollIntervalMs(connected);
+    const intervalMs = resolvePagePollIntervalMs(connected);
     const timer = setInterval(() => {
       if (!shouldPollNow(document.visibilityState)) return;
       scheduleResync();

@@ -48,6 +48,11 @@ export async function getOrderPaymentState(
       .select(
         "id, status, total_amount, tip_amount, paid_at, payment_orders!inner(order_id)",
       )
+      // The restaurant filter is redundant for correctness (the order
+      // decides it) but lets Postgres start from this restaurant's
+      // payments, instead of judging the read rule on every payment on
+      // the platform.
+      .eq("restaurant_id", restaurantId)
       .eq("payment_orders.order_id", orderId),
   ]);
 

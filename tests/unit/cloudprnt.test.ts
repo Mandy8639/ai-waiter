@@ -7,6 +7,8 @@ import {
   pollReply,
   printedOk,
   isOnline,
+  pollUpdate,
+  SEEN_WRITE_EVERY_MS,
 } from "@/lib/printing/cloudprnt-core";
 import {
   docToText,
@@ -196,6 +198,69 @@ describe("answering a poll", () => {
     expect(isOnline("2026-10-22T11:59:30Z", now)).toBe(true);
     expect(isOnline("2026-10-22T11:58:00Z", now)).toBe(false);
     expect(isOnline(null, now)).toBe(false);
+  });
+});
+
+describe("noting a poll", () => {
+  const now = new Date("2026-10-27T18:00:00Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  const known = {
+    mac: "00:11:62:aa:bb:cc",
+    client_type: "Star mC-Print3",
+    last_seen_at: ago(4_000),
+    last_status: "200 OK",
+  };
+  const poll = {
+    mac: "00:11:62:aa:bb:cc",
+    statusCode: "200 OK",
+    clientType: null,
+    encodings: null,
+  };
+
+  it("skips the write when nothing changed and it was seen recently", () => {
+    expect(pollUpdate(known, poll, now)).toBeNull();
+  });
+
+  it('writes "last seen" again once it is getting old', () => {
+    const update = pollUpdate(
+      { ...known, last_seen_at: ago(SEEN_WRITE_EVERY_MS) },
+      poll,
+      now,
+    );
+    expect(update).toEqual({
+      last_seen_at: now.toISOString(),
+      last_status: "200 OK",
+    });
+  });
+
+  it("writes at once when the status changes", () => {
+    expect(
+      pollUpdate(known, { ...poll, statusCode: "200 Paper empty" }, now),
+    ).toMatchObject({ last_status: "200 Paper empty" });
+  });
+
+  it("writes what the printer says about itself", () => {
+    expect(
+      pollUpdate(
+        known,
+        { ...poll, clientType: "Star TSP143IV", encodings: "text/plain" },
+        now,
+      ),
+    ).toMatchObject({
+      client_type: "Star TSP143IV",
+      encodings: "text/plain",
+      encodings_at: now.toISOString(),
+    });
+  });
+
+  it("writes the first poll of a printer never seen", () => {
+    expect(
+      pollUpdate({ ...known, last_seen_at: null }, poll, now),
+    ).not.toBeNull();
+  });
+
+  it("keeps the printer online between writes", () => {
+    expect(isOnline(ago(SEEN_WRITE_EVERY_MS * 2), now)).toBe(true);
   });
 });
 
