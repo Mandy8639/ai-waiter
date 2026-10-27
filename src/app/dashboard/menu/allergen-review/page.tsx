@@ -5,6 +5,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { ALLERGEN_VOCABULARY } from "@/lib/menu-import/suggestions";
+import { FindAllergensButton } from "@/components/dashboard/find-allergens-button";
+import { suggestAllergensFromMenu } from "@/lib/menu-graph/actions";
 
 export const metadata = {
   title: "Confirm allergens — Tableside",
@@ -15,14 +17,23 @@ export default async function AllergenReviewPage() {
   const supabase = await createClient();
 
   // Unconfirmed rows only — these are the suggestions awaiting a human.
-  const { data: links } = await supabase
+  // suggestion_reason: why the menu knowledge graph suggested it
+  // (20261123090000), newer than database.types.ts.
+  const { data: rawLinks } = await supabase
     .from("menu_item_allergens")
-    .select("menu_item_id, allergen_id")
+    .select(
+      "menu_item_id, allergen_id, suggestion_reason" as "menu_item_id, allergen_id",
+    )
     .eq("restaurant_id", restaurant.id)
     .is("confirmed_at", null);
+  const links = (rawLinks ?? []) as unknown as {
+    menu_item_id: string;
+    allergen_id: string;
+    suggestion_reason: string | null;
+  }[];
 
-  const itemIds = [...new Set((links ?? []).map((l) => l.menu_item_id))];
-  const allergenIds = [...new Set((links ?? []).map((l) => l.allergen_id))];
+  const itemIds = [...new Set(links.map((l) => l.menu_item_id))];
+  const allergenIds = [...new Set(links.map((l) => l.allergen_id))];
 
   const [{ data: menuItems }, { data: allergens }] = await Promise.all([
     itemIds.length
@@ -43,18 +54,18 @@ export default async function AllergenReviewPage() {
   // design. A kitchen that knows its dahi vada is finished with a
   // wheat-based sev must be able to say so here.
   const pending: PendingItem[] = itemIds.map((id) => {
-    const suggestedNames = new Set(
-      (links ?? [])
-        .filter((l) => l.menu_item_id === id)
-        .map((l) => allergenName.get(l.allergen_id))
-        .filter((n): n is string => Boolean(n)),
-    );
+    const reasons = new Map<string, string | null>();
+    for (const l of links.filter((l) => l.menu_item_id === id)) {
+      const name = allergenName.get(l.allergen_id);
+      if (name) reasons.set(name, l.suggestion_reason);
+    }
     return {
       menuItemId: id,
       itemName: itemName.get(id) ?? "Unknown dish",
       options: ALLERGEN_VOCABULARY.map((name) => ({
         name,
-        suggested: suggestedNames.has(name),
+        suggested: reasons.has(name),
+        reason: reasons.get(name) ?? undefined,
       })),
     };
   });
@@ -70,6 +81,10 @@ export default async function AllergenReviewPage() {
           reviewed as you check it, then confirm the reviewed ones together.
         </p>
       </div>
+
+      <FindAllergensButton
+        action={suggestAllergensFromMenu.bind(null, restaurant.id)}
+      />
 
       <AllergenConfirmList restaurantId={restaurant.id} items={pending} />
     </div>

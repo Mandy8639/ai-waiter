@@ -54,3 +54,16 @@ an idea but must not call it popular.
   orders ignored, signed-out callers refused.
 - The waiter evaluation (`npm run eval:waiter`) runs both tools against the same graph code:
   `dairy-allergy-menu-wide`, `pairing-from-orders`, `pairing-not-enough-orders`.
+
+## Owners confirm what the graph infers
+
+An inferred allergen is only ever a warning. To turn it into a fact the restaurant states, the allergen
+review screen (`/dashboard/menu/allergen-review`, linked from Menu as "Check allergens") has **Find
+likely allergens**. It runs the graph over the whole menu (`suggest-core.ts`) and adds each inferred
+allergen that nothing stated yet to the existing review queue, as an unconfirmed suggestion with its
+reason ("its name mentions paneer"), named in the screen's own vocabulary (Milk, Wheat, Tree nuts…).
+`suggest_menu_allergens()` (migration `20261123090000`) skips anything already on a dish and anything
+turned down before: `confirm_menu_item_allergens()` now records a rejected suggestion in
+`allergen_dismissals`, and ticking it later lifts that. Owners and managers only, and nothing reaches a
+diner until it's confirmed, exactly as for menu-import suggestions. Once confirmed, the waiter's
+allergy check reports the dish under "the restaurant says it contains".
