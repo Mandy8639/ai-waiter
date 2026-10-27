@@ -8,6 +8,7 @@ import { pickupLabel } from "@/lib/pickup/format-core";
 import {
   MAX_ATTEMPTS,
   SENT_RETRY_MS,
+  pollUpdate,
   printedOk,
   type parsePoll,
 } from "./cloudprnt-core";
@@ -43,6 +44,9 @@ export interface PrinterRow {
   client_type: string | null;
   encodings: string | null;
   encodings_at: string | null;
+  mac: string | null;
+  last_seen_at: string | null;
+  last_status: string | null;
 }
 
 interface JobRow {
@@ -74,36 +78,27 @@ export async function findPrinter(token: string): Promise<PrinterRow | null> {
   const { data } = await db()
     .from("printers")
     .select(
-      "id, restaurant_id, name, role, station_id, is_active, client_type, encodings, encodings_at",
+      "id, restaurant_id, name, role, station_id, is_active, client_type, encodings, encodings_at, mac, last_seen_at, last_status",
     )
     .eq("token_hash", hashPrinterToken(token))
     .maybeSingle();
   return (data as PrinterRow | null) ?? null;
 }
 
-/** Notes the poll: when it was seen, its status, and what it said it is. */
+/**
+ * Notes the poll: when it was seen, its status, and what it said it is.
+ * Only when something changed or "last seen" is getting old (pollUpdate),
+ * so a printer polling every 2 seconds isn't a database write each time.
+ */
 export async function recordPoll(
   printer: PrinterRow,
   poll: ReturnType<typeof parsePoll>,
   now: Date,
 ): Promise<PrinterRow> {
-  const update: Record<string, unknown> = {
-    last_seen_at: now.toISOString(),
-    last_status: poll.statusCode,
-  };
-  if (poll.mac) update.mac = poll.mac;
-  if (poll.clientType) update.client_type = poll.clientType;
-  if (poll.encodings) {
-    update.encodings = poll.encodings;
-    update.encodings_at = now.toISOString();
-  }
+  const update = pollUpdate(printer, poll, now);
+  if (!update) return printer;
   await db().from("printers").update(update).eq("id", printer.id);
-  return {
-    ...printer,
-    client_type: poll.clientType ?? printer.client_type,
-    encodings: poll.encodings ?? printer.encodings,
-    encodings_at: poll.encodings ? now.toISOString() : printer.encodings_at,
-  };
+  return { ...printer, ...update } as PrinterRow;
 }
 
 async function setJob(jobId: string, update: Record<string, unknown>) {

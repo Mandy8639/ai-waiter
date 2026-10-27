@@ -1,3 +1,4 @@
+import { cache } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -17,13 +18,20 @@ import { OrderFeedbackPanel } from "@/components/customer/order-feedback-panel";
 import { OrderChangeControls } from "@/components/customer/order-change-controls";
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
 
+/**
+ * The title and the page read the same order: once per render, not twice.
+ * This page re-renders on every status change and safety-net poll, so the
+ * second read was a full set of order queries each time.
+ */
+const getOrder = cache(getOrderById);
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ orderId: string }>;
 }) {
   const { orderId } = await params;
-  const order = await getOrderById(orderId);
+  const order = await getOrder(orderId);
   return {
     title: order ? `Order #${order.orderNumber}` : "Order",
     robots: PRIVATE_PAGE_ROBOTS,
@@ -41,7 +49,7 @@ export default async function OrderConfirmationPage({
   // who isn't this order's own session, or staff at a different
   // restaurant, gets `null` here, indistinguishable from "doesn't exist"
   // (see docs/security.md#customer-order-access).
-  const order = await getOrderById(orderId);
+  const order = await getOrder(orderId);
   if (!order) {
     notFound();
   }

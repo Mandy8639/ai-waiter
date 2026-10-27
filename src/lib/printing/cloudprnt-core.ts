@@ -210,6 +210,52 @@ export function pollReply(options: {
   };
 }
 
+/**
+ * How often a polling printer's "last seen" is written when nothing else
+ * changed: well inside ONLINE_WITHIN_MS, and a tenth of the writes at a
+ * 2-second poll (the busy-Saturday run found every poll updating the row).
+ */
+export const SEEN_WRITE_EVERY_MS = 20 * 1000;
+
+/**
+ * What a poll changes on the printer's row, or null when it changes
+ * nothing worth a write: same status, nothing new about the printer, and
+ * seen recently enough.
+ */
+export function pollUpdate(
+  printer: {
+    mac: string | null;
+    client_type: string | null;
+    last_seen_at: string | null;
+    last_status: string | null;
+  },
+  poll: ReturnType<typeof parsePoll>,
+  now: Date,
+): Record<string, unknown> | null {
+  const update: Record<string, unknown> = {};
+  if (poll.mac && poll.mac !== printer.mac) update.mac = poll.mac;
+  if (poll.clientType && poll.clientType !== printer.client_type)
+    update.client_type = poll.clientType;
+  if (poll.encodings) {
+    update.encodings = poll.encodings;
+    update.encodings_at = now.toISOString();
+  }
+  const stale =
+    !printer.last_seen_at ||
+    now.getTime() - new Date(printer.last_seen_at).getTime() >=
+      SEEN_WRITE_EVERY_MS;
+  if (
+    !stale &&
+    poll.statusCode === printer.last_status &&
+    Object.keys(update).length === 0
+  ) {
+    return null;
+  }
+  update.last_seen_at = now.toISOString();
+  update.last_status = poll.statusCode;
+  return update;
+}
+
 export function isOnline(lastSeenAt: string | null, now: Date): boolean {
   if (!lastSeenAt) return false;
   return now.getTime() - new Date(lastSeenAt).getTime() <= ONLINE_WITHIN_MS;

@@ -32,6 +32,29 @@ export function resolvePollIntervalMs(realtimeConnected: boolean): number {
     : KDS_DEGRADED_POLL_INTERVAL_MS;
 }
 
+/**
+ * The safety net for screens that re-render a whole server page per tick
+ * (Settle up, the diner's order page) — several queries each, where the
+ * KDS fetches one list. Slower than the KDS's: since Realtime delivers to
+ * the browser (src/lib/supabase/realtime.ts) this only catches what it
+ * misses, and in the busy-Saturday run these re-renders were most of the
+ * database's load.
+ */
+export const PAGE_NORMAL_POLL_INTERVAL_MS = 30_000;
+/**
+ * While Realtime is down. Still slower than the KDS's: when the database
+ * is what's slow, connections drop, and a fast full-page poll is what made
+ * it slower still (busy-Saturday run).
+ */
+export const PAGE_DEGRADED_POLL_INTERVAL_MS = 8_000;
+
+/** resolvePollIntervalMs for the full-page screens. */
+export function resolvePagePollIntervalMs(realtimeConnected: boolean): number {
+  return realtimeConnected
+    ? PAGE_NORMAL_POLL_INTERVAL_MS
+    : PAGE_DEGRADED_POLL_INTERVAL_MS;
+}
+
 /** False while the tab is hidden — a poll tick firing in the background is wasted work no one can see anyway (spec: avoid aggressive polling when hidden). */
 export function shouldPollNow(documentVisibilityState: string): boolean {
   return documentVisibilityState !== "hidden";

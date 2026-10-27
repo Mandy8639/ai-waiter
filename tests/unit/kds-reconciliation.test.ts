@@ -6,6 +6,9 @@ import {
   hasNewPendingOrder,
   KDS_NORMAL_POLL_INTERVAL_MS,
   KDS_DEGRADED_POLL_INTERVAL_MS,
+  resolvePagePollIntervalMs,
+  PAGE_NORMAL_POLL_INTERVAL_MS,
+  PAGE_DEGRADED_POLL_INTERVAL_MS,
 } from "@/components/kitchen/kds-reconciliation";
 
 describe("resolvePollIntervalMs", () => {
@@ -24,6 +27,27 @@ describe("resolvePollIntervalMs", () => {
   it("the degraded interval is meaningfully faster than the normal one", () => {
     expect(KDS_DEGRADED_POLL_INTERVAL_MS).toBeLessThan(
       KDS_NORMAL_POLL_INTERVAL_MS,
+    );
+  });
+});
+
+describe("resolvePagePollIntervalMs", () => {
+  it("picks the full-page interval by connection state", () => {
+    expect(resolvePagePollIntervalMs(true)).toBe(PAGE_NORMAL_POLL_INTERVAL_MS);
+    expect(resolvePagePollIntervalMs(false)).toBe(
+      PAGE_DEGRADED_POLL_INTERVAL_MS,
+    );
+  });
+
+  it("polls a whole page less often than the kitchen board's list", () => {
+    expect(PAGE_NORMAL_POLL_INTERVAL_MS).toBeGreaterThan(
+      KDS_NORMAL_POLL_INTERVAL_MS,
+    );
+    expect(PAGE_DEGRADED_POLL_INTERVAL_MS).toBeGreaterThan(
+      KDS_DEGRADED_POLL_INTERVAL_MS,
+    );
+    expect(PAGE_DEGRADED_POLL_INTERVAL_MS).toBeLessThan(
+      PAGE_NORMAL_POLL_INTERVAL_MS,
     );
   });
 });

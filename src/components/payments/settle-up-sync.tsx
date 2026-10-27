@@ -5,12 +5,18 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { openAuthorizedChannel } from "@/lib/supabase/realtime";
 import {
-  resolvePollIntervalMs,
+  resolvePagePollIntervalMs,
   shouldPollNow,
 } from "@/components/kitchen/kds-reconciliation";
 
 /** How often to look again while a dialog is open. */
 const DIALOG_RETRY_MS = 2_000;
+/**
+ * At most one refresh this often. Each one re-renders the whole page; on a
+ * busy night orders and payments change every few seconds across the room,
+ * and refreshing for each was a large part of the database's load.
+ */
+const MIN_REFRESH_GAP_MS = 2_500;
 
 /**
  * Renders nothing — keeps Settle up current: a new order, an adjusted bill,
@@ -18,7 +24,10 @@ const DIALOG_RETRY_MS = 2_000;
  * staff never charge a table that already paid. Same shape as
  * OrderStatusSync: Realtime on this restaurant's orders and payments
  * (order_payments joined the publication in 20261113090000) triggers a
- * server refetch, with the kitchen board's polling safety net behind it.
+ * server refetch, with a slower polling safety net behind it.
+ *
+ * Changes that arrive together share one refresh: one already waiting
+ * absorbs the rest, and refreshes are at least MIN_REFRESH_GAP_MS apart.
  *
  * It waits while any dialog is open. A refresh mid-payment would re-render
  * the dialog's table out from under it — a Square Terminal payment that
@@ -33,18 +42,24 @@ export function SettleUpSync({ restaurantId }: { restaurantId: string }) {
   const router = useRouter();
   const [connected, setConnected] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRefreshRef = useRef(0);
 
   const scheduleResync = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
+    if (timerRef.current) return; // the waiting refresh covers this too
     const run = () => {
       if (document.querySelector('[role="dialog"], [role="alertdialog"]')) {
         timerRef.current = setTimeout(run, DIALOG_RETRY_MS);
         return;
       }
       timerRef.current = null;
+      lastRefreshRef.current = Date.now();
       router.refresh();
     };
-    timerRef.current = setTimeout(run, 250);
+    const sinceLast = Date.now() - lastRefreshRef.current;
+    timerRef.current = setTimeout(
+      run,
+      Math.max(250, MIN_REFRESH_GAP_MS - sinceLast),
+    );
   }, [router]);
 
   useEffect(() => {
@@ -95,7 +110,7 @@ export function SettleUpSync({ restaurantId }: { restaurantId: string }) {
     const timer = setInterval(() => {
       if (!shouldPollNow(document.visibilityState)) return;
       scheduleResync();
-    }, resolvePollIntervalMs(connected));
+    }, resolvePagePollIntervalMs(connected));
     return () => clearInterval(timer);
   }, [connected, scheduleResync]);
 

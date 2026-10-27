@@ -5,15 +5,15 @@
 // delivery is not always reliable), mirroring kitchen-board.test.tsx's
 // approach: Realtime, Supabase, and the Next.js router are faked so these
 // tests are fast and deterministic. The pure interval/visibility rules
-// this component relies on (resolvePollIntervalMs/shouldPollNow) are
+// this component relies on (resolvePagePollIntervalMs/shouldPollNow) are
 // already covered, without any mocking, in kds-reconciliation.test.ts —
 // not re-tested here.
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OrderStatusSync } from "@/components/customer/order-status-sync";
 import {
-  KDS_NORMAL_POLL_INTERVAL_MS,
-  KDS_DEGRADED_POLL_INTERVAL_MS,
+  PAGE_NORMAL_POLL_INTERVAL_MS,
+  PAGE_DEGRADED_POLL_INTERVAL_MS,
 } from "@/components/kitchen/kds-reconciliation";
 
 const { mockRefresh, realtimeState, removeChannelSpy } = vi.hoisted(() => ({
@@ -126,7 +126,7 @@ describe("OrderStatusSync — Realtime + polling reconciliation", () => {
     mockRefresh.mockClear();
 
     // No Realtime event fired — only the poll timer should refresh.
-    await flush(KDS_NORMAL_POLL_INTERVAL_MS + 300);
+    await flush(PAGE_NORMAL_POLL_INTERVAL_MS + 300);
 
     expect(mockRefresh).toHaveBeenCalled();
   });
@@ -142,7 +142,7 @@ describe("OrderStatusSync — Realtime + polling reconciliation", () => {
 
     // Only the DEGRADED interval elapses — this must already be enough to
     // trigger a refresh if the fast interval is actually active.
-    await flush(KDS_DEGRADED_POLL_INTERVAL_MS + 300);
+    await flush(PAGE_DEGRADED_POLL_INTERVAL_MS + 300);
 
     expect(mockRefresh).toHaveBeenCalled();
   });
@@ -160,11 +160,11 @@ describe("OrderStatusSync — Realtime + polling reconciliation", () => {
 
     // Only enough time for the OLD degraded interval elapses — if this is
     // correctly back on the normal (slower) interval, no refresh yet.
-    await flush(KDS_DEGRADED_POLL_INTERVAL_MS + 300);
+    await flush(PAGE_DEGRADED_POLL_INTERVAL_MS + 300);
     expect(mockRefresh).not.toHaveBeenCalled();
 
     // The remaining time up to the full normal interval does trigger it.
-    await flush(KDS_NORMAL_POLL_INTERVAL_MS - KDS_DEGRADED_POLL_INTERVAL_MS);
+    await flush(PAGE_NORMAL_POLL_INTERVAL_MS - PAGE_DEGRADED_POLL_INTERVAL_MS);
     expect(mockRefresh).toHaveBeenCalled();
   });
 
@@ -177,7 +177,7 @@ describe("OrderStatusSync — Realtime + polling reconciliation", () => {
     expect(removeChannelSpy).toHaveBeenCalledTimes(1);
 
     mockRefresh.mockClear();
-    await flush(KDS_NORMAL_POLL_INTERVAL_MS * 2);
+    await flush(PAGE_NORMAL_POLL_INTERVAL_MS * 2);
 
     // No further polling after unmount — no timer leak.
     expect(mockRefresh).not.toHaveBeenCalled();
@@ -194,7 +194,7 @@ describe("OrderStatusSync — Realtime + polling reconciliation", () => {
     });
     mockRefresh.mockClear();
 
-    await flush(KDS_NORMAL_POLL_INTERVAL_MS + 300);
+    await flush(PAGE_NORMAL_POLL_INTERVAL_MS + 300);
 
     expect(mockRefresh).not.toHaveBeenCalled();
   });
