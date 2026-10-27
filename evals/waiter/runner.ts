@@ -3,7 +3,13 @@ import { runConversationLoop } from "@/lib/ai/loop";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { buildHistoryMessages, buildRecentToolContext } from "@/lib/ai/history";
 import { complimentReply, isOnlyCompliment } from "@/lib/ai/compliment-core";
-import { fallbackLanguage, fallbackText } from "@/lib/ai/fallback-text";
+import {
+  fallbackLanguage,
+  fallbackText,
+  foundDishesText,
+} from "@/lib/ai/fallback-text";
+import { dishesForEmptyReply } from "@/lib/ai/empty-reply-core";
+import { formatMoney } from "@/lib/orders/format";
 import {
   looksLikeAllergenQuestion,
   looksLikeMenuFactQuestion,
@@ -159,7 +165,19 @@ async function runTurn(
       path = "fixed";
     }
     if (!reply) {
-      reply = fallbackText("didNotCatch", language);
+      // As orchestrator.ts: dishes this turn's lookups found, else the
+      // fixed "didn't catch that".
+      const found = dishesForEmptyReply(loop.toolOutcomes);
+      reply =
+        found.dishes.length > 0
+          ? foundDishesText(
+              found.dishes.map(
+                (d) => `${d.name} (${formatMoney(d.price, d.currency)})`,
+              ),
+              found.kind,
+              language,
+            )
+          : fallbackText("didNotCatch", language);
       path = "fixed";
     }
     world.addMessage("assistant", reply);

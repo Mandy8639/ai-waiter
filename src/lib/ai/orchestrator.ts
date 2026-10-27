@@ -16,7 +16,13 @@ import {
   looksLikeAllergenQuestion,
   looksLikeMenuFactQuestion,
 } from "./tools/menu-fact-detection";
-import { fallbackLanguage, fallbackText } from "./fallback-text";
+import {
+  fallbackLanguage,
+  fallbackText,
+  foundDishesText,
+} from "./fallback-text";
+import { dishesForEmptyReply } from "./empty-reply-core";
+import { formatMoney } from "@/lib/orders/format";
 import {
   ALLERGEN_SOURCE_GUARD_ID,
   CART_STATE_GUARD_ID,
@@ -273,8 +279,22 @@ export async function sendAiMessage(
       });
     }
 
+    // An empty reply after lookups that found dishes: offer those dishes
+    // rather than "didn't catch that" (busy-Saturday audit). Facts from
+    // this turn's tool results only, see empty-reply-core.ts.
+    let answeredFromLookups = false;
     if (!finalText) {
-      finalText = fallbackText("didNotCatch", replyLanguage);
+      const found = dishesForEmptyReply(loopResult.toolOutcomes);
+      answeredFromLookups = found.dishes.length > 0;
+      finalText = answeredFromLookups
+        ? foundDishesText(
+            found.dishes.map(
+              (d) => `${d.name} (${formatMoney(d.price, d.currency)})`,
+            ),
+            found.kind,
+            replyLanguage,
+          )
+        : fallbackText("didNotCatch", replyLanguage);
     }
 
     const orderId = loopResult.toolOutcomes.find(
@@ -303,7 +323,7 @@ export async function sendAiMessage(
     const repliedNormally =
       !loopResult.toolLimitExceeded &&
       !loopResult.guardCorrectionExhausted &&
-      loopResult.finalText.length > 0;
+      (loopResult.finalText.length > 0 || answeredFromLookups);
 
     return {
       ok: true,

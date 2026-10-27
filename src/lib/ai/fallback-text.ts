@@ -81,6 +81,46 @@ export function fallbackText(
   return TEXT[key][language];
 }
 
+/**
+ * When the model came back with nothing after its menu lookups had found
+ * dishes (busy-Saturday audit: "what do you recommend?" got "didn't quite
+ * catch that" while search_menu had returned the whole menu). The dishes
+ * and prices come from those lookups, never the model; only the words
+ * around them are fixed, here, per language.
+ */
+export type FoundDishesKind = "favorites" | "found";
+
+const FOUND_DISHES: Record<
+  FoundDishesKind,
+  Record<FallbackLanguage, (list: string) => string>
+> = {
+  favorites: {
+    en: (list) =>
+      `Some favorites here: ${list}. Tap a dish to see more, or ask me about any of them.`,
+    hi: (list) =>
+      `यहाँ के कुछ पसंदीदा: ${list}। किसी डिश पर टैप करके और देखें, या उसके बारे में पूछें।`,
+    es: (list) =>
+      `Algunos favoritos de la casa: ${list}. Toca un plato para ver más, o pregúntame por cualquiera.`,
+  },
+  found: {
+    en: (list) =>
+      `Here's what I found on the menu: ${list}. Tap a dish to see more, or ask me about any of them.`,
+    hi: (list) =>
+      `मेन्यू में ये मिले: ${list}। किसी डिश पर टैप करके और देखें, या उसके बारे में पूछें।`,
+    es: (list) =>
+      `Esto es lo que he encontrado en el menú: ${list}. Toca un plato para ver más, o pregúntame por cualquiera.`,
+  },
+};
+
+/** `dishes` already formatted, e.g. "Butter Chicken ($18.00)". */
+export function foundDishesText(
+  dishes: readonly string[],
+  kind: FoundDishesKind,
+  language: FallbackLanguage,
+): string {
+  return FOUND_DISHES[kind][language](dishes.join(", "));
+}
+
 const ALL_TEXTS = new Set(
   Object.values(TEXT).flatMap((byLanguage) => Object.values(byLanguage)),
 );

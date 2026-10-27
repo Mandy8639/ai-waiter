@@ -52,6 +52,37 @@ describe("resolveWaiterModels", () => {
     ).toBe("saved");
   });
 
+  it("leaves out models that went wrong in real conversations", () => {
+    const bad = "poolside/laguna-s-2.1:free";
+    expect(
+      resolveWaiterModels({
+        restaurant: [bad, "free/b:free"],
+        plan: undefined,
+        platform,
+        overridesApply: true,
+      }),
+    ).toEqual({ models: ["free/b:free"], source: "restaurant" });
+    // A list of nothing but bad ones falls through to the next list...
+    expect(
+      resolveWaiterModels({
+        restaurant: [bad],
+        plan: undefined,
+        platform,
+        overridesApply: true,
+      }),
+    ).toEqual({ models: ["free/a:free"], source: "saved" });
+    // ...and a platform list of nothing but bad ones is kept: some waiter
+    // beats none.
+    expect(
+      resolveWaiterModels({
+        restaurant: undefined,
+        plan: undefined,
+        platform: { models: [bad], source: "saved" },
+        overridesApply: true,
+      }).models,
+    ).toEqual([bad]);
+  });
+
   it("says where a choice came from", () => {
     expect(waiterSourceLabel("restaurant")).toBe("Set for this restaurant");
     expect(waiterSourceLabel("plan")).toBe("Its plan's default");
