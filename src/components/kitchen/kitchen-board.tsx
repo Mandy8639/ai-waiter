@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { openAuthorizedChannel } from "@/lib/supabase/realtime";
 import { fetchActiveOrders } from "@/lib/orders/kitchen-actions";
 import { transitionOrderStatus } from "@/lib/orders/transition";
 import {
@@ -299,40 +300,42 @@ export function KitchenBoard({
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`orders:restaurant:${restaurantId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-          filter: `restaurant_id=eq.${restaurantId}`,
-        },
-        (payload) => {
-          scheduleResync(true);
-          const row = payload.new as {
-            id?: string;
-            status?: string;
-            order_number?: number;
-          };
-          if (row?.status === "cancelled" && row.id) {
-            void noticeGuestCancel(row.id, row.order_number);
+    const closeChannel = openAuthorizedChannel(supabase, () =>
+      supabase
+        .channel(`orders:restaurant:${restaurantId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "orders",
+            filter: `restaurant_id=eq.${restaurantId}`,
+          },
+          (payload) => {
+            scheduleResync(true);
+            const row = payload.new as {
+              id?: string;
+              status?: string;
+              order_number?: number;
+            };
+            if (row?.status === "cancelled" && row.id) {
+              void noticeGuestCancel(row.id, row.order_number);
+            }
+          },
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            setConnected(true);
+            scheduleResync(false);
+          } else if (
+            status === "CLOSED" ||
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT"
+          ) {
+            setConnected(false);
           }
-        },
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setConnected(true);
-          scheduleResync(false);
-        } else if (
-          status === "CLOSED" ||
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT"
-        ) {
-          setConnected(false);
-        }
-      });
+        }),
+    );
 
     /**
      * A diner can cancel their own order before it's accepted
@@ -364,7 +367,7 @@ export function KitchenBoard({
       document.removeEventListener("visibilitychange", handleWake);
       window.removeEventListener("online", handleWake);
       if (resyncTimerRef.current) clearTimeout(resyncTimerRef.current);
-      void supabase.removeChannel(channel);
+      closeChannel();
     };
   }, [restaurantId, scheduleResync]);
 

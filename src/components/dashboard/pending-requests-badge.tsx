@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { openAuthorizedChannel } from "@/lib/supabase/realtime";
 import { countPendingRequestsFromBrowser } from "@/lib/notifications/count-pending";
 import {
   resolvePollIntervalMs,
@@ -73,34 +74,36 @@ export function PendingRequestsBadge({
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`reservations:restaurant:${restaurantId}:${instanceId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "reservations",
-          filter: `restaurant_id=eq.${restaurantId}`,
-        },
-        scheduleRefresh,
-      )
-      .subscribe((status) => {
-        // Previously `.subscribe()` with no callback, which meant a
-        // subscription that never connected was completely invisible —
-        // the badge simply sat there looking correct. Tracking the status
-        // is what lets the poll below speed up instead.
-        if (status === "SUBSCRIBED") {
-          setConnected(true);
-          scheduleRefresh();
-        } else if (
-          status === "CLOSED" ||
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT"
-        ) {
-          setConnected(false);
-        }
-      });
+    const closeChannel = openAuthorizedChannel(supabase, () =>
+      supabase
+        .channel(`reservations:restaurant:${restaurantId}:${instanceId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "reservations",
+            filter: `restaurant_id=eq.${restaurantId}`,
+          },
+          scheduleRefresh,
+        )
+        .subscribe((status) => {
+          // Previously `.subscribe()` with no callback, which meant a
+          // subscription that never connected was completely invisible —
+          // the badge simply sat there looking correct. Tracking the status
+          // is what lets the poll below speed up instead.
+          if (status === "SUBSCRIBED") {
+            setConnected(true);
+            scheduleRefresh();
+          } else if (
+            status === "CLOSED" ||
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT"
+          ) {
+            setConnected(false);
+          }
+        }),
+    );
 
     function handleWake() {
       if (document.visibilityState === "visible") scheduleRefresh();
@@ -112,7 +115,7 @@ export function PendingRequestsBadge({
       document.removeEventListener("visibilitychange", handleWake);
       window.removeEventListener("online", handleWake);
       if (timerRef.current) clearTimeout(timerRef.current);
-      void supabase.removeChannel(channel);
+      closeChannel();
     };
   }, [restaurantId, scheduleRefresh, instanceId]);
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Hand, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { openAuthorizedChannel } from "@/lib/supabase/realtime";
 import {
   resolvePollIntervalMs,
   shouldPollNow,
@@ -72,28 +73,30 @@ export function ServiceRequestQueue({
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`service-requests-${restaurantId}-${instanceId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "table_requests",
-          filter: `restaurant_id=eq.${restaurantId}`,
-        },
-        () => void refresh(),
-      )
-      .subscribe((status) => {
-        const live = status === "SUBSCRIBED";
-        setConnected(live);
-        // A channel that just (re)connected may have missed events while
-        // it was down, so resynchronise rather than assume continuity.
-        if (live) void refresh();
-      });
+    const closeChannel = openAuthorizedChannel(supabase, () =>
+      supabase
+        .channel(`service-requests-${restaurantId}-${instanceId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "table_requests",
+            filter: `restaurant_id=eq.${restaurantId}`,
+          },
+          () => void refresh(),
+        )
+        .subscribe((status) => {
+          const live = status === "SUBSCRIBED";
+          setConnected(live);
+          // A channel that just (re)connected may have missed events while
+          // it was down, so resynchronise rather than assume continuity.
+          if (live) void refresh();
+        }),
+    );
 
     return () => {
-      void supabase.removeChannel(channel);
+      closeChannel();
     };
   }, [restaurantId, instanceId, refresh]);
 
