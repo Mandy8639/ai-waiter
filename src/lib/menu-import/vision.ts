@@ -6,6 +6,7 @@ import { recordAiUsage } from "@/lib/ai/usage";
 import { addCall, newTally, USAGE_REQUEST } from "@/lib/ai/usage-core";
 import { EXTRACTION_PROMPT, type ParseOutcome } from "./extraction";
 import { extractPages, type CallVisionModel } from "./vision-core";
+import { LINK_EXTRACTION_PROMPT } from "./link-core";
 
 /**
  * Sends menu photographs to a vision model and returns draft rows.
@@ -82,29 +83,17 @@ export interface ExtractionOutcome extends ParseOutcome {
   model?: string;
 }
 
-export async function extractMenuFromImages(
-  input: ExtractionInput,
-): Promise<ExtractionOutcome> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    return {
-      ok: false,
-      drafts: [],
-      unpricedCount: 0,
-      error: "Menu reading isn't configured. Add the items manually for now.",
-    };
-  }
-  if (input.imageDataUrls.length === 0) {
-    return {
-      ok: false,
-      drafts: [],
-      unpricedCount: 0,
-      error: "No pages were uploaded.",
-    };
-  }
-
-  const tally = newTally();
-  const call: CallVisionModel = async (imageDataUrl, modelList) => {
+/**
+ * One request to OpenRouter with the reader's settings, for a page given
+ * as an image (a photo) or as text (a web page, link-core.ts). Counts the
+ * cost into `tally`.
+ */
+function modelCaller(
+  apiKey: string,
+  tally: ReturnType<typeof newTally>,
+  content: (page: string) => unknown[],
+): CallVisionModel {
+  return async (page, modelList) => {
     let response: Response;
     try {
       response = await fetch(OPENROUTER_ENDPOINT, {
@@ -133,13 +122,7 @@ export async function extractMenuFromImages(
           messages: [
             {
               role: "user",
-              content: [
-                { type: "text", text: EXTRACTION_PROMPT },
-                {
-                  type: "image_url" as const,
-                  image_url: { url: imageDataUrl },
-                },
-              ],
+              content: content(page),
             },
           ],
         }),
@@ -169,6 +152,34 @@ export async function extractMenuFromImages(
       bodyError: json?.error?.message,
     };
   };
+}
+
+export async function extractMenuFromImages(
+  input: ExtractionInput,
+): Promise<ExtractionOutcome> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    return {
+      ok: false,
+      drafts: [],
+      unpricedCount: 0,
+      error: "Menu reading isn't configured. Add the items manually for now.",
+    };
+  }
+  if (input.imageDataUrls.length === 0) {
+    return {
+      ok: false,
+      drafts: [],
+      unpricedCount: 0,
+      error: "No pages were uploaded.",
+    };
+  }
+
+  const tally = newTally();
+  const call = modelCaller(apiKey, tally, (imageDataUrl) => [
+    { type: "text", text: EXTRACTION_PROMPT },
+    { type: "image_url" as const, image_url: { url: imageDataUrl } },
+  ]);
 
   const models = await visionModels();
   const outcome = await extractPages(
@@ -181,5 +192,49 @@ export async function extractMenuFromImages(
     job: "vision",
     restaurantId: input.restaurantId,
   });
+  return { ...outcome, model: outcome.model ?? models[0] };
+}
+
+/**
+ * Reads a menu from a web page's text (link-core.ts), one piece at a time
+ * like photos, with the same retries and the same never-guess-a-price
+ * parser. Errors talk about the page, not photos.
+ */
+export async function extractMenuFromText(input: {
+  chunks: string[];
+  restaurantId?: string;
+}): Promise<ExtractionOutcome> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    return {
+      ok: false,
+      drafts: [],
+      unpricedCount: 0,
+      error: "Menu reading isn't configured. Add the items manually for now.",
+    };
+  }
+  const tally = newTally();
+  const call = modelCaller(apiKey, tally, (text) => [
+    { type: "text", text: `${LINK_EXTRACTION_PROMPT}${text}` },
+  ]);
+  const models = await visionModels();
+  const outcome = await extractPages(
+    input.chunks,
+    openRouterModels(models),
+    call,
+  );
+  await recordAiUsage({
+    tally,
+    job: "vision",
+    restaurantId: input.restaurantId,
+  });
+  if (!outcome.ok) {
+    return {
+      ...outcome,
+      error: outcome.error?.includes("busy")
+        ? outcome.error
+        : "Couldn't read a menu from that page. Try again, or upload photos of your menu instead.",
+    };
+  }
   return { ...outcome, model: outcome.model ?? models[0] };
 }

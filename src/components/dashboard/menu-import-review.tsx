@@ -101,7 +101,7 @@ export function MenuImportReview({
               price on the menu.
             </strong>{" "}
             Add a price, or untick the item, before adding these to your menu.
-            Nothing is imported at £0.
+            Nothing is imported without a price.
           </AlertDescription>
         </Alert>
       )}
