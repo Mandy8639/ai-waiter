@@ -24,6 +24,8 @@ export interface PublicRestaurant {
    */
   activeHeroVideoId: string | null;
   heroVideo: HeroVideoPointer | null;
+  /** QR menu, AI waiter and kitchen only: no booking, no paying in the app (20261125090000). */
+  basicMode: boolean;
 }
 
 /**
@@ -46,16 +48,25 @@ export const getPublicRestaurantBySlug = cache(
         ) => {
           maybeSingle: () => Promise<{
             data: Record<string, unknown> | null;
+            error: { code?: string } | null;
           }>;
         };
       };
     };
-    const { data } = await from("restaurants")
-      .select(
-        "id, name, slug, description, logo_url, cover_image_url, phone, address, city, state, currency, is_active, active_hero_video_id, hero_video",
-      )
+    const columns =
+      "id, name, slug, description, logo_url, cover_image_url, phone, address, city, state, currency, is_active, active_hero_video_id, hero_video";
+    let { data, error } = await from("restaurants")
+      .select(`${columns}, basic_mode`)
       .eq("slug", slug)
       .maybeSingle();
+    // basic_mode not there yet (the app deployed before its migration,
+    // 20261125090000): without this every menu would read "not found".
+    if (error?.code === "42703") {
+      ({ data, error } = await from("restaurants")
+        .select(columns)
+        .eq("slug", slug)
+        .maybeSingle());
+    }
 
     if (!data) return null;
 
@@ -74,6 +85,7 @@ export const getPublicRestaurantBySlug = cache(
       isActive: data.is_active as boolean,
       activeHeroVideoId: (data.active_hero_video_id as string | null) ?? null,
       heroVideo: (data.hero_video as HeroVideoPointer | null) ?? null,
+      basicMode: (data.basic_mode as boolean | undefined) ?? true,
     };
   },
 );

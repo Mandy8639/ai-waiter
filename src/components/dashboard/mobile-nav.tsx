@@ -16,12 +16,14 @@ import type { RestaurantRole } from "@/lib/restaurants/get-user-restaurants";
  */
 export function MobileNav({
   role,
+  basicMode,
   restaurantId,
   pendingRequestCount,
   restaurantName,
   showAdmin = false,
 }: {
   role: RestaurantRole;
+  basicMode: boolean;
   restaurantId?: string;
   pendingRequestCount?: number;
   restaurantName: string;
@@ -53,6 +55,7 @@ export function MobileNav({
           </div>
           <DashboardNav
             role={role}
+            basicMode={basicMode}
             restaurantId={restaurantId}
             pendingRequestCount={pendingRequestCount}
             showAdmin={showAdmin}

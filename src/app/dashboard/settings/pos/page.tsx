@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   Card,
@@ -109,6 +110,8 @@ export default async function PointOfSalePage({
   searchParams: Promise<{ square?: string; clover?: string }>;
 }) {
   const { restaurant } = await requireCurrentRestaurant();
+  // Closed in basic mode, like Payments (20261125090000).
+  if (restaurant.basicMode) redirect("/dashboard/settings");
   const { square, clover } = await searchParams;
   const supabase = (await createClient()) as unknown as SupabaseClient;
 

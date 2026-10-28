@@ -4,13 +4,14 @@ import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS, NAV_ITEMS } from "./nav-items";
-import { navItemFor } from "@/lib/dashboard/access-core";
+import { NAV_GROUPS } from "./nav-items";
+import { navItemFor, navItemsFor } from "@/lib/dashboard/access-core";
 import { PendingRequestsBadge } from "./pending-requests-badge";
 import type { RestaurantRole } from "@/lib/restaurants/get-user-restaurants";
 
 export function DashboardNav({
   role,
+  basicMode,
   onNavigate,
   className,
   restaurantId,
@@ -18,6 +19,8 @@ export function DashboardNav({
   showAdmin = false,
 }: {
   role: RestaurantRole;
+  /** Basic mode hides the pages about money and bookings (nav-items.ts). */
+  basicMode: boolean;
   /** The platform owner's /admin link. Presentation only: the page checks for itself. */
   showAdmin?: boolean;
   onNavigate?: () => void;
@@ -27,9 +30,7 @@ export function DashboardNav({
   pendingRequestCount?: number;
 }) {
   const pathname = usePathname();
-  const items = NAV_ITEMS.filter(
-    (item) => !item.roles || item.roles.includes(role),
-  );
+  const items = navItemsFor(role, basicMode);
   const activeHref = navItemFor(pathname)?.href;
 
   return (

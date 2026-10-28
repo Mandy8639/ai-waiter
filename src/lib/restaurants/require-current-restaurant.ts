@@ -37,7 +37,8 @@ export const getDashboardContext = cache(
  * Every dashboard page calls this, on every navigation (layouts don't
  * re-render between sibling pages; pages do), so it is also where a role
  * is turned away from a page that isn't theirs — the kitchen account from
- * Payments, say — and sent to its own home instead. See
+ * Payments, say, or anyone from Settle up in a basic restaurant — and sent
+ * to its own home instead. See
  * src/lib/dashboard/access-core.ts.
  */
 export async function requireCurrentRestaurant(): Promise<{
@@ -57,7 +58,14 @@ export async function requireCurrentRestaurant(): Promise<{
   // No header means the request didn't come through the proxy (it always
   // sets it), so there's no path to judge; the database still decides
   // what data the role can reach.
-  if (pathname && !canOpenDashboardPath(state.restaurant.role, pathname)) {
+  if (
+    pathname &&
+    !canOpenDashboardPath(
+      state.restaurant.role,
+      pathname,
+      state.restaurant.basicMode,
+    )
+  ) {
     redirect(dashboardHomeFor(state.restaurant.role));
   }
 

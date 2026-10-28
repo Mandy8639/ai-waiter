@@ -144,7 +144,7 @@ describe("free month, then Starter", () => {
     expect(await acceptingOrders(f.restaurantId)).toBe(false);
   });
 
-  it("never pauses an exempt restaurant, which keeps the normal fee", async () => {
+  it("never pauses an exempt restaurant, and takes no fee from it", async () => {
     const f = await dinerReadyToOrder();
     await endFreeMonth(db, f.restaurantId, 100);
     await db.admin.query(
@@ -152,7 +152,8 @@ describe("free month, then Starter", () => {
       [f.restaurantId],
     );
     expect(await acceptingOrders(f.restaurantId)).toBe(true);
-    expect(await fee(f.restaurantId, 10_000)).toBe(100);
+    // Tableside is free (20261125090000): exempt means no fee at all.
+    expect(await fee(f.restaurantId, 10_000)).toBe(0);
     await submitOrder(db, f.userId, crypto.randomUUID());
   });
 

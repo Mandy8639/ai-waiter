@@ -11,12 +11,17 @@ function unique(prefix: string): string {
 
 export async function createRestaurant(
   db: TestDb,
-  overrides: { name?: string; slug?: string } = {},
+  overrides: { name?: string; slug?: string; basicMode?: boolean } = {},
 ): Promise<string> {
   const slug = overrides.slug ?? unique("restaurant");
+  // Tests predate basic mode and free pricing (20261125090000), and test
+  // the full product and its billing: a test restaurant has every feature
+  // and starts inside a free month, unless a test asks for basic mode.
   const { rows } = await db.admin.query<{ id: string }>(
-    "insert into public.restaurants (name, slug) values ($1, $2) returning id;",
-    [overrides.name ?? slug, slug],
+    `insert into public.restaurants (name, slug, basic_mode, billing_exempt)
+     values ($1, $2, $3, false)
+     returning id;`,
+    [overrides.name ?? slug, slug, overrides.basicMode ?? false],
   );
   const restaurantId = rows[0].id;
   await db.admin.query(

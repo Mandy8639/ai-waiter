@@ -115,12 +115,12 @@ export default async function DashboardLayout({
   const { restaurant } = state;
 
   const hasChef = ["owner", "manager", "kitchen"].includes(restaurant.role);
-  // Reservations are front-of-house only — a kitchen viewer has no RLS
+  // Reservations are front-of-house only, and closed in basic mode — a kitchen viewer has no RLS
   // visibility into the table at all, so counting for them would always
   // return 0 and the query would be pure waste.
-  const canSeeReservations = ["owner", "manager", "staff"].includes(
-    restaurant.role,
-  );
+  const canSeeReservations =
+    !restaurant.basicMode &&
+    ["owner", "manager", "staff"].includes(restaurant.role);
 
   // Loaded together, not one after another: every dashboard click re-renders
   // this layout, so each sequential database trip adds to the wait.
@@ -182,7 +182,7 @@ export default async function DashboardLayout({
             <span className="type-label hidden truncate font-semibold sm:block">
               {restaurant.name}
             </span>
-            <KitchenTabs />
+            <KitchenTabs basicMode={restaurant.basicMode} />
           </div>
           <div className="flex items-center gap-2">
             {state.all.length > 1 && (
@@ -232,6 +232,7 @@ export default async function DashboardLayout({
         </Link>
         <DashboardNav
           role={restaurant.role}
+          basicMode={restaurant.basicMode}
           restaurantId={canSeeReservations ? restaurant.id : undefined}
           pendingRequestCount={pendingRequestCount}
           showAdmin={showAdmin}
@@ -243,6 +244,7 @@ export default async function DashboardLayout({
           <div className="flex min-w-0 items-center gap-3">
             <MobileNav
               role={restaurant.role}
+              basicMode={restaurant.basicMode}
               restaurantId={canSeeReservations ? restaurant.id : undefined}
               pendingRequestCount={pendingRequestCount}
               showAdmin={showAdmin}

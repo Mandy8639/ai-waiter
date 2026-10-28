@@ -9,7 +9,7 @@
 export const TERMS_PATH = "/terms";
 
 /** Shown as "Last updated". Change it whenever the terms' substance changes. */
-export const TERMS_UPDATED = "October 21, 2026";
+export const TERMS_UPDATED = "October 28, 2026";
 
 /** The company that operates Tableside. */
 export const LEGAL_ENTITY = "Beacon Digital Consulting LLC";
