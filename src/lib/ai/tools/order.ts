@@ -362,7 +362,7 @@ export const orderTools: ToolDefinition[] = [
   {
     name: "request_order_cancellation",
     description:
-      'When the customer wants to cancel or change an order they placed ("cancel my order", "I ordered by mistake", "can I change my order?"): checks their latest order can still be cancelled (the kitchen hasn\'t accepted it and it isn\'t paid) and shows what it contains. Show them the order and ask them to confirm; do not cancel in the same turn.',
+      'When the customer wants to cancel or change an order they placed ("cancel my order", "I ordered by mistake", "can I change my order?"): checks their latest order can still be cancelled (the kitchen hasn\'t accepted it and it isn\'t paid) and shows what it contains. Show them the order and ask one yes/no question (for a change: cancel it and put the dishes back in their cart?; for a cancellation: cancel it?), never a choice between options; do not cancel in the same turn.',
     schema: requestOrderCancellationSchema,
     execute: requestOrderCancellation as ToolDefinition["execute"],
   },

@@ -64,6 +64,9 @@ when something got worse. It runs as a scheduled routine (claude.ai/code/routine
 - **One issue a night at most,** and never a duplicate of an open one. At most one vetting pull
   request a night.
 - **No secrets in output.** Never print environment values, keys or tokens, in the issue or anywhere.
+- **Don't chase CI.** A check that fails within a few seconds with no logs is GitHub Actions itself
+  (often the account's minutes running out), not your change: never re-run it. Say so once in the
+  pull request and in your summary, and leave the pull request as it is.
 - **A busy model is not a regression.** Unjudged scenarios (rate limits, timeouts) are listed, not
   raised.
 - When a scenario is fixed for good, a human runs `npm run eval:compare -- --update-baseline` after a
