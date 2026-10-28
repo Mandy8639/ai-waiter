@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   Card,
@@ -110,8 +109,9 @@ export default async function PointOfSalePage({
   searchParams: Promise<{ square?: string; clover?: string }>;
 }) {
   const { restaurant } = await requireCurrentRestaurant();
-  // Closed in basic mode, like Payments (20261125090000).
-  if (restaurant.basicMode) redirect("/dashboard/settings");
+  // Basic mode (20261125090000): the POS is for importing the menu only;
+  // nothing about payments or Terminals is shown.
+  const menuOnly = restaurant.basicMode;
   const { square, clover } = await searchParams;
   const supabase = (await createClient()) as unknown as SupabaseClient;
 
@@ -150,6 +150,7 @@ export default async function PointOfSalePage({
     menuSyncedAt: row?.menu_synced_at ?? null,
     lastSync: row?.last_sync_summary ?? null,
     paymentsEnabled: Boolean(row?.payments_enabled),
+    menuOnly,
   };
   const message = square
     ? RETURN_MESSAGES[square]
@@ -207,7 +208,7 @@ export default async function PointOfSalePage({
   // Cash and card-machine sales (and their refunds) that didn't reach
   // Square's reports (20261118090000).
   let unsynced = { payments: 0, refunds: 0 };
-  if (connected && row?.payments_enabled) {
+  if (connected && row?.payments_enabled && !menuOnly) {
     const { data } = await supabase.rpc("square_unsynced", {
       p_restaurant_id: restaurant.id,
     });
@@ -311,7 +312,7 @@ export default async function PointOfSalePage({
         </Card>
       )}
 
-      {connected && (
+      {connected && !menuOnly && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Square Terminals</CardTitle>

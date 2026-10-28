@@ -10,6 +10,11 @@ import {
   startMenuImport,
 } from "@/lib/menu-import/actions";
 import { MENU_IMPORTS_BUCKET } from "@/lib/menu-import/upload-core";
+import {
+  PdfPagesError,
+  isPdf,
+  pdfToPageImages,
+} from "@/lib/menu-import/pdf-pages";
 
 const MAX_PAGES = 8;
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -35,6 +40,7 @@ const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
  */
 type Phase =
   | { name: "idle" }
+  | { name: "converting" }
   | { name: "preparing" }
   | { name: "uploading"; done: number; total: number }
   | { name: "extracting" };
@@ -46,11 +52,33 @@ export function MenuImportUpload({ restaurantId }: { restaurantId: string }) {
 
   const busy = phase.name !== "idle";
 
-  function onFiles(files: FileList | null) {
+  async function onFiles(files: FileList | null) {
     if (!files) return;
     setError(null);
 
-    const chosen = Array.from(files);
+    // A PDF becomes one photo per page, here in the browser
+    // (src/lib/menu-import/pdf-pages.ts), so it counts as that many pages.
+    const chosen: File[] = [];
+    for (const file of Array.from(files)) {
+      if (!isPdf(file)) {
+        chosen.push(file);
+        continue;
+      }
+      setPhase({ name: "converting" });
+      try {
+        chosen.push(...(await pdfToPageImages(file, MAX_PAGES - pages.length)));
+      } catch (pdfError) {
+        setPhase({ name: "idle" });
+        setError(
+          pdfError instanceof PdfPagesError
+            ? pdfError.message
+            : `"${file.name}" couldn't be read as a PDF.`,
+        );
+        return;
+      }
+      setPhase({ name: "idle" });
+    }
+
     if (chosen.length + pages.length > MAX_PAGES) {
       setError(`Up to ${MAX_PAGES} pages at a time.`);
       return;
@@ -61,7 +89,7 @@ export function MenuImportUpload({ restaurantId }: { restaurantId: string }) {
         return;
       }
       if (!ACCEPTED.includes(file.type)) {
-        setError(`"${file.name}" must be a JPEG, PNG or WebP photo.`);
+        setError(`"${file.name}" must be a JPEG, PNG or WebP photo, or a PDF.`);
         return;
       }
     }
@@ -115,28 +143,32 @@ export function MenuImportUpload({ restaurantId }: { restaurantId: string }) {
   }
 
   const label =
-    phase.name === "preparing"
-      ? "Preparing…"
-      : phase.name === "uploading"
-        ? `Uploading ${phase.done + 1} of ${phase.total}…`
-        : phase.name === "extracting"
-          ? "Reading your menu…"
-          : "Read menu";
+    phase.name === "converting"
+      ? "Opening your PDF…"
+      : phase.name === "preparing"
+        ? "Preparing…"
+        : phase.name === "uploading"
+          ? `Uploading ${phase.done + 1} of ${phase.total}…`
+          : phase.name === "extracting"
+            ? "Reading your menu…"
+            : "Read menu";
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <FileDropZone
         id="menu-pages"
-        label="Photos of your menu"
-        buttonText={pages.length > 0 ? "Add more photos" : "Choose photos"}
-        accept="image/jpeg,image/png,image/webp"
+        label="Photos or a PDF of your menu"
+        buttonText={
+          pages.length > 0 ? "Add more pages" : "Choose photos or a PDF"
+        }
+        accept="image/jpeg,image/png,image/webp,application/pdf"
         multiple
         disabled={busy}
         onFiles={onFiles}
         hint={
           <>
-            One photo per section of your menu works best. Up to {MAX_PAGES}{" "}
-            photos, 10 MB each.
+            One photo per section of your menu works best. A PDF counts one page
+            per page. Up to {MAX_PAGES} pages, 10 MB each.
           </>
         }
       />

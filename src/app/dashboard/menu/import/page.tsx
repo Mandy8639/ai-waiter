@@ -2,6 +2,8 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { MenuImportUpload } from "@/components/dashboard/menu-import-upload";
+import { MenuImportLink } from "@/components/dashboard/menu-import-link";
+import { importMenuFromLink } from "@/lib/menu-import/actions";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { isMenuImportConfigured } from "@/lib/menu-import/vision";
 
@@ -24,13 +26,37 @@ export default async function MenuImportPage() {
           Import your menu
         </h1>
         <p className="text-muted-foreground text-sm">
-          Photograph your menu boards and we&apos;ll read them for you.
-          You&apos;ll check everything before anything is added.
+          Upload photos or a PDF of your menu, or paste a link to it, and
+          we&apos;ll read it for you. You&apos;ll check everything before
+          anything is added.
         </p>
       </div>
 
       {configured ? (
-        <MenuImportUpload restaurantId={restaurant.id} />
+        <>
+          <MenuImportUpload restaurantId={restaurant.id} />
+          <div className="flex flex-col gap-3 border-t pt-5">
+            <h2 className="font-medium">Or read it from a link</h2>
+            <MenuImportLink
+              action={importMenuFromLink.bind(null, restaurant.id)}
+            />
+          </div>
+          <div className="flex flex-col gap-2 border-t pt-5">
+            <h2 className="font-medium">Use Square?</h2>
+            <p className="text-muted-foreground text-sm">
+              Connect Square to import your menu exactly as it is there, and
+              import again whenever it changes.
+            </p>
+            <div>
+              <Link
+                href="/dashboard/settings/pos"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Import from Square
+              </Link>
+            </div>
+          </div>
+        </>
       ) : (
         <>
           <Alert>

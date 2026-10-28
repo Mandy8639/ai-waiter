@@ -257,15 +257,17 @@ export default async function SettingsPage() {
         </Card>
       )}
 
-      {/* Point of sale and the manager PIN are about taking money, which
-          basic mode leaves to the restaurant (20261125090000). Printers
-          stay: kitchen tickets are part of basic. */}
-      {canManage && !restaurant.basicMode && (
+      {/* In basic mode (20261125090000) the point of sale is for importing
+          the menu only; the manager PIN is about taking money, so it's
+          hidden. Printers stay: kitchen tickets are part of basic. */}
+      {canManage && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Point of sale</CardTitle>
             <CardDescription>
-              Connect your Square account to use the same menu in Tableside.
+              {restaurant.basicMode
+                ? "Use Square? Connect it to import your menu, and import again whenever it changes."
+                : "Connect your Square account to use the same menu in Tableside."}
             </CardDescription>
           </CardHeader>
           <CardContent>

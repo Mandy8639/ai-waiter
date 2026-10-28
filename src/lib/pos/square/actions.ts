@@ -253,6 +253,20 @@ export async function setSquarePayments(
   }
 
   const supabase = loose(auth.context.supabase);
+  // Basic mode takes no payments (20261125090000): Square is for the menu.
+  if (enable) {
+    const { data: restaurant } = await supabase
+      .from("restaurants")
+      .select("basic_mode")
+      .eq("id", restaurantId)
+      .maybeSingle();
+    if (restaurant?.basic_mode !== false) {
+      return {
+        error:
+          "Tableside doesn't take payments for your restaurant. Square is connected for your menu only.",
+      };
+    }
+  }
   const { data: integration } = await supabase
     .from("restaurant_pos_integrations")
     .select("provider, is_enabled, external_location_id")

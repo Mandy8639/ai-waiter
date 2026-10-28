@@ -10,7 +10,15 @@ import { authorizeRestaurantAction } from "@/lib/restaurants/authorize";
 import { toFriendlyError } from "@/lib/errors/database-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { StorageGateway } from "@/lib/menu-images/upload-core";
-import { extractMenuFromImages } from "./vision";
+import { extractMenuFromImages, extractMenuFromText } from "./vision";
+import { fetchMenuPage } from "./link";
+import {
+  MAX_MENU_TEXT,
+  MIN_MENU_TEXT,
+  MenuLinkError,
+  chunkMenuText,
+  menuTextFromHtml,
+} from "./link-core";
 import {
   ImportUploadRejected,
   authorizeImportUpload,
@@ -189,7 +197,20 @@ export async function extractUploadedImport(
     .eq("restaurant_id", restaurantId);
 
   const result = await extractMenuFromImages({ imageDataUrls, restaurantId });
+  return saveExtraction(supabase, restaurantId, importId, result);
+}
 
+/**
+ * The reader's result onto the import: drafts and 'review' (then on to the
+ * review page), or 'failed' with the reason. Shared by photos, PDFs and
+ * links, so every import ends up in the same review step.
+ */
+async function saveExtraction(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  restaurantId: string,
+  importId: string,
+  result: Awaited<ReturnType<typeof extractMenuFromImages>>,
+): Promise<MenuImportState> {
   if (!result.ok) {
     // Recorded on the row rather than only shown once, so a failed import
     // is still visible and diagnosable afterwards.
@@ -233,6 +254,67 @@ export async function extractUploadedImport(
 
   redirect(`/dashboard/menu/import/${importId}`);
 }
+
+/**
+ * Reads a menu from a link to the restaurant's own menu or ordering page
+ * (link.ts fetches it safely; link-core.ts turns it into text), then goes
+ * to the same review step as photos. Nothing reaches the menu until a
+ * person presses add.
+ */
+export async function importMenuFromLink(
+  restaurantId: string,
+  _prev: MenuImportState,
+  formData: FormData,
+): Promise<MenuImportState> {
+  const auth = await authorizeRestaurantAction(restaurantId, [...MANAGERS]);
+  if (!auth.ok) return { error: auth.error };
+  if (!(await isAiFeatureAllowed(restaurantId, "owner_tools"))) {
+    return { error: switchedOffMessage("owner_tools") };
+  }
+
+  let page: Awaited<ReturnType<typeof fetchMenuPage>>;
+  try {
+    page = await fetchMenuPage(String(formData.get("url") ?? ""));
+  } catch (error) {
+    return {
+      error:
+        error instanceof MenuLinkError
+          ? error.message
+          : "That page couldn't be loaded. Check the link, or upload photos instead.",
+    };
+  }
+
+  const text = /json/i.test(page.contentType)
+    ? page.body.slice(0, MAX_MENU_TEXT)
+    : menuTextFromHtml(page.body);
+  if (text.length < MIN_MENU_TEXT) {
+    return {
+      error:
+        "That page builds its menu as it loads, so it can't be read from the link. Take screenshots of the menu and upload them instead.",
+    };
+  }
+
+  const supabase = auth.context.supabase;
+  const importId = crypto.randomUUID();
+  const { error: createError } = await supabase.from("menu_imports").insert({
+    id: importId,
+    restaurant_id: restaurantId,
+    status: "extracting",
+    // 20261126090000 is newer than database.types.ts.
+    ...({ source_url: page.url } as Record<string, string>),
+  });
+  if (createError)
+    return { error: toFriendlyError(createError, "menu import") };
+
+  const result = await extractMenuFromText({
+    chunks: chunkMenuText(text).slice(0, MAX_LINK_PIECES),
+    restaurantId,
+  });
+  return saveExtraction(supabase, restaurantId, importId, result);
+}
+
+/** A long page is read in at most this many pieces (each one model call). */
+const MAX_LINK_PIECES = 3;
 
 function friendlyImportError(error: unknown): string {
   if (error instanceof ImportUploadRejected) return error.message;
