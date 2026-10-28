@@ -34,6 +34,10 @@ export const TESTED_MODELS: Record<AiJob, TestedModel[]> = {
       model: DOTS,
       note: "Held a real conversation 2026-09-05: tool calls and prices right",
     },
+    {
+      model: "cohere/north-mini-code:free",
+      note: "Passed the waiter evaluation (92%) on 2026-10-28, nightly watch",
+    },
   ],
   staff_assistant: SUGGESTER_NOTES,
   vision: [
