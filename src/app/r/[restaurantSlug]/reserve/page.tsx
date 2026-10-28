@@ -32,8 +32,8 @@ export async function generateMetadata({
  * scanned nothing. Identity is established by the server action when they
  * submit — see src/lib/reservations/request-actions.ts.
  *
- * An inactive restaurant is a 404 rather than a form that would take a
- * booking nobody is reading.
+ * An inactive restaurant, or one in basic mode (no bookings), is a 404
+ * rather than a form that would take a booking nobody is reading.
  */
 export default async function ReservePage({
   params,
@@ -43,7 +43,7 @@ export default async function ReservePage({
   const { restaurantSlug } = await params;
   const restaurant = await getPublicRestaurantBySlug(restaurantSlug);
 
-  if (!restaurant || !restaurant.isActive) {
+  if (!restaurant || !restaurant.isActive || restaurant.basicMode) {
     notFound();
   }
 

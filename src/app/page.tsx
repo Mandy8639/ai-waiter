@@ -9,18 +9,11 @@ import { TERMS_PATH } from "@/lib/legal/terms";
 import { publicPageMetadata } from "@/lib/seo/metadata";
 import { JsonLd } from "@/components/seo/json-ld";
 import { organizationJsonLd } from "@/lib/seo/structured-data";
-import { getPublicPricing } from "@/lib/billing/public-pricing";
-import { formatFeeBps, formatMonthlyPrice } from "@/lib/billing/format";
-import { freePeriodPhrase, planNote } from "@/lib/admin/plan-admin-core";
-
-// Prices and the free month are set on /admin (Phase 8); re-read every few
-// minutes so a change there reaches this page without a deploy.
-export const revalidate = 300;
 
 export const metadata = publicPageMetadata({
   title: "Tableside — an AI waiter for your restaurant",
   description:
-    "Diners scan the table's QR code, ask questions in their own words, and order. Orders land on your kitchen board, and card payments go straight to your own Stripe account.",
+    "Diners scan the table's QR code, ask questions in their own words, and order. Orders land on your kitchen board. Free to use.",
   path: "/",
 });
 
@@ -32,8 +25,8 @@ export const metadata = publicPageMetadata({
  * /r/<slug>/table/<token>, which redirects into that restaurant's menu. So
  * this page's only reader is someone deciding whether to use the product,
  * and it answers their questions in their order: what it does at the
- * table, what it does for the kitchen, what it costs, and how the money
- * reaches them.
+ * table, what it does for the kitchen, what it costs (nothing, for now:
+ * 20261125090000_basic_mode.sql), and how paying works (as it does today).
  *
  * The <h1> is the product name; the tagline below it stays "An AI waiter
  * for restaurants", because that is what the thing DOES and a visitor who
@@ -59,14 +52,12 @@ const HOW_IT_WORKS = [
   },
   {
     step: "4",
-    title: "They pay at the table",
-    body: "Card or cash, per order or for the whole table, with an optional tip. Card payments go straight into your own Stripe account.",
+    title: "Paying stays the way it is",
+    body: "When they're done, diners tap \u201cAsk for the bill\u201d and your staff take payment exactly as they do today, on your own card machine or register.",
   },
 ];
 
-export default async function Home() {
-  const pricing = await getPublicPricing();
-  const free = freePeriodPhrase(pricing.freeMonthDays);
+export default function Home() {
   return (
     <div className="flex flex-1 flex-col">
       <JsonLd data={organizationJsonLd()} />
@@ -83,8 +74,8 @@ export default async function Home() {
           </p>
           <p className="text-muted-foreground max-w-xl text-base text-balance">
             Your diners scan the code on the table, ask whatever they&apos;d
-            normally ask a server, and order. You get the orders on a kitchen
-            board and the money in your own Stripe account.
+            normally ask a server, and order. The order goes straight to your
+            kitchen. Nothing changes at your counter.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Link href="/signup" className={buttonVariants()}>
@@ -98,9 +89,8 @@ export default async function Home() {
             </Link>
           </div>
           <p className="text-muted-foreground text-sm">
-            {free ? `${free}, with no fee on card payments. ` : ""}You review
-            and edit everything the AI knows about your menu before a single
-            diner sees it.
+            Free to use. You review and edit everything the AI knows about your
+            menu before a single diner sees it.
           </p>
         </section>
 
@@ -132,42 +122,16 @@ export default async function Home() {
           </ol>
         </section>
 
-        <section className="flex flex-col gap-6">
+        <section className="flex flex-col gap-3">
           <h2 className="text-2xl font-semibold tracking-tight">
             What it costs
           </h2>
           <p className="text-muted-foreground text-sm">
-            {free
-              ? `${free}: no monthly fee and no percentage on card payments. After that, choose a plan below. `
-              : "Choose a plan below. "}
-            Card payments go directly to your own Stripe account — this platform
-            never holds your money. You pay Stripe&apos;s usual card fee, plus
-            our percentage.
+            Nothing. Tableside is free to use: no monthly fee and no fee on your
+            orders. If we ever introduce paid plans, we&apos;ll tell you well
+            before anything changes, and nothing is charged unless you choose a
+            plan.
           </p>
-          <ul className="flex flex-col gap-4">
-            {pricing.plans.map((plan, index) => (
-              <li key={plan.slug}>
-                <Card>
-                  <CardContent className="flex flex-col gap-1">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <h3 className="font-medium">{plan.name}</h3>
-                      <span className="text-muted-foreground text-sm">
-                        {formatMonthlyPrice(
-                          plan.monthlyPriceCents,
-                          plan.currency,
-                        )}
-                        {plan.monthlyPriceCents > 0 ? "/month" : ""} ·{" "}
-                        {formatFeeBps(plan.feeBps)} of each card payment
-                      </span>
-                    </div>
-                    <p className="text-muted-foreground text-sm">
-                      {planNote(pricing.plans, index)}
-                    </p>
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
-          </ul>
         </section>
 
         <section className="flex flex-col gap-4">
@@ -193,19 +157,20 @@ export default async function Home() {
               </dd>
             </div>
             <div className="flex flex-col gap-1">
-              <dt className="font-medium">Who holds the money?</dt>
+              <dt className="font-medium">
+                Do I need a new card machine or POS?
+              </dt>
               <dd className="text-muted-foreground text-sm">
-                You do. Each restaurant connects its own Stripe account, and
-                payments go straight there. Refunds are handled from your
-                dashboard.
+                No. Tableside doesn&apos;t take payments. Diners order from the
+                table, and when they ask for the bill your staff take payment on
+                whatever you use today.
               </dd>
             </div>
             <div className="flex flex-col gap-1">
               <dt className="font-medium">What if the internet drops?</dt>
               <dd className="text-muted-foreground text-sm">
-                Staff can still take orders and record cash in the dashboard,
-                and the kitchen board keeps working on any device that has a
-                connection.
+                Your staff take orders the way they always have, and the kitchen
+                board keeps working on any device that still has a connection.
               </dd>
             </div>
           </dl>

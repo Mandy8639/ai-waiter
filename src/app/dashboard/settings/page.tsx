@@ -257,7 +257,10 @@ export default async function SettingsPage() {
         </Card>
       )}
 
-      {canManage && (
+      {/* Point of sale and the manager PIN are about taking money, which
+          basic mode leaves to the restaurant (20261125090000). Printers
+          stay: kitchen tickets are part of basic. */}
+      {canManage && !restaurant.basicMode && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Point of sale</CardTitle>
@@ -276,7 +279,7 @@ export default async function SettingsPage() {
         </Card>
       )}
 
-      {canManage && (
+      {canManage && !restaurant.basicMode && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Manager PIN</CardTitle>

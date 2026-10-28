@@ -111,7 +111,10 @@ export default async function DashboardOverviewPage() {
       href: "/dashboard/kitchen",
       action: "Open kitchen",
     },
-    overview.pendingBookings !== null &&
+    // Bookings, card payments and takings are closed in basic mode
+    // (20261125090000), so the overview doesn't point at them.
+    !restaurant.basicMode &&
+      overview.pendingBookings !== null &&
       overview.pendingBookings > 0 && {
         icon: CalendarClock,
         text: `${overview.pendingBookings} booking ${overview.pendingBookings === 1 ? "request needs" : "requests need"} an answer`,
@@ -137,7 +140,7 @@ export default async function DashboardOverviewPage() {
       label: "Create tables and print their QR codes",
       href: "/dashboard/tables",
     },
-    ...(overview.canTakeCardPayments === null
+    ...(restaurant.basicMode || overview.canTakeCardPayments === null
       ? []
       : [
           {
@@ -251,7 +254,7 @@ export default async function DashboardOverviewPage() {
             }
             href="/dashboard/kitchen"
           />
-          {overview.takingsToday && (
+          {!restaurant.basicMode && overview.takingsToday && (
             <StatCard
               label="Taken today"
               value={formatPrice(

@@ -3,8 +3,14 @@ import {
   canOpenDashboardPath,
   dashboardHomeFor,
   navItemFor,
+  navItemsFor,
 } from "@/lib/dashboard/access-core";
 import { NAV_ITEMS } from "@/components/dashboard/nav-items";
+import type { RestaurantRole } from "@/lib/restaurants/get-user-restaurants";
+
+/** A full restaurant (basic mode off): every page that exists. */
+const canOpen = (role: RestaurantRole, path: string) =>
+  canOpenDashboardPath(role, path, false);
 
 /**
  * Kitchen mode: which dashboard pages each role may open. One table feeds
@@ -18,7 +24,7 @@ describe("the kitchen account", () => {
     "/dashboard/kitchen/sold-out",
     "/dashboard/assistant",
   ])("opens %s", (path) => {
-    expect(canOpenDashboardPath("kitchen", path)).toBe(true);
+    expect(canOpen("kitchen", path)).toBe(true);
   });
 
   it.each([
@@ -36,20 +42,16 @@ describe("the kitchen account", () => {
     "/dashboard/modifiers",
     "/dashboard/reservations",
   ])("is turned away from %s", (path) => {
-    expect(canOpenDashboardPath("kitchen", path)).toBe(false);
+    expect(canOpen("kitchen", path)).toBe(false);
   });
 
   it("is turned away from a page nobody listed, rather than let in", () => {
-    expect(canOpenDashboardPath("kitchen", "/dashboard/something-new")).toBe(
-      false,
-    );
+    expect(canOpen("kitchen", "/dashboard/something-new")).toBe(false);
   });
 
   it("lands on the board", () => {
     expect(dashboardHomeFor("kitchen")).toBe("/dashboard/kitchen");
-    expect(canOpenDashboardPath("kitchen", dashboardHomeFor("kitchen"))).toBe(
-      true,
-    );
+    expect(canOpen("kitchen", dashboardHomeFor("kitchen"))).toBe(true);
   });
 });
 
@@ -62,7 +64,7 @@ describe("front-of-house staff", () => {
     "/dashboard/reservations",
     "/dashboard/reservations/new",
   ])("opens %s", (path) => {
-    expect(canOpenDashboardPath("staff", path)).toBe(true);
+    expect(canOpen("staff", path)).toBe(true);
   });
 
   it.each([
@@ -74,7 +76,7 @@ describe("front-of-house staff", () => {
     "/dashboard/staff",
     "/dashboard/reports",
   ])("is turned away from %s", (path) => {
-    expect(canOpenDashboardPath("staff", path)).toBe(false);
+    expect(canOpen("staff", path)).toBe(false);
   });
 
   it("lands on the overview", () => {
@@ -87,7 +89,7 @@ describe("owners and managers", () => {
     "open every page in the nav (%s)",
     (role) => {
       for (const item of NAV_ITEMS) {
-        expect(canOpenDashboardPath(role, item.href)).toBe(true);
+        expect(canOpen(role, item.href)).toBe(true);
       }
     },
   );
@@ -107,6 +109,58 @@ describe("navItemFor", () => {
 
   it("ignores everything outside the dashboard", () => {
     expect(navItemFor("/account")).toBeNull();
-    expect(canOpenDashboardPath("kitchen", "/account")).toBe(true);
+    expect(canOpen("kitchen", "/account")).toBe(true);
+  });
+});
+
+describe("basic mode: QR menu, AI waiter and kitchen only", () => {
+  const closed = [
+    "/dashboard/pos",
+    "/dashboard/checkout",
+    "/dashboard/reservations",
+    "/dashboard/reservations/new",
+    "/dashboard/payments",
+    "/dashboard/reports",
+    "/dashboard/reports/close",
+  ];
+
+  it.each(["owner", "manager", "staff"] as const)(
+    "closes the pages about money and bookings, even to %s",
+    (role) => {
+      for (const path of closed) {
+        expect(canOpenDashboardPath(role, path, true)).toBe(false);
+      }
+    },
+  );
+
+  it.each([
+    "/dashboard",
+    "/dashboard/kitchen",
+    "/dashboard/kitchen/sold-out",
+    "/dashboard/assistant",
+    "/dashboard/orders",
+    "/dashboard/menu",
+    "/dashboard/allergens",
+    "/dashboard/tables",
+    "/dashboard/staff",
+    "/dashboard/guests",
+    "/dashboard/feedback",
+    "/dashboard/settings",
+  ])("still opens %s for an owner", (path) => {
+    expect(canOpenDashboardPath("owner", path, true)).toBe(true);
+  });
+
+  it("keeps the kitchen's tabs as they were", () => {
+    expect(navItemsFor("kitchen", true).map((i) => i.label)).toEqual(
+      navItemsFor("kitchen", false).map((i) => i.label),
+    );
+  });
+
+  it("shows staff only what's left: the overview, the board and orders", () => {
+    expect(navItemsFor("staff", true).map((i) => i.label)).toEqual([
+      "Overview",
+      "Kitchen",
+      "Orders",
+    ]);
   });
 });

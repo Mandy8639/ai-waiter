@@ -45,6 +45,12 @@ export interface NavItem {
    * behind it do their own checks; hiding a link is not access control.
    */
   roles?: readonly RestaurantRole[];
+  /**
+   * Hidden and closed in basic mode (restaurants.basic_mode,
+   * 20261125090000): the pages about taking money and bookings. A basic
+   * restaurant is the QR menu, the AI waiter and the kitchen.
+   */
+  fullOnly?: true;
 }
 
 /**
@@ -99,6 +105,7 @@ export const NAV_ITEMS: NavItem[] = [
     group: "Service",
     icon: ClipboardPen,
     roles: FRONT_OF_HOUSE,
+    fullOnly: true,
   },
   // Front of house: a waiter settling a dispute needs order history as
   // much as an owner does. Takings stay owner/manager-only (Reports).
@@ -115,6 +122,7 @@ export const NAV_ITEMS: NavItem[] = [
     group: "Service",
     icon: HandCoins,
     roles: FRONT_OF_HOUSE,
+    fullOnly: true,
   },
   {
     label: "Reservations",
@@ -122,6 +130,7 @@ export const NAV_ITEMS: NavItem[] = [
     group: "Service",
     icon: CalendarDays,
     roles: FRONT_OF_HOUSE,
+    fullOnly: true,
   },
   {
     label: "Menu",
@@ -178,6 +187,7 @@ export const NAV_ITEMS: NavItem[] = [
     group: "Business",
     icon: CreditCard,
     roles: MANAGERS,
+    fullOnly: true,
   },
   {
     label: "Reports",
@@ -185,6 +195,7 @@ export const NAV_ITEMS: NavItem[] = [
     group: "Business",
     icon: ChartColumn,
     roles: MANAGERS,
+    fullOnly: true,
   },
   // Who comes, when, and how they use the AI waiter
   // (docs/guest-insights.md). Counts only, owners and managers.

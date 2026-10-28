@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { formatFeeBps, formatMonthlyPrice } from "@/lib/billing/format";
-import { getPublicPricing } from "@/lib/billing/public-pricing";
 import { PRIVACY_POLICY_PATH } from "@/lib/legal/privacy";
 import { SECURITY_PATH } from "@/lib/legal/security";
 import { SUPPORT_CONTACT_EMAIL } from "@/lib/legal/support";
@@ -11,19 +9,14 @@ import { publicPageMetadata } from "@/lib/seo/metadata";
 export const metadata = publicPageMetadata({
   title: "Terms of Service — Tableside",
   description:
-    "The terms for restaurants using Tableside: accounts, plans and fees, card payments through Stripe, the AI features, your data, and what each side is responsible for.",
+    "The terms for restaurants using Tableside: accounts, the price (free), card payments through Stripe, the AI features, your data, and what each side is responsible for.",
   path: TERMS_PATH,
 });
 
-// Plans and the free period come from /admin; re-read every few minutes.
-export const revalidate = 300;
-
 /**
  * The Terms of Service. Written to describe what Tableside actually does:
- *   - plans, card fees, the free period and what pauses afterwards:
- *     platform_plans, platform_billing_settings and
- *     20261018120000_free_month_then_starter.sql (7 days' grace; only new
- *     QR orders pause);
+ *   - the price: free, no fee (20261125090000_basic_mode.sql: every
+ *     restaurant billing-exempt, platform fee 0);
  *   - card payments: direct charges on the restaurant's own Stripe account
  *     (src/lib/payments/checkout.ts, tap-to-pay.ts), fee on food not tips;
  *   - allergens shown only once confirmed; AI drafts reviewed; AI images
@@ -31,11 +24,7 @@ export const revalidate = 300;
  *   - data export (Settings → Your data) and account deletion (/account).
  * A change to any of those means a change here and to TERMS_UPDATED.
  */
-export default async function TermsPage() {
-  const pricing = await getPublicPricing();
-  const paidPlans = pricing.plans.filter((p) => p.monthlyPriceCents > 0);
-  const freeDays = pricing.freeMonthDays;
-
+export default function TermsPage() {
   const email = (
     <a
       href={`mailto:${SUPPORT_CONTACT_EMAIL}`}
@@ -105,64 +94,16 @@ export default async function TermsPage() {
         </ul>
       </Section>
 
-      <Section title="2. Plans, the free period and fees">
-        {freeDays > 0 && (
-          <p>
-            <Term>
-              Your first {freeDays === 30 ? "month" : `${freeDays} days`} is
-              free.
-            </Term>{" "}
-            During it there&apos;s no subscription to pay and Tableside takes no
-            fee on your card payments.
-          </p>
-        )}
+      <Section title="2. Price">
         <p>
-          After that, to keep taking orders through Tableside, choose a plan.
-          Our current plans:
+          <Term>Tableside is free to use.</Term> There&apos;s no subscription
+          and no fee on your orders or payments.
         </p>
-        <ul className="list-disc space-y-2 pl-5">
-          {paidPlans.map((p) => (
-            <li key={p.slug}>
-              <Term>{p.name}</Term>:{" "}
-              {formatMonthlyPrice(p.monthlyPriceCents, p.currency)} a month,
-              plus {formatFeeBps(p.feeBps)} of each card payment taken through
-              Tableside.
-            </li>
-          ))}
-        </ul>
-        <ul className="list-disc space-y-2 pl-5">
-          <li>
-            <Term>The monthly price</Term> is billed in advance each month to
-            the card you give us, through Stripe. Prices don&apos;t include
-            sales tax where it applies.
-          </li>
-          <li>
-            <Term>Our fee on card payments</Term> is a percentage of the food
-            and drink, never of tips, and is taken automatically from each card
-            payment. It&apos;s separate from Stripe&apos;s own processing fees,
-            which Stripe sets and charges you directly.
-          </li>
-          <li>
-            <Term>If you haven&apos;t chosen a plan</Term> 7 days after the free
-            period ends, or a cancelled or unpaid plan ends, new QR orders
-            pause. Your menu stays visible, orders already placed carry on, and
-            you keep every dashboard tool, so you can pick a plan and resume at
-            any time. A card that fails while Stripe is still retrying it
-            doesn&apos;t pause anything.
-          </li>
-          <li>
-            <Term>Cancel any time</Term> from Payments in your dashboard (owners
-            and managers). Your plan runs to the end of the month you&apos;ve
-            paid for, and you can change your mind until then. We don&apos;t
-            refund part months.
-          </li>
-          <li>
-            <Term>Price changes.</Term> We&apos;ll tell you at least 30 days
-            before we change what you pay, by email or in the dashboard. A new
-            monthly price applies to new subscriptions; if we ever need to
-            change the price of yours, we&apos;ll say so in that notice.
-          </li>
-        </ul>
+        <p>
+          If we introduce paid plans, we&apos;ll tell you at least 30 days
+          before anything changes, by email or in the dashboard. Nothing is ever
+          charged unless you choose a plan.
+        </p>
       </Section>
 
       <Section title="3. Card payments through Stripe">

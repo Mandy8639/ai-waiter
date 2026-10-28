@@ -77,17 +77,19 @@ export default async function RestaurantLandingPage({
         </Link>
         {/* Secondary to the menu on purpose: most people reaching this page
             scanned a code and are already sitting down. Booking is for the
-            ones who are not. */}
-        <Link
-          href={`/r/${restaurantSlug}/reserve`}
-          className={cn(
-            buttonVariants({ variant: "outline", size: "lg" }),
-            "sm:flex-1",
-          )}
-        >
-          <CalendarDays aria-hidden="true" />
-          Book a table
-        </Link>
+            ones who are not, and is closed in basic mode. */}
+        {!restaurant.basicMode && (
+          <Link
+            href={`/r/${restaurantSlug}/reserve`}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "lg" }),
+              "sm:flex-1",
+            )}
+          >
+            <CalendarDays aria-hidden="true" />
+            Book a table
+          </Link>
+        )}
       </div>
 
       <AskWaiterCard />
