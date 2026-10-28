@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { env } from "@/lib/env";
 import type { Database } from "./database.types";
+import { SUPABASE_REQUEST_TIMEOUT_MS, fetchWithTimeout } from "./fetch-timeout";
 
 /**
  * Server-side Supabase client, scoped to the current request.
@@ -23,6 +24,8 @@ export async function createClient() {
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
+      // A stuck request fails in seconds instead of minutes (fetch-timeout.ts).
+      global: { fetch: fetchWithTimeout(SUPABASE_REQUEST_TIMEOUT_MS) },
       cookies: {
         getAll() {
           return cookieStore.getAll();

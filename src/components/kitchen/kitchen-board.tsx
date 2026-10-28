@@ -248,8 +248,21 @@ export function KitchenBoard({
   const resyncSeqRef = useRef(0);
   const isMountedRef = useRef(true);
 
+  // One resync at a time. A browser sends server actions one at a time,
+  // so ticks that pile up behind a slow resync also hold up every tap;
+  // instead a tick during a resync asks for one more afterwards (found in
+  // the 2026-10-28 busy-night simulation, with fetch-timeout.ts).
+  const resyncInFlightRef = useRef(false);
+  const resyncAgainRef = useRef<boolean | null>(null);
+
   const resync = useCallback(
-    async (announceNew: boolean) => {
+    async (announceNew: boolean): Promise<void> => {
+      if (resyncInFlightRef.current) {
+        resyncAgainRef.current =
+          (resyncAgainRef.current ?? false) || announceNew;
+        return;
+      }
+      resyncInFlightRef.current = true;
       const seq = (resyncSeqRef.current += 1);
       let fresh;
       try {
@@ -261,6 +274,13 @@ export function KitchenBoard({
         // retry naturally.
         console.error("KDS resync failed, will retry on next trigger", error);
         return;
+      } finally {
+        resyncInFlightRef.current = false;
+        const again = resyncAgainRef.current;
+        resyncAgainRef.current = null;
+        if (again !== null && isMountedRef.current) {
+          queueMicrotask(() => void resyncRef.current(again));
+        }
       }
       if (!isMountedRef.current) return;
       if (isStaleResync(seq, resyncSeqRef.current)) return;
@@ -287,6 +307,11 @@ export function KitchenBoard({
     },
     [restaurantId, play],
   );
+  // The latest resync(), for the follow-up run above.
+  const resyncRef = useRef(resync);
+  useEffect(() => {
+    resyncRef.current = resync;
+  }, [resync]);
 
   const scheduleResync = useCallback(
     (announceNew: boolean) => {

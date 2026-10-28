@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import type { Database } from "./database.types";
+import { fetchWithTimeout } from "./fetch-timeout";
 
 /**
  * Privileged Supabase client, authenticated with the SECRET key.
@@ -45,6 +46,10 @@ export function createAdminClient() {
         autoRefreshToken: false,
         persistSession: false,
       },
+      // Longer than the signed-in client's: this one also moves files
+      // (menu photos up to 10 MB). Still bounded, so a stuck request can't
+      // hold a webhook or a job for minutes (fetch-timeout.ts).
+      global: { fetch: fetchWithTimeout(60_000) },
     },
   );
 }

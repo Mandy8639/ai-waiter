@@ -55,7 +55,6 @@ export function ServiceRequestQueue({
   initial: OpenRequest[];
 }) {
   const [requests, setRequests] = useState(initial);
-  const [clearing, setClearing] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   // Re-rendered on a timer so "3 min" does not sit there saying "just now"
   // for the rest of service.
@@ -67,9 +66,50 @@ export function ServiceRequestQueue({
   // did. A per-instance topic costs nothing and removes the question.
   const instanceId = useId();
 
-  const refresh = useCallback(async () => {
-    setRequests(await loadOpenRequests(restaurantId));
+  // Rows this screen just cleared. A refresh that was already on its way
+  // when "Done" was tapped comes back with the row still open, and without
+  // this it reappeared until the next refresh, so staff tapped again (seen
+  // in the 2026-10-28 busy-night simulation). Kept until the database
+  // agrees the row is gone.
+  const clearedRef = useRef(new Set<string>());
+  // Only the newest refresh may write the list: under load an older,
+  // slower one can finish last.
+  const refreshSeq = useRef(0);
+  // One refresh at a time: server actions run one after another, so
+  // refreshes queued behind a slow one would also hold up "Done". A
+  // refresh asked for meanwhile runs once afterwards.
+  const refreshing = useRef(false);
+  const refreshAgain = useRef(false);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    if (refreshing.current) {
+      refreshAgain.current = true;
+      return;
+    }
+    refreshing.current = true;
+    const seq = ++refreshSeq.current;
+    let rows: OpenRequest[];
+    try {
+      rows = await loadOpenRequests(restaurantId);
+    } catch {
+      return; // the next change, tick or wake retries
+    } finally {
+      refreshing.current = false;
+      if (refreshAgain.current) {
+        refreshAgain.current = false;
+        queueMicrotask(() => void refreshRef.current());
+      }
+    }
+    if (seq !== refreshSeq.current) return;
+    for (const id of clearedRef.current) {
+      if (!rows.some((r) => r.id === id)) clearedRef.current.delete(id);
+    }
+    setRequests(rows.filter((r) => !clearedRef.current.has(r.id)));
   }, [restaurantId]);
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  }, [refresh]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -124,15 +164,21 @@ export function ServiceRequestQueue({
   }, [refresh]);
 
   async function clear(id: string) {
-    if (clearing) return;
-    setClearing(id);
+    // Each row clears on its own. This used to ignore a tap while any
+    // other row was still saving, so under load a waiter who cleared two
+    // tables in a row saw the second one stay and tapped it again (the
+    // 2026-10-28 busy-night simulation).
+    if (clearedRef.current.has(id)) return;
     // Optimistic: the row leaves the queue immediately, because a staff
     // member who tapped "Done" and watched it sit there will tap again.
+    clearedRef.current.add(id);
     setRequests((current) => current.filter((r) => r.id !== id));
     const result = await resolveServiceRequest(restaurantId, id);
-    setClearing(null);
     // If it failed, the authoritative read puts it back.
-    if (!result.ok) void refresh();
+    if (!result.ok) {
+      clearedRef.current.delete(id);
+      void refresh();
+    }
   }
 
   if (requests.length === 0) {
@@ -180,7 +226,6 @@ export function ServiceRequestQueue({
             <Button
               size="sm"
               variant="outline"
-              disabled={clearing === request.id}
               onClick={() => void clear(request.id)}
             >
               Done
