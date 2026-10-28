@@ -464,6 +464,47 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
   });
 });
 
+describe("KitchenBoard — a refresh that hangs", () => {
+  // Found in the 2026-10-28 busy-night simulation: one hung refresh froze
+  // a kitchen tablet for six minutes, because a browser sends server
+  // actions one at a time and every poll tick queued another behind it.
+  it("doesn't pile up polls behind it, and catches up once it gives up", async () => {
+    let fail!: (error: Error) => void;
+    mockFetchActiveOrders.mockResolvedValue([]);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[]}
+      />,
+    );
+    subscribed();
+    await flush();
+
+    // The next refresh hangs (Supabase overloaded)...
+    mockFetchActiveOrders.mockReturnValueOnce(
+      new Promise((_resolve, reject) => (fail = reject)),
+    );
+    await flush(KDS_NORMAL_POLL_INTERVAL_MS + 300);
+    const callsWhenHung = mockFetchActiveOrders.mock.calls.length;
+
+    // ...through three more poll ticks: none of them queue another call.
+    mockFetchActiveOrders.mockResolvedValue([makeOrder()]);
+    await flush(KDS_NORMAL_POLL_INTERVAL_MS * 3);
+    expect(mockFetchActiveOrders.mock.calls.length).toBe(callsWhenHung);
+    expect(orderCardIds()).toEqual([]);
+
+    // It finally fails (fetch-timeout.ts); one follow-up finds the order.
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await act(async () => fail(new Error("timed out")));
+    await flush();
+    expect(orderCardIds()).toEqual(["1"]);
+    expect(mockFetchActiveOrders.mock.calls.length).toBe(callsWhenHung + 1);
+  });
+});
+
 describe("KitchenBoard — unaccepted orders keep asking", () => {
   it("says in writing how many orders are waiting to be accepted", async () => {
     // The alert cannot exist only as a noise: a kitchen mutes the board on
