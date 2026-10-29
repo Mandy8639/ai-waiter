@@ -108,7 +108,17 @@ export function parseStaffCommand(input: string): StaffIntent {
     return { kind: "help" };
   }
 
-  // Small talk gets a friendly answer, not "didn't catch that".
+  // Small talk gets a friendly answer, not "didn't catch that". "Ok",
+  // "got it": acknowledging the last answer, nothing to do. Not "yes":
+  // after "Should I?", a typed yes must not sound like the change was made
+  // (the Yes button does that).
+  if (
+    /^(ok|okay|k|kk|okie|alright|all right|got it|gotcha|cool|great|nice|perfect|fine|noted|understood|sounds good|good)$/.test(
+      text,
+    )
+  ) {
+    return { kind: "greeting", thanks: true };
+  }
   if (
     /^(thanks|thank you|thank u|thx|ty|cheers|great thanks|ok thanks)\b/.test(
       text,

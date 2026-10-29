@@ -134,16 +134,39 @@ const GENERIC_OPTION_NAMES = new Set(
     "other",
     "cold",
     "warm",
+    "family",
+    "family pack",
+    "kids",
+    "party",
+    "jumbo",
+    "personal",
+    "half tray",
+    "full tray",
+    "veg",
+    "non veg",
+    "chicken",
+    "lamb",
+    "goat",
+    "paneer",
   ].map(normalizeName),
 );
 
-export function pickExampleOption<T extends { name: string }>(
-  options: T[],
-): T | undefined {
+/**
+ * Groups whose options are sizes, spice levels or a required pick ("Choose
+ * one": Regular / Family, imported from Square): "The Family is out"
+ * means nothing on its own, whatever the option is called.
+ */
+const GENERIC_GROUP =
+  /\b(size|sizes|portion|serving|quantity|spice|heat|level|choose|choice|pick|select|type|variant|option)\b/i;
+
+export function pickExampleOption<
+  T extends { name: string; groupName?: string },
+>(options: T[]): T | undefined {
   return options.find((o) => {
     const name = o.name.trim();
     return (
       name.length > 0 &&
+      !GENERIC_GROUP.test(o.groupName ?? "") &&
       name.length <= 24 &&
       /[a-z]/i.test(name) &&
       !GENERIC_OPTION_NAMES.has(normalizeName(name))
@@ -178,7 +201,7 @@ export function helpText(catalog?: Catalog): string {
 
 /** "Hi" and "thanks": a friendly answer that says what it can do. */
 export function greetingText(thanks: boolean, catalog?: Catalog): string {
-  if (thanks) return "You're welcome!";
+  if (thanks) return "👍 Anything else, just ask.";
   return `Hi! I can change the menu and the kitchen for you, or tell you how service is going.\n\n${helpText(catalog)}`;
 }
 

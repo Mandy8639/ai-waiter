@@ -70,7 +70,15 @@ describe("small talk", () => {
       });
     },
   );
-  it.each(["thanks", "Thank you!", "ok thanks"])("%s is thanks", (text) => {
+  it.each([
+    "thanks",
+    "Thank you!",
+    "ok thanks",
+    "Ok",
+    "okay",
+    "got it",
+    "cool",
+  ])("%s is an acknowledgement", (text) => {
     expect(parseStaffCommand(text)).toEqual({ kind: "greeting", thanks: true });
   });
   it("answers hello with what it can do, never 'didn't catch that'", () => {
@@ -80,7 +88,10 @@ describe("small talk", () => {
     expect(text).toMatch(/^Hi!/);
     expect(text).toContain("86 the Punjabi Samosa");
     expect(text).not.toMatch(/didn't catch/);
-    expect(greetingText(true)).toBe("You're welcome!");
+    expect(greetingText(true)).toBe("👍 Anything else, just ask.");
+  });
+  it("never reads a typed 'yes' as done", () => {
+    expect(parseStaffCommand("yes").kind).not.toBe("greeting");
   });
   it("doesn't mistake a command that starts with hello", () => {
     expect(parseStaffCommand("hey 86 the cone dosa").kind).not.toBe("greeting");
@@ -170,6 +181,17 @@ describe("examples", () => {
     expect(text).toContain("The Extra chutney is out");
     expect(text).toContain("How many tables are live?");
   });
+  it("skips options in size, spice and 'Choose one' groups, whatever they're called", () => {
+    // Square imports a required size as "Choose one": Regular / Family.
+    expect(
+      pickExampleOption([
+        { name: "Family", groupName: "Choose one" },
+        { name: "Half plate", groupName: "Portion" },
+        { name: "Extra raita", groupName: "Sides" },
+      ])?.name,
+    ).toBe("Extra raita");
+  });
+
   it("leaves the add-on example out when only generic ones exist", () => {
     expect(
       pickExampleOption([
