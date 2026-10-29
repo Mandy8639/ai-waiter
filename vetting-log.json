@@ -6,6 +6,15 @@
       "passed": true,
       "passRate": 92.2,
       "reasons": []
+    },
+    {
+      "model": "google/gemma-4-26b-a4b-it:free",
+      "testedAt": "2026-10-29T08:34:55.825Z",
+      "passed": false,
+      "passRate": 100,
+      "reasons": [
+        "only 2 of 51 scenarios could be judged (busy or failing calls)"
+      ]
     }
   ]
 }
