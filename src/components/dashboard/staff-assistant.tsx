@@ -440,6 +440,9 @@ function StaffChefConversation({
             submit(text);
           }}
         >
+          {/* 16px on phones: iPhones zoom the whole page in when a text box
+              under 16px is tapped, and it stays zoomed with the edges cut
+              off (seen in the staff app, 2026-10-29). */}
           <input
             ref={inputRef}
             value={text}
@@ -453,7 +456,7 @@ function StaffChefConversation({
             aria-label="Message the Waiter"
             autoComplete="off"
             enterKeyHint="send"
-            className="bg-muted/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/40 type-body h-11 min-w-0 flex-1 rounded-full border border-transparent px-4 transition-colors focus-visible:ring-3 focus-visible:outline-none"
+            className="bg-muted/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/40 sm:type-body h-11 min-w-0 flex-1 rounded-full border border-transparent px-4 text-base leading-normal transition-colors focus-visible:ring-3 focus-visible:outline-none"
           />
           <button
             type="submit"

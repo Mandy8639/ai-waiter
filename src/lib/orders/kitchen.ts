@@ -77,7 +77,7 @@ const RECENT_SERVED_WINDOW_MINUTES = 30;
  * all and counted nine-day-old abandoned orders that the board, correctly,
  * would not show and therefore gave nobody any way to clear.
  */
-const BOARD_LOOKBACK_HOURS = 12;
+export const BOARD_LOOKBACK_HOURS = 12;
 
 /**
  * The kitchen display's data source: every order at this restaurant that's

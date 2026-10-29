@@ -23,6 +23,9 @@ Return ONLY one JSON object, no prose. It must be exactly one of:
 {"kind":"busy_off"}                                                            — the kitchen has caught up
 {"kind":"set_price","target":"<dish name>","price":<dollars as a number>}     — change a dish's price
 {"kind":"status"}                                                              — asking what is sold out or paused
+{"kind":"service"}                                                             — asking how service is going: how many tables or orders are live, what's in the kitchen, who is waiting
+{"kind":"greeting","thanks":false}                                             — just saying hello
+{"kind":"greeting","thanks":true}                                              — just saying thanks
 {"kind":"unknown"}                                                             — anything else
 
 Rules:

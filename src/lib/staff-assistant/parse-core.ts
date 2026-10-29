@@ -108,6 +108,32 @@ export function parseStaffCommand(input: string): StaffIntent {
     return { kind: "help" };
   }
 
+  // Small talk gets a friendly answer, not "didn't catch that".
+  if (
+    /^(thanks|thank you|thank u|thx|ty|cheers|great thanks|ok thanks)\b/.test(
+      text,
+    )
+  ) {
+    return { kind: "greeting", thanks: true };
+  }
+  if (
+    /^(hi|hello|hey|hiya|yo|namaste|good (morning|afternoon|evening))( there| waiter| chef)?$/.test(
+      text,
+    )
+  ) {
+    return { kind: "greeting", thanks: false };
+  }
+
+  // How service is going (read only): live tables, the kitchen's queue,
+  // who's waiting.
+  if (
+    /\b(how many (live |open |active |busy |occupied )?(tables|orders|people|guests)|live tables|open tables|active tables|tables? (are )?(live|open|active|seated|occupied|in)|how busy are we|how('?s| is) (service|it going|the kitchen|the floor)|what'?s (cooking|in the kitchen|on the board|on the go|going on)|orders? (in|on) the (kitchen|board)|open orders|who'?s waiting|anyone waiting|tables waiting)\b/.test(
+      text,
+    )
+  ) {
+    return { kind: "service" };
+  }
+
   if (
     /^(status|what'?s (sold out|86'?d|off|out|paused|unavailable)|what is (sold out|86'?d|off|out|paused|unavailable)|what are we out of|anything (sold out|86'?d))\b/.test(
       text,

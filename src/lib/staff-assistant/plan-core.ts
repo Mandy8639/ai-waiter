@@ -42,6 +42,25 @@ export interface PlanContext {
    * opening" is 4 AM, which is worth saying out loud.
    */
   hasMenuHours?: boolean;
+  /** Live service numbers, loaded only to answer "how's service?". */
+  service?: ServiceSnapshot;
+}
+
+/** How service is going right now, from orders and table requests. */
+export interface ServiceSnapshot {
+  /** Orders not yet served or cancelled, by stage. */
+  inKitchen: {
+    pending: number;
+    confirmed: number;
+    preparing: number;
+    ready: number;
+  };
+  /** Tables with an order on the go, as staff call them ("Table 4", "Patio"). */
+  activeTables: string[];
+  /** Other tables whose last order was served in the last hour. */
+  recentlyServedTables: number;
+  /** Tables waiting for a person, with what they want ("Table 7 wants the bill"). */
+  waiting: string[];
 }
 
 export interface ReplyButton {
@@ -81,10 +100,61 @@ export function pickExampleDishes(names: string[], count = 2): string[] {
  * the examples are things the staff could actually say ("86 the Chilli
  * Baby Corn", not a salmon the restaurant has never served).
  */
+/**
+ * Add-on names that make no sense on their own as an example: "The Regular
+ * is out" reads as nonsense, though Regular is a real size (seen in the
+ * staff app, 2026-10-29). Sizes, spice levels and yes/no choices.
+ */
+const GENERIC_OPTION_NAMES = new Set(
+  [
+    "regular",
+    "small",
+    "medium",
+    "large",
+    "extra large",
+    "mini",
+    "half",
+    "full",
+    "single",
+    "double",
+    "triple",
+    "mild",
+    "hot",
+    "extra hot",
+    "spicy",
+    "extra spicy",
+    "no spice",
+    "plain",
+    "normal",
+    "standard",
+    "none",
+    "no",
+    "yes",
+    "default",
+    "other",
+    "cold",
+    "warm",
+  ].map(normalizeName),
+);
+
+export function pickExampleOption<T extends { name: string }>(
+  options: T[],
+): T | undefined {
+  return options.find((o) => {
+    const name = o.name.trim();
+    return (
+      name.length > 0 &&
+      name.length <= 24 &&
+      /[a-z]/i.test(name) &&
+      !GENERIC_OPTION_NAMES.has(normalizeName(name))
+    );
+  });
+}
+
 export function helpText(catalog?: Catalog): string {
   const dishes = catalog?.dishes ?? [];
   const [a, b] = pickExampleDishes(dishes.map((d) => d.name));
-  const option = catalog?.options.find((o) => o.name.trim().length <= 24);
+  const option = pickExampleOption(catalog?.options ?? []);
   const priced = dishes.find((d) => d.name === (b ?? a));
   const lines = ["Try one of these:"];
   lines.push(
@@ -102,6 +172,78 @@ export function helpText(catalog?: Catalog): string {
       : "• Make the [dish] $12.50 (owners and managers; asks first)",
   );
   lines.push("• What's sold out?");
+  lines.push("• How many tables are live?");
+  return lines.join("\n");
+}
+
+/** "Hi" and "thanks": a friendly answer that says what it can do. */
+export function greetingText(thanks: boolean, catalog?: Catalog): string {
+  if (thanks) return "You're welcome!";
+  return `Hi! I can change the menu and the kitchen for you, or tell you how service is going.\n\n${helpText(catalog)}`;
+}
+
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+
+/** Lists names as "Table 2, Table 5 and Patio". */
+function listNames(names: string[], max = 8): string {
+  const shown = names.slice(0, max);
+  const more = names.length - shown.length;
+  if (more > 0) return `${shown.join(", ")} and ${more} more`;
+  return shown.length <= 1
+    ? (shown[0] ?? "")
+    : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}`;
+}
+
+/** How service is going right now. Every number is read, never estimated. */
+export function serviceText(ctx: PlanContext): string {
+  const service = ctx.service;
+  if (!service)
+    return "I couldn't read the kitchen just now. Please try again.";
+  const k = service.inKitchen;
+  const orders = k.pending + k.confirmed + k.preparing + k.ready;
+  const lines = ["Right now:"];
+
+  lines.push(
+    service.activeTables.length === 0
+      ? "• No tables have an order on the go."
+      : `• ${plural(service.activeTables.length, "table has", "tables have")} an order on the go: ${listNames(service.activeTables)}`,
+  );
+  if (orders > 0) {
+    const stages = [
+      k.pending && `${k.pending} new`,
+      k.confirmed && `${k.confirmed} accepted`,
+      k.preparing && `${k.preparing} cooking`,
+      k.ready && `${k.ready} ready`,
+    ].filter(Boolean);
+    lines.push(
+      `• ${plural(orders, "order", "orders")} in the kitchen: ${stages.join(", ")}`,
+    );
+  }
+  if (service.recentlyServedTables > 0) {
+    lines.push(
+      `• ${plural(service.recentlyServedTables, "more table was", "more tables were")} served in the last hour`,
+    );
+  }
+  lines.push(
+    service.waiting.length === 0
+      ? "• Nobody is waiting for a person."
+      : `• Waiting for a person: ${listNames(service.waiting)}`,
+  );
+
+  const now = ctx.now ?? new Date();
+  if (isPaused(ctx.state, now)) {
+    lines.push(
+      ctx.state.pausedUntil === "infinity"
+        ? "New orders are paused until someone resumes them."
+        : `New orders are paused until ${clock(ctx.state.pausedUntil!, ctx.timeZone)}.`,
+    );
+  }
+  if (ctx.state.busyExtraMinutes > 0) {
+    lines.push(
+      `Diners are told food is taking ${ctx.state.busyExtraMinutes} minutes longer.`,
+    );
+  }
   return lines.join("\n");
 }
 
@@ -317,6 +459,13 @@ export function planIntent(intent: StaffIntent, ctx: PlanContext): Plan {
       return { type: "answered", text: helpText(ctx.catalog) };
     case "status":
       return { type: "answered", text: statusText(ctx) };
+    case "service":
+      return { type: "answered", text: serviceText(ctx) };
+    case "greeting":
+      return {
+        type: "answered",
+        text: greetingText(intent.thanks, ctx.catalog),
+      };
     case "pause":
       return planAction({ kind: "pause", minutes: intent.minutes }, ctx, {
         confirmed: false,
