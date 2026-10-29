@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { openAuthorizedChannel } from "@/lib/supabase/realtime";
+import { listenToTopic } from "@/lib/supabase/realtime";
 import { countPendingRequestsFromBrowser } from "@/lib/notifications/count-pending";
 import {
   resolvePollIntervalMs,
@@ -18,15 +18,15 @@ import {
  * otherwise never learn a request arrived, and they are the reason this
  * exists at all.
  *
- * Realtime is the primary signal, with the same caveat the kitchen board
- * documents (Supabase ticket SU-452145: postgres_changes INSERT delivery
- * is not always reliable), so the count is also re-read when the tab
+ * Realtime is the primary signal: a Broadcast message on the restaurant's
+ * private `reservations:restaurant:<id>` topic (20261127090000). A message
+ * can always be missed, so the count is also re-read when the tab
  * becomes visible and when the browser regains network. A missed event
  * then costs a staff member a tab switch, not a lost booking.
  *
- * The `filter` below is a bandwidth optimisation, NOT the security
- * boundary — RLS is what stops another restaurant's rows ever reaching
- * this client (docs/security.md#realtime-security).
+ * Only owners, managers and front of house may join the topic, the same
+ * rule as reading bookings, and the count reads through RLS
+ * (docs/security.md#realtime-security).
  */
 export function PendingRequestsBadge({
   restaurantId,
@@ -39,23 +39,9 @@ export function PendingRequestsBadge({
   const [connected, setConnected] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // The nav is rendered TWICE — once in the desktop aside, once inside the
-  // mobile dropdown — and both are mounted at the same time, hidden only by
-  // CSS. supabase.channel(topic) returns the EXISTING channel when one with
-  // that topic is already open, so two badges sharing a topic meant the
-  // second called .on() on an already-subscribed channel, which throws:
-  //
-  //   cannot add `postgres_changes` callbacks ... after `subscribe()`
-  //
-  // A per-instance topic keeps the two subscriptions distinct. The cost is
-  // one extra subscription on small viewports; the alternative — lifting
-  // this into a shared provider so the nav subscribes once — is the right
-  // shape if a second badge ever appears, but is more machinery than one
-  // count needs today.
-  //
-  // The topic is display-only: RLS and the filter below are what scope the
-  // data, and neither depends on this string.
-  const instanceId = useId();
+  // The nav is rendered twice (the desktop aside and the mobile drawer),
+  // so two badges can be mounted at once. listenToTopic() shares one
+  // channel between them and closes it with the last.
 
   const refresh = useCallback(async () => {
     const next = await countPendingRequestsFromBrowser(restaurantId);
@@ -74,24 +60,14 @@ export function PendingRequestsBadge({
 
   useEffect(() => {
     const supabase = createClient();
-    const closeChannel = openAuthorizedChannel(supabase, () =>
-      supabase
-        .channel(`reservations:restaurant:${restaurantId}:${instanceId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "reservations",
-            filter: `restaurant_id=eq.${restaurantId}`,
-          },
-          scheduleRefresh,
-        )
-        .subscribe((status) => {
-          // Previously `.subscribe()` with no callback, which meant a
-          // subscription that never connected was completely invisible —
-          // the badge simply sat there looking correct. Tracking the status
-          // is what lets the poll below speed up instead.
+    const closeChannel = listenToTopic(
+      supabase,
+      `reservations:restaurant:${restaurantId}`,
+      {
+        onMessage: scheduleRefresh,
+        onStatus: (status) => {
+          // Tracking the status is what lets the poll below speed up when
+          // the channel isn't live.
           if (status === "SUBSCRIBED") {
             setConnected(true);
             scheduleRefresh();
@@ -102,7 +78,8 @@ export function PendingRequestsBadge({
           ) {
             setConnected(false);
           }
-        }),
+        },
+      },
     );
 
     function handleWake() {
@@ -117,11 +94,10 @@ export function PendingRequestsBadge({
       if (timerRef.current) clearTimeout(timerRef.current);
       closeChannel();
     };
-  }, [restaurantId, scheduleRefresh, instanceId]);
+  }, [restaurantId, scheduleRefresh]);
 
   // Polling safety net, the same one the kitchen board runs and for the
-  // same documented reason (Supabase ticket SU-452145: postgres_changes
-  // delivery is not always reliable). Without it, a subscription that
+  // same reason (a live message can always be missed). Without it, a subscription that
   // silently fails to deliver leaves the badge frozen until the next full
   // page load — which is exactly what was observed before this was added,
   // with the table correctly in the publication the whole time.

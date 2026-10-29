@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Hand, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { openAuthorizedChannel } from "@/lib/supabase/realtime";
+import { listenToTopic } from "@/lib/supabase/realtime";
 import {
   resolvePollIntervalMs,
   shouldPollNow,
@@ -25,22 +25,21 @@ import {
 /**
  * Tables waiting for a person.
  *
- * Realtime is the primary signal, with the same caveat the kitchen board
- * documents (Supabase ticket SU-452145: `postgres_changes` INSERT delivery
- * is not always reliable), so the queue is also re-read on reconnect, when
+ * Realtime is the primary signal: a Broadcast message on the restaurant's
+ * private `requests:restaurant:<id>` topic (20261127090000). A message can
+ * always be missed, so the queue is also re-read on reconnect, when
  * the tab becomes visible, when the browser regains network, and on a
  * low-frequency safety-net timer. A missed event then costs a staff member
  * a tab switch rather than costing a table their waiter.
  *
  * Every trigger goes through the same full re-fetch rather than patching
- * the changed row into local state — the realtime payload carries the
- * request but not the table's number, so a partial patch could not render
+ * the changed row into local state — the message carries the request's
+ * id but not the table's number, so a partial patch could not render
  * anyway, and one code path means reconnect and polling are not special
  * cases.
  *
- * The `filter` below is a bandwidth optimisation, NOT the security
- * boundary: RLS is what stops another restaurant's rows ever reaching this
- * client (docs/security.md#realtime-security).
+ * Only the restaurant's members may join the topic, and the re-fetch reads
+ * through RLS (docs/security.md#realtime-security).
  */
 const ICONS: Record<RequestKind, typeof Hand> = {
   waiter: Hand,
@@ -60,11 +59,6 @@ export function ServiceRequestQueue({
   // for the rest of service.
   const [now, setNow] = useState(() => Date.now());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // The dashboard nav renders in two places on small viewports; this queue
-  // does not, but the same channel-topic collision would apply if it ever
-  // did. A per-instance topic costs nothing and removes the question.
-  const instanceId = useId();
 
   // Rows this screen just cleared. A refresh that was already on its way
   // when "Done" was tapped comes back with the row still open, and without
@@ -113,32 +107,26 @@ export function ServiceRequestQueue({
 
   useEffect(() => {
     const supabase = createClient();
-    const closeChannel = openAuthorizedChannel(supabase, () =>
-      supabase
-        .channel(`service-requests-${restaurantId}-${instanceId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "table_requests",
-            filter: `restaurant_id=eq.${restaurantId}`,
-          },
-          () => void refresh(),
-        )
-        .subscribe((status) => {
+    const closeChannel = listenToTopic(
+      supabase,
+      `requests:restaurant:${restaurantId}`,
+      {
+        onMessage: () => void refresh(),
+        onStatus: (status) => {
           const live = status === "SUBSCRIBED";
           setConnected(live);
-          // A channel that just (re)connected may have missed events while
-          // it was down, so resynchronise rather than assume continuity.
+          // A channel that just (re)connected may have missed messages
+          // while it was down, so resynchronise rather than assume
+          // continuity.
           if (live) void refresh();
-        }),
+        },
+      },
     );
 
     return () => {
       closeChannel();
     };
-  }, [restaurantId, instanceId, refresh]);
+  }, [restaurantId, refresh]);
 
   // Safety net, and the clock for the waiting labels.
   useEffect(() => {

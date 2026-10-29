@@ -37,6 +37,40 @@ vi.mock("next/navigation", () => {
 // The token-first join is openAuthorizedChannel's own test
 // (realtime-authorized-channel.test.ts); here the channel opens at once.
 vi.mock("@/lib/supabase/realtime", () => ({
+  // The shared Broadcast listener (realtime.ts), over the fake client.
+  listenToTopic: (
+    supabase: {
+      channel: (
+        topic: string,
+        options?: unknown,
+      ) => {
+        on: (
+          event: string,
+          filter: unknown,
+          cb: (message: unknown) => void,
+        ) => {
+          subscribe: (cb: (status: string) => void) => unknown;
+        };
+      };
+      removeChannel?: (channel: unknown) => unknown;
+    },
+    topic: string,
+    listener: {
+      onMessage: (payload: Record<string, unknown>) => void;
+      onStatus?: (status: string) => void;
+    },
+  ) => {
+    const channel = supabase
+      .channel(topic, { config: { private: true } })
+      .on("broadcast", { event: "change" }, (message) =>
+        listener.onMessage(
+          ((message as { payload?: Record<string, unknown> })?.payload ??
+            {}) as Record<string, unknown>,
+        ),
+      )
+      .subscribe((status) => listener.onStatus?.(status));
+    return () => void supabase.removeChannel?.(channel);
+  },
   openAuthorizedChannel: (
     supabase: { removeChannel: (channel: unknown) => unknown },
     open: () => unknown,

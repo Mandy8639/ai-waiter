@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { openAuthorizedChannel } from "@/lib/supabase/realtime";
+import { listenToTopic } from "@/lib/supabase/realtime";
 import {
   resolvePagePollIntervalMs,
   shouldPollNow,
@@ -16,9 +16,8 @@ import {
  * getOrderById()) whenever this order's row changes, rather than
  * duplicating status-display logic into client-side state.
  *
- * Realtime + polling fallback, mirroring the kitchen board's own
- * resilience against the same known issue (Supabase ticket SU-452145 —
- * postgres_changes delivery is not always reliable): a normal-interval
+ * Realtime + polling fallback, mirroring the kitchen board (a Broadcast
+ * message can always be missed: a dropped socket, a phone asleep): a normal-interval
  * poll acts as a safety net while Realtime is healthy, a faster
  * degraded-interval poll takes over while it's disconnected. Both
  * intervals and the tab-hidden rule come from kds-reconciliation.ts, the
@@ -51,32 +50,23 @@ export function OrderStatusSync({ orderId }: { orderId: string }) {
 
   useEffect(() => {
     const supabase = createClient();
-    const closeChannel = openAuthorizedChannel(supabase, () =>
-      supabase
-        .channel(`orders:order:${orderId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "orders",
-            filter: `id=eq.${orderId}`,
-          },
-          () => scheduleResync(),
-        )
-        .subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            setConnected(true);
-            scheduleResync();
-          } else if (
-            status === "CLOSED" ||
-            status === "CHANNEL_ERROR" ||
-            status === "TIMED_OUT"
-          ) {
-            setConnected(false);
-          }
-        }),
-    );
+    // Broadcast from the database (20261127090000): this order's own
+    // private topic, open to its diner and the restaurant's staff.
+    const closeChannel = listenToTopic(supabase, `orders:order:${orderId}`, {
+      onMessage: () => scheduleResync(),
+      onStatus: (status) => {
+        if (status === "SUBSCRIBED") {
+          setConnected(true);
+          scheduleResync();
+        } else if (
+          status === "CLOSED" ||
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT"
+        ) {
+          setConnected(false);
+        }
+      },
+    });
 
     function handleWake() {
       if (document.visibilityState === "visible") scheduleResync();
