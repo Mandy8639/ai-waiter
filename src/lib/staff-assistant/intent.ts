@@ -49,6 +49,10 @@ export const staffIntentSchema = z.discriminatedUnion("kind", [
     price: z.number().min(0).max(PRICE_MAX),
   }),
   z.object({ kind: z.literal("status") }),
+  /** How service is going: tables with orders, the kitchen's queue, who's waiting. Read only. */
+  z.object({ kind: z.literal("service") }),
+  /** "Hi", or "thanks". */
+  z.object({ kind: z.literal("greeting"), thanks: z.boolean() }),
   z.object({ kind: z.literal("help") }),
   z.object({ kind: z.literal("unknown") }),
 ]);

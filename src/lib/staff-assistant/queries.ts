@@ -2,7 +2,14 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AuthorizedContext } from "@/lib/restaurants/authorize";
 import type { AssistantDb, ToolCall } from "./execute-core";
-import type { KitchenState, PlanContext, StaffRole } from "./plan-core";
+import type {
+  KitchenState,
+  PlanContext,
+  ServiceSnapshot,
+  StaffRole,
+} from "./plan-core";
+import { BOARD_LOOKBACK_HOURS } from "@/lib/orders/kitchen";
+import { tableLabel } from "@/lib/table-requests/core";
 import type { Catalog } from "./resolve-core";
 
 /**
@@ -218,4 +225,81 @@ export async function recordCommand(entry: {
       extra: { restaurantId: entry.restaurantId },
     });
   }
+}
+
+/**
+ * How service is going, for "how many tables are live?": orders on the go
+ * (within the kitchen board's own window, so a forgotten order from days
+ * ago doesn't count), tables served in the last hour, and tables waiting
+ * for a person. Read as the signed-in person: the same orders, tables and
+ * requests their own screens show.
+ */
+export async function loadServiceSnapshot(
+  supabase: Client,
+  restaurantId: string,
+  now: Date,
+): Promise<ServiceSnapshot> {
+  const since = new Date(
+    now.getTime() - BOARD_LOOKBACK_HOURS * 3_600_000,
+  ).toISOString();
+  const hourAgo = new Date(now.getTime() - 3_600_000).toISOString();
+  const [orders, tables, requests] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("table_id, status, updated_at")
+      .eq("restaurant_id", restaurantId)
+      .gt("created_at", since)
+      .in("status", ["pending", "confirmed", "preparing", "ready", "served"]),
+    supabase
+      .from("tables")
+      .select("id, table_number, display_name")
+      .eq("restaurant_id", restaurantId),
+    supabase
+      .from("table_requests")
+      .select("table_id, kind, created_at")
+      .eq("restaurant_id", restaurantId)
+      .eq("status", "open")
+      .order("created_at"),
+  ]);
+  if (orders.error || tables.error || requests.error) {
+    throw new Error("service snapshot: a read failed");
+  }
+
+  const label = new Map(
+    (tables.data ?? []).map((t) => [
+      t.id,
+      tableLabel(t.table_number, t.display_name),
+    ]),
+  );
+  const nameOf = (id: string) => label.get(id) ?? "A table";
+  const inKitchen = { pending: 0, confirmed: 0, preparing: 0, ready: 0 };
+  const active = new Set<string>();
+  const served = new Set<string>();
+  for (const o of orders.data ?? []) {
+    if (o.status === "served") {
+      if (o.updated_at > hourAgo) served.add(o.table_id);
+      continue;
+    }
+    inKitchen[o.status as keyof typeof inKitchen] += 1;
+    active.add(o.table_id);
+  }
+  for (const id of active) served.delete(id);
+
+  const byName = (a: string, b: string) =>
+    a.localeCompare(b, "en", { numeric: true });
+  return {
+    inKitchen,
+    activeTables: [...active].map(nameOf).sort(byName),
+    recentlyServedTables: served.size,
+    // table_requests postdates database.types.ts.
+    waiting: (
+      (requests.data ?? []) as unknown as Array<{
+        table_id: string;
+        kind: string;
+      }>
+    ).map(
+      (r) =>
+        `${nameOf(r.table_id)} ${r.kind === "bill" ? "wants the bill" : "wants a waiter"}`,
+    ),
+  };
 }

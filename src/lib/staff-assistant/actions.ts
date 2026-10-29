@@ -31,6 +31,7 @@ import {
   assistantDb,
   isRateLimited,
   loadAssistantContext,
+  loadServiceSnapshot,
   recordCommand,
 } from "./queries";
 
@@ -154,11 +155,22 @@ export async function sendStaffCommand(
     }
 
     const db = assistantDb(auth.context.supabase);
+    const now = new Date();
     const ctx: PlanContext = {
       ...(await loadAssistantContext(auth.context.supabase, restaurantId)),
       role,
       source: interpretedBy,
-      now: new Date(),
+      now,
+      // Only read when someone asks how service is going.
+      ...(intent.kind === "service"
+        ? {
+            service: await loadServiceSnapshot(
+              auth.context.supabase,
+              restaurantId,
+              now,
+            ).catch(() => undefined),
+          }
+        : {}),
     };
     const plan = planIntent(intent, ctx);
     const { reply, outcome, calls } = await carryOut(

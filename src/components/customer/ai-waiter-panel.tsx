@@ -490,6 +490,9 @@ export function AiWaiterPanel({
               send(input);
             }}
           >
+            {/* 16px on phones: iPhones zoom the whole page in when a text
+                box under 16px is tapped, and it stays zoomed with the edges
+                cut off (seen in the staff app, 2026-10-29). */}
             <input
               ref={inputRef}
               value={input}
@@ -501,7 +504,7 @@ export function AiWaiterPanel({
               disabled={isPending}
               aria-label={chef ? "Message the Chef" : "Message your waiter"}
               enterKeyHint="send"
-              className="bg-muted/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/40 type-body h-11 min-w-0 flex-1 rounded-full border border-transparent px-4 transition-colors focus-visible:ring-3 focus-visible:outline-none disabled:opacity-60"
+              className="bg-muted/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/40 sm:type-body h-11 min-w-0 flex-1 rounded-full border border-transparent px-4 text-base leading-normal transition-colors focus-visible:ring-3 focus-visible:outline-none disabled:opacity-60"
             />
             <VoiceInputButton
               value={input}
