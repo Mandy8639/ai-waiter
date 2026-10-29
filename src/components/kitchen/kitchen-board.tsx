@@ -11,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { openAuthorizedChannel } from "@/lib/supabase/realtime";
+import { listenToTopic } from "@/lib/supabase/realtime";
 import { fetchActiveOrders } from "@/lib/orders/kitchen-actions";
 import { transitionOrderStatus } from "@/lib/orders/transition";
 import {
@@ -72,16 +72,14 @@ const BOARD_COLUMNS: OrderStatus[] = [
 ];
 
 /**
- * Realtime strategy: every `postgres_changes` event on `orders` for this
- * restaurant (the `filter` below is a bandwidth/performance optimization —
- * NOT the security boundary; RLS, unchanged since Batch 5, is what
- * actually prevents another restaurant's rows from ever reaching this
- * client, filter or no filter — see docs/security.md#realtime-security)
- * triggers a full, authoritative re-fetch via fetchActiveOrders(), rather
- * than patching the bare changed row into local state. The realtime
- * payload for an INSERT/UPDATE on `orders` doesn't carry the row's
- * order_items/order_item_modifiers at all, so a partial patch couldn't
- * render a complete card anyway — and a full re-fetch, keyed by order id,
+ * Realtime strategy: every change to this restaurant's orders arrives as
+ * a Broadcast message on its private `orders:restaurant:<id>` topic
+ * (20261127090000; joining is limited to the restaurant's members, the
+ * same rule as reading orders) and triggers a full, authoritative
+ * re-fetch via fetchActiveOrders(), rather than patching the changed row
+ * into local state. The message carries only the order's id, number and
+ * status, not its items, so a partial patch couldn't render a complete
+ * card anyway — and a full re-fetch, keyed by order id,
  * is naturally idempotent: duplicate events, an event that arrives after
  * a reconnect already resynced, or two events for the same order in quick
  * succession, all converge on the same correct state rather than
@@ -93,8 +91,8 @@ const BOARD_COLUMNS: OrderStatus[] = [
  * missed" (spec section 21) isn't a special case, it's the same code path
  * as every other update.
  *
- * Polling fallback (Supabase ticket SU-452145 — `postgres_changes` INSERT
- * delivery is not always reliable): a low-frequency safety-net timer calls
+ * Polling fallback (a message can always be missed: a dropped socket, a
+ * sleeping tablet, a deploy): a low-frequency safety-net timer calls
  * this exact same resync() on an interval, so a missed Realtime event is
  * still caught even if the channel never reports a problem. The interval
  * speeds up automatically while the channel is actually disconnected (see
@@ -325,30 +323,25 @@ export function KitchenBoard({
 
   useEffect(() => {
     const supabase = createClient();
-    const closeChannel = openAuthorizedChannel(supabase, () =>
-      supabase
-        .channel(`orders:restaurant:${restaurantId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "orders",
-            filter: `restaurant_id=eq.${restaurantId}`,
-          },
-          (payload) => {
-            scheduleResync(true);
-            const row = payload.new as {
-              id?: string;
-              status?: string;
-              order_number?: number;
-            };
-            if (row?.status === "cancelled" && row.id) {
-              void noticeGuestCancel(row.id, row.order_number);
-            }
-          },
-        )
-        .subscribe((status) => {
+    // Broadcast from the database (20261127090000): orders and payments
+    // for this restaurant. Payments don't change the board.
+    const closeChannel = listenToTopic(
+      supabase,
+      `orders:restaurant:${restaurantId}`,
+      {
+        onMessage: (change) => {
+          if (change.table !== "orders") return;
+          scheduleResync(true);
+          if (change.status === "cancelled" && typeof change.id === "string") {
+            void noticeGuestCancel(
+              change.id,
+              typeof change.order_number === "number"
+                ? change.order_number
+                : undefined,
+            );
+          }
+        },
+        onStatus: (status) => {
           if (status === "SUBSCRIBED") {
             setConnected(true);
             scheduleResync(false);
@@ -359,7 +352,8 @@ export function KitchenBoard({
           ) {
             setConnected(false);
           }
-        }),
+        },
+      },
     );
 
     /**

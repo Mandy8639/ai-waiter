@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { openAuthorizedChannel } from "@/lib/supabase/realtime";
+import { listenToTopic } from "@/lib/supabase/realtime";
 import {
   resolvePagePollIntervalMs,
   shouldPollNow,
@@ -22,9 +22,9 @@ const MIN_REFRESH_GAP_MS = 2_500;
  * Renders nothing — keeps Settle up current: a new order, an adjusted bill,
  * or a diner paying on their phone shows up without anyone refreshing, so
  * staff never charge a table that already paid. Same shape as
- * OrderStatusSync: Realtime on this restaurant's orders and payments
- * (order_payments joined the publication in 20261113090000) triggers a
- * server refetch, with a slower polling safety net behind it.
+ * OrderStatusSync: a Broadcast message on this restaurant's private
+ * `orders:restaurant:<id>` topic (orders and payments, 20261127090000)
+ * triggers a server refetch, with a slower polling safety net behind it.
  *
  * Changes that arrive together share one refresh: one already waiting
  * absorbs the rest, and refreshes are at least MIN_REFRESH_GAP_MS apart.
@@ -35,8 +35,8 @@ const MIN_REFRESH_GAP_MS = 2_500;
  * screen (the reason square-terminal-dialog.tsx refreshes only on Done).
  * Once the dialog closes, the waiting refresh runs.
  *
- * RLS scopes which rows reach this subscription; the filter only narrows
- * bandwidth (docs/security.md#realtime-security).
+ * Only the restaurant's members may join the topic, and the refetch reads
+ * through RLS (docs/security.md#realtime-security).
  */
 export function SettleUpSync({ restaurantId }: { restaurantId: string }) {
   const router = useRouter();
@@ -64,21 +64,14 @@ export function SettleUpSync({ restaurantId }: { restaurantId: string }) {
 
   useEffect(() => {
     const supabase = createClient();
-    const filter = `restaurant_id=eq.${restaurantId}`;
-    const closeChannel = openAuthorizedChannel(supabase, () =>
-      supabase
-        .channel(`settle-up:${restaurantId}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "orders", filter },
-          () => scheduleResync(),
-        )
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "order_payments", filter },
-          () => scheduleResync(),
-        )
-        .subscribe((status) => {
+    // Broadcast from the database (20261127090000): this restaurant's
+    // orders and payments, on one private topic.
+    const closeChannel = listenToTopic(
+      supabase,
+      `orders:restaurant:${restaurantId}`,
+      {
+        onMessage: () => scheduleResync(),
+        onStatus: (status) => {
           if (status === "SUBSCRIBED") {
             setConnected(true);
             scheduleResync();
@@ -89,7 +82,8 @@ export function SettleUpSync({ restaurantId }: { restaurantId: string }) {
           ) {
             setConnected(false);
           }
-        }),
+        },
+      },
     );
 
     function handleWake() {

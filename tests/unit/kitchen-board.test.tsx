@@ -30,6 +30,40 @@ const { mockFetchActiveOrders, realtimeState, removeChannelSpy } = vi.hoisted(
 // The token-first join is openAuthorizedChannel's own test
 // (realtime-authorized-channel.test.ts); here the channel opens at once.
 vi.mock("@/lib/supabase/realtime", () => ({
+  // The shared Broadcast listener (realtime.ts), over the fake client.
+  listenToTopic: (
+    supabase: {
+      channel: (
+        topic: string,
+        options?: unknown,
+      ) => {
+        on: (
+          event: string,
+          filter: unknown,
+          cb: (message: unknown) => void,
+        ) => {
+          subscribe: (cb: (status: string) => void) => unknown;
+        };
+      };
+      removeChannel?: (channel: unknown) => unknown;
+    },
+    topic: string,
+    listener: {
+      onMessage: (payload: Record<string, unknown>) => void;
+      onStatus?: (status: string) => void;
+    },
+  ) => {
+    const channel = supabase
+      .channel(topic, { config: { private: true } })
+      .on("broadcast", { event: "change" }, (message) =>
+        listener.onMessage(
+          ((message as { payload?: Record<string, unknown> })?.payload ??
+            {}) as Record<string, unknown>,
+        ),
+      )
+      .subscribe((status) => listener.onStatus?.(status));
+    return () => void supabase.removeChannel?.(channel);
+  },
   openAuthorizedChannel: (
     supabase: { removeChannel: (channel: unknown) => unknown },
     open: () => unknown,
@@ -157,7 +191,7 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
     expect(orderCardIds()).toEqual([]);
 
     mockFetchActiveOrders.mockResolvedValue([makeOrder()]);
-    act(() => realtimeState.onCallback?.({}));
+    act(() => realtimeState.onCallback?.({ payload: { table: "orders" } }));
     await flush();
 
     expect(orderCardIds()).toEqual(["1"]);
@@ -202,7 +236,7 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
 
     mockFetchActiveOrders.mockResolvedValue([makeOrder()]);
     // Realtime fires...
-    act(() => realtimeState.onCallback?.({}));
+    act(() => realtimeState.onCallback?.({ payload: { table: "orders" } }));
     // ...and a poll tick also lands shortly after, before/around the same
     // time — both trigger the same full-replace resync().
     await flush(KDS_NORMAL_POLL_INTERVAL_MS + 300);
@@ -232,7 +266,7 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
     mockFetchActiveOrders.mockResolvedValue([
       makeOrder({ status: "confirmed" }),
     ]);
-    act(() => realtimeState.onCallback?.({}));
+    act(() => realtimeState.onCallback?.({ payload: { table: "orders" } }));
     await flush();
 
     expect(
@@ -283,7 +317,7 @@ describe("KitchenBoard — Realtime + polling reconciliation", () => {
     // getActiveOrdersForRestaurant() no longer returns it (served-window
     // expired, or cancelled) — the existing query behavior is reused as-is.
     mockFetchActiveOrders.mockResolvedValue([]);
-    act(() => realtimeState.onCallback?.({}));
+    act(() => realtimeState.onCallback?.({ payload: { table: "orders" } }));
     await flush();
 
     expect(orderCardIds()).toEqual([]);
@@ -561,7 +595,7 @@ describe("KitchenBoard — unaccepted orders keep asking", () => {
     mockFetchActiveOrders.mockResolvedValue([
       makeOrder({ id: "a", status: "confirmed" }),
     ]);
-    act(() => realtimeState.onCallback?.({}));
+    act(() => realtimeState.onCallback?.({ payload: { table: "orders" } }));
     await flush();
 
     expect(screen.queryByText(/waiting to be accepted/i)).toBeNull();

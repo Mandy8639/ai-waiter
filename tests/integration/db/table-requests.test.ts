@@ -414,28 +414,6 @@ describe("table requests", () => {
     });
   });
 
-  describe("realtime", () => {
-    /**
-     * The publication itself cannot be asserted here — PGlite has no
-     * Realtime layer and therefore no `supabase_realtime` publication, which
-     * is exactly why the missing entry survived 24 passing tests and was
-     * only found by running the flow against a real project.
-     *
-     * Replica identity is the half that CAN be checked, and it is the half
-     * that governs the UPDATE carrying enough of the old row for Realtime to
-     * re-evaluate RLS. Resolving a request is an UPDATE, and that is the
-     * event that clears the row from every other device's queue.
-     */
-    it("keeps replica identity full, so an UPDATE can be re-evaluated against RLS", async () => {
-      const { rows } = await db.admin.query<{ relreplident: string }>(
-        `select relreplident from pg_class
-         where oid = 'public.table_requests'::regclass;`,
-      );
-      // 'f' = FULL. 'd' (default) would ship only the primary key.
-      expect(rows[0].relreplident).toBe("f");
-    });
-  });
-
   describe("grants", () => {
     it("leaves no table request function callable by anon", async () => {
       const { rows } = await db.admin.query<{

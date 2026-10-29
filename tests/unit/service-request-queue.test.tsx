@@ -23,7 +23,7 @@ const realtime = vi.hoisted(() => {
       state.onChange = cb;
       return channel;
     },
-    subscribe: () => channel,
+    subscribe: (_cb?: (status: string) => void) => channel,
   };
   return { state, client: { channel: () => channel } };
 });
@@ -32,6 +32,40 @@ vi.mock("@/lib/supabase/client", () => ({
   createClient: () => realtime.client,
 }));
 vi.mock("@/lib/supabase/realtime", () => ({
+  // The shared Broadcast listener (realtime.ts), over the fake client.
+  listenToTopic: (
+    supabase: {
+      channel: (
+        topic: string,
+        options?: unknown,
+      ) => {
+        on: (
+          event: string,
+          filter: unknown,
+          cb: (message: unknown) => void,
+        ) => {
+          subscribe: (cb: (status: string) => void) => unknown;
+        };
+      };
+      removeChannel?: (channel: unknown) => unknown;
+    },
+    topic: string,
+    listener: {
+      onMessage: (payload: Record<string, unknown>) => void;
+      onStatus?: (status: string) => void;
+    },
+  ) => {
+    const channel = supabase
+      .channel(topic, { config: { private: true } })
+      .on("broadcast", { event: "change" }, (message) =>
+        listener.onMessage(
+          ((message as { payload?: Record<string, unknown> })?.payload ??
+            {}) as Record<string, unknown>,
+        ),
+      )
+      .subscribe((status) => listener.onStatus?.(status));
+    return () => void supabase.removeChannel?.(channel);
+  },
   openAuthorizedChannel: (_client: unknown, make: () => unknown) => {
     make();
     return () => undefined;
