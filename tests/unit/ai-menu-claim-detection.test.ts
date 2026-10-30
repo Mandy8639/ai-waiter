@@ -289,6 +289,10 @@ describe("the last clean-up before a guest reads a reply", () => {
     ],
     [`Your order is placed! Order ID: ${id}`, "Your order is placed!"],
     [`Removed item ${id} from your cart.`, "Removed item from your cart."],
+    [
+      "Order #1 (ID cf9ea6ca\u2011d40d\u20114d00\u20119315\u2011601745970e20) has been placed.",
+      "Order #1 has been placed.",
+    ],
   ])("removes raw ids: %s", (before, after) => {
     expect(cleanReplyForGuest(before)).toBe(after);
   });
