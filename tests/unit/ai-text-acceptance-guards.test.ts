@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildTextAcceptanceGuards,
   MENU_FACT_GUARD_ID,
+  ALLERGY_HOLD_GUARD_ID,
   CART_STATE_GUARD_ID,
   MENU_CLAIM_GUARD_ID,
 } from "@/lib/ai/providers/text-acceptance-guards";
@@ -15,6 +16,7 @@ describe("buildTextAcceptanceGuards", () => {
   it("always includes the cart-state and menu-claim guards — both gate themselves on the model's reply, not on a per-turn flag", () => {
     const guards = buildTextAcceptanceGuards({ appendUserMessage });
     expect(guards.map((g) => g.id)).toEqual([
+      ALLERGY_HOLD_GUARD_ID,
       CART_STATE_GUARD_ID,
       MENU_CLAIM_GUARD_ID,
     ]);
@@ -29,6 +31,7 @@ describe("buildTextAcceptanceGuards", () => {
     // round. The cart guard sits before the menu-claim guard so a cart
     // total gets the more specific instruction (read the cart).
     expect(guards.map((g) => g.id)).toEqual([
+      ALLERGY_HOLD_GUARD_ID,
       MENU_FACT_GUARD_ID,
       CART_STATE_GUARD_ID,
       MENU_CLAIM_GUARD_ID,
@@ -47,7 +50,9 @@ describe("buildTextAcceptanceGuards", () => {
   });
 
   it("wires the cart guard to reject an unbacked cart-state claim", () => {
-    const [cartGuard] = buildTextAcceptanceGuards({ appendUserMessage });
+    const cartGuard = buildTextAcceptanceGuards({ appendUserMessage }).find(
+      (g) => g.id === CART_STATE_GUARD_ID,
+    )!;
     expect(
       cartGuard.shouldAccept(
         [{ toolName: "add_item_to_cart", result: { ok: true, data: {} } }],

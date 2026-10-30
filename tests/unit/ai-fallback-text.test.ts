@@ -4,6 +4,7 @@ import {
   fallbackLanguage,
   fallbackText,
   orderPlacedText,
+  addedToCartText,
   type FallbackKey,
   type FallbackLanguage,
 } from "@/lib/ai/fallback-text";
@@ -106,6 +107,11 @@ describe("the reply when an order went through but the model's reply didn't pass
     );
     expect(orderPlacedText(12, "hi")).toContain("#12");
     expect(orderPlacedText(12, "es")).toContain("#12");
+  });
+  it("says a dish went in, rather than that it failed", () => {
+    expect(addedToCartText("en")).toBe("That's in your cart.");
+    expect(addedToCartText("hi")).toContain("कार्ट");
+    expect(addedToCartText("es")).toContain("carrito");
   });
   it("still reads properly without a number", () => {
     expect(orderPlacedText(null, "en")).toBe(

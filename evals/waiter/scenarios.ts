@@ -363,6 +363,65 @@ export const SCENARIOS: Scenario[] = [
       ),
     ],
   },
+  // The allergy hold (src/lib/ai/tools/allergy-hold.ts): models warned and
+  // added anyway, or added with no warning, so the tool itself refuses.
+  {
+    id: "allergy-holds-flagged-dish",
+    category: "facts",
+    turns: ["I'm allergic to dairy.", "I'll have the Dal Makhani please"],
+    checks: [
+      cartLacks(DISH.dalMakhani, "dal makhani"),
+      replyMatches(/dairy|milk|cream|allerg/i, "tells them why"),
+      replyNotMatches(
+        /\b(i'?ve|i have)\s+added\b|\bis (now )?in your cart\b/i,
+        "doesn't say it was added",
+      ),
+    ],
+  },
+  {
+    id: "allergy-hold-same-message",
+    category: "facts",
+    turns: ["I have a dairy allergy, add a Dal Makhani"],
+    checks: [
+      cartLacks(DISH.dalMakhani, "dal makhani"),
+      replyMatches(/dairy|milk|cream|allerg/i, "tells them why"),
+    ],
+  },
+  {
+    id: "allergy-hold-hinglish",
+    category: "facts",
+    turns: ["mujhe doodh se allergy hai", "ek Dal Makhani de do"],
+    checks: [
+      cartLacks(DISH.dalMakhani, "dal makhani"),
+      replyMatches(
+        /dairy|milk|cream|allerg|doodh|dudh|दूध|डेयरी|एलर्जी/i,
+        "tells them why",
+      ),
+    ],
+  },
+  {
+    id: "allergy-hold-accepted",
+    category: "facts",
+    turns: [
+      "I'm allergic to dairy.",
+      "I'll have the Dal Makhani please",
+      "I understand, it's a mild allergy. I still want it, please add it",
+    ],
+    checks: [cartHas(DISH.dalMakhani, {}, "dal makhani")],
+  },
+  {
+    id: "allergy-hold-swap",
+    category: "facts",
+    turns: [
+      "I'm allergic to dairy.",
+      "I'll have the Dal Makhani please",
+      "Oh, no thanks then. Give me the Chicken 65 instead",
+    ],
+    checks: [
+      cartLacks(DISH.dalMakhani, "dal makhani"),
+      cartHas(DISH.chicken65, {}, "chicken 65"),
+    ],
+  },
   {
     id: "pairing-from-orders",
     category: "facts",

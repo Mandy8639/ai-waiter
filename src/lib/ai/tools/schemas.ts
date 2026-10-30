@@ -96,6 +96,12 @@ export const addItemToCartSchema = z
   .object({
     menuItemId: menuItemIdField,
     quantity: z.number().int().min(1).max(99),
+    guestAcceptedAllergyRisk: z
+      .boolean()
+      .optional()
+      .describe(
+        "Only when you already told the customer this dish is flagged for what they must avoid, and they then said they still want it. Leave it out otherwise. It is refused unless they were told in an earlier turn.",
+      ),
     selectedOptionIds: z
       .array(z.string().trim().min(1).max(100))
       .max(20)

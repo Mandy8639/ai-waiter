@@ -12,6 +12,7 @@ import {
 import { selectMentionedItems } from "@/lib/ai/recommendations";
 import {
   ALLERGEN_SOURCE_GUARD_ID,
+  ALLERGY_HOLD_GUARD_ID,
   buildTextAcceptanceGuards,
   CART_STATE_GUARD_ID,
   MENU_CLAIM_GUARD_ID,
@@ -145,13 +146,14 @@ describe("allergen questions need get_menu_item, in any language", () => {
     ).toBe(false);
   });
 
-  it("goes first in the guard list, ahead of the broader menu guard", () => {
+  it("goes ahead of the broader menu guard, after only the allergy hold", () => {
     const guards = buildTextAcceptanceGuards({
       requiresAuthoritativeMenuSource: true,
       requiresAllergenSource: true,
       appendUserMessage,
     });
     expect(guards.map((g) => g.id)).toEqual([
+      ALLERGY_HOLD_GUARD_ID,
       ALLERGEN_SOURCE_GUARD_ID,
       MENU_FACT_GUARD_ID,
       CART_STATE_GUARD_ID,
