@@ -173,7 +173,14 @@ async function submitOrderTool(
   const placed = result.orderId ? await getOrderById(result.orderId) : null;
   return {
     ok: true,
-    data: { orderId: result.orderId, orderNumber: placed?.orderNumber ?? null },
+    data: {
+      orderId: result.orderId,
+      orderNumber: placed?.orderNumber ?? null,
+      // So a recap of the total is backed by this turn's tool result, and
+      // the price guard doesn't replace a placed order's reply.
+      total: placed?.total ?? null,
+      currency: placed?.currency ?? null,
+    },
   };
 }
 
