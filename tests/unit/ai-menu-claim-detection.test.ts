@@ -5,6 +5,7 @@ import {
   acceptsMenuClaims,
   extractPriceAmounts,
   mentionsReligiousClaim,
+  quotesWrongCurrency,
 } from "@/lib/ai/tools/menu-claim-detection";
 
 /**
@@ -225,5 +226,53 @@ describe("both checks together", () => {
       ),
     ).toBe(true);
     expect(acceptsMenuClaims([item], "It's halal, and only $5!")).toBe(false);
+  });
+});
+
+describe("the currency a reply quotes", () => {
+  // A Hinglish guest at a USD restaurant was quoted ₹28.79 (2026-10-30).
+  const cart = (currency = "USD") =>
+    [
+      {
+        toolName: "get_cart",
+        result: { ok: true, data: { currency, subtotal: 27, total: 28.79 } },
+      },
+    ] as unknown as LoopToolOutcome[];
+
+  it("refuses rupees at a dollar restaurant, even with the right numbers", () => {
+    expect(quotesWrongCurrency(cart(), "Total: ₹28.79")).toBe(true);
+    expect(quotesWrongCurrency(cart(), "Total: Rs. 28.79")).toBe(true);
+    expect(quotesWrongCurrency(cart(), "That's 28.79 rupees")).toBe(true);
+    expect(acceptsMenuClaims(cart(), "Total: ₹28.79")).toBe(false);
+  });
+
+  it("accepts the restaurant's own currency", () => {
+    expect(acceptsMenuClaims(cart(), "Total: $28.79")).toBe(true);
+    expect(acceptsMenuClaims(cart("INR"), "Total: ₹28.79")).toBe(true);
+    expect(acceptsMenuClaims(cart("CAD"), "Total: $28.79")).toBe(true);
+  });
+
+  it("finds a currency however deep the tool put it", () => {
+    const nested = [
+      {
+        toolName: "search_menu",
+        result: { ok: true, data: { items: [{ price: 5, currency: "USD" }] } },
+      },
+    ] as unknown as LoopToolOutcome[];
+    expect(quotesWrongCurrency(nested, "It's €5")).toBe(true);
+  });
+
+  it("leaves a reply alone when no tool stated a currency, or no price is quoted", () => {
+    expect(quotesWrongCurrency([], "Total: ₹28.79")).toBe(false);
+    expect(
+      quotesWrongCurrency(cart(), "Sorry, we only take dollars here."),
+    ).toBe(false);
+  });
+
+  it("ignores a failed tool", () => {
+    const failed = [
+      { toolName: "get_cart", result: { ok: false, error: "x" } },
+    ] as unknown as LoopToolOutcome[];
+    expect(quotesWrongCurrency(failed, "Total: ₹28.79")).toBe(false);
   });
 });

@@ -36,7 +36,7 @@ import {
  * indexed lookup on a row these queries already touch, and putting it in
  * the context would mean every future tool has to remember to include it.
  */
-async function restaurantCurrency(
+export async function restaurantCurrency(
   supabase: Awaited<ReturnType<typeof createClient>>,
   restaurantId: string,
 ): Promise<string> {

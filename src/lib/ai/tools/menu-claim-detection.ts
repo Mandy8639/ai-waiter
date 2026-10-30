@@ -54,7 +54,7 @@ import { AUTHORITATIVE_MENU_TOOL_NAMES } from "./menu-fact-detection";
  * reply, so the patterns insist on a currency mark.
  */
 const CURRENCY_BEFORE =
-  /(?:[$€£₹¥]|\b(?:USD|EUR|GBP|INR|CAD|AUD|JPY|NZD|SGD|AED)\s?)\s?(\d{1,7}(?:[.,]\d{1,2})?)/gi;
+  /(?:[$€£₹¥]|\b(?:USD|EUR|GBP|INR|CAD|AUD|JPY|NZD|SGD|AED|Rs\.?)\s?)\s?(\d{1,7}(?:[.,]\d{1,2})?)/gi;
 const CURRENCY_AFTER =
   /(\d{1,7}(?:[.,]\d{1,2})?)\s?(?:USD|EUR|GBP|INR|CAD|AUD|JPY|NZD|SGD|AED|dollars?|euros?|pounds?|rupees?)\b/gi;
 
@@ -107,9 +107,58 @@ function collectNumbers(value: unknown, into: Set<number>): void {
   }
 }
 
+/** Which currency each mark can mean. "$" is several, so any of them will do. */
+const CURRENCY_MARKS: Array<[RegExp, string[]]> = [
+  [/₹|\b(?:INR|Rs\.?|rupees?)(?=[\s\d]|$)/i, ["INR"]],
+  [/€|\b(?:EUR|euros?)\b/i, ["EUR"]],
+  [/£|\b(?:GBP|pounds?)\b/i, ["GBP"]],
+  [/¥|\bJPY\b/i, ["JPY"]],
+  [/\$|\b(?:USD|dollars?)\b/i, ["USD", "CAD", "AUD", "NZD", "SGD"]],
+];
+
+/** Every "currency" code a tool returned, however deeply nested. */
+function collectCurrencies(value: unknown, into: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectCurrencies(item, into);
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      if (key === "currency" && typeof item === "string") {
+        into.add(item.toUpperCase());
+      } else {
+        collectCurrencies(item, into);
+      }
+    }
+  }
+}
+
 /**
- * The guard predicate: accept unless the reply states a price no tool
- * returned this turn, or mentions halal/kosher without a menu tool having
+ * True when the reply quotes money in a currency other than the one this
+ * turn's tools returned. Only when a tool stated one: without that there is
+ * nothing to compare with, and a guest's own "do you take euros?" is no
+ * reason to reject a reply. A digit must follow or precede the mark's
+ * amount for it to count as a price, so "rupees" in passing doesn't trip it.
+ */
+export function quotesWrongCurrency(
+  toolOutcomes: LoopToolOutcome[],
+  finalText: string,
+): boolean {
+  if (extractPriceAmounts(finalText).length === 0) return false;
+  const known = new Set<string>();
+  for (const outcome of toolOutcomes) {
+    if (outcome.result.ok) collectCurrencies(outcome.result.data, known);
+  }
+  if (known.size === 0) return false;
+  return CURRENCY_MARKS.some(
+    ([mark, codes]) =>
+      mark.test(finalText) && !codes.some((code) => known.has(code)),
+  );
+}
+
+/**
+ * The guard predicate: accept unless the reply quotes the wrong currency,
+ * states a price no tool returned this turn, or mentions halal/kosher without a menu tool having
  * run this turn. Failed tool calls never count as backing.
  */
 export function acceptsMenuClaims(
@@ -117,6 +166,8 @@ export function acceptsMenuClaims(
   finalText: string,
 ): boolean {
   const succeeded = toolOutcomes.filter((outcome) => outcome.result.ok);
+
+  if (quotesWrongCurrency(toolOutcomes, finalText)) return false;
 
   const amounts = extractPriceAmounts(finalText);
   if (amounts.length > 0) {
@@ -141,4 +192,4 @@ export function acceptsMenuClaims(
 }
 
 export const MENU_CLAIM_CORRECTIVE_INSTRUCTION =
-  "[System note: your reply states a price, or says something about halal or kosher, that no tool returned this turn. Prices and dietary claims must come from search_menu, get_menu_item or get_cart called now — not from memory, earlier messages, or the restaurant's style notes. Call the right tool and answer from its result, or leave the price or claim out.]";
+  "[System note: your reply states a price, or says something about halal or kosher, that no tool returned this turn. Prices and dietary claims must come from search_menu, get_menu_item or get_cart called now — not from memory, earlier messages, or the restaurant's style notes. Call the right tool and answer from its result, or leave the price or claim out. Quote every price in the currency the tool returned, whatever language the customer writes in.]";

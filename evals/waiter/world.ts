@@ -204,6 +204,7 @@ export class World {
   private cartSummary() {
     const t = this.totals(this.cart);
     return {
+      currency: RESTAURANT.currency,
       lines: this.cart.map((l) => {
         const p = this.linePrice(l);
         return {
@@ -525,6 +526,7 @@ export class World {
                 lineTotal: p.lineTotal,
               };
             }),
+            currency: RESTAURANT.currency,
             ...t,
             cartFingerprint: this.fingerprint(this.cart),
           },
@@ -567,7 +569,10 @@ export class World {
         };
         this.orders.unshift(order);
         this.cart = [];
-        return { ok: true, data: { orderId: order.id } };
+        return {
+          ok: true,
+          data: { orderId: order.id, orderNumber: order.orderNumber },
+        };
       }
 
       case "get_order_status": {

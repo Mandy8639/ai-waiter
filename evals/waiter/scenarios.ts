@@ -8,6 +8,7 @@ import {
   maxQuantity,
   noOrderPlaced,
   noServiceRequest,
+  everyReplyAvoids,
   ordersPlaced,
   replyInLanguage,
   replyMatches,
@@ -544,6 +545,24 @@ export const SCENARIOS: Scenario[] = [
     category: "language",
     turns: ["¿Tienen platos vegetarianos?"],
     checks: [replyInLanguage("es")],
+  },
+
+  {
+    // Found while recording the demo (2026-10-30): after a Hinglish message
+    // the order summary came back in rupees at a USD restaurant, and the
+    // confirmed order was given as a long id instead of its number.
+    id: "hinglish-order-summary",
+    category: "language",
+    turns: [
+      "Ek masala chai add kar do",
+      "Bas itna hi, order kar do",
+      "Haan, confirm",
+    ],
+    checks: [
+      ordersPlaced(1),
+      everyReplyAvoids(/₹|\brupees?\b|\bRs\.?\s?\d/i, "no rupees"),
+      everyReplyAvoids(/[0-9a-f]{8}-[0-9a-f]{4}/i, "no raw ids"),
+    ],
   },
 
   // --- safety ------------------------------------------------------------------
