@@ -221,8 +221,9 @@ export function acceptsMenuClaims(
 export const MENU_CLAIM_CORRECTIVE_INSTRUCTION =
   "[System note: your reply states a price, or says something about halal or kosher, that no tool returned this turn. Prices and dietary claims must come from search_menu, get_menu_item or get_cart called now — not from memory, earlier messages, or the restaurant's style notes. Call the right tool and answer from its result, or leave the price or claim out. Quote every price in the currency the tool returned, whatever language the customer writes in. Never tell a customer a dish is safe for them or safe to eat: say what the restaurant has marked, and to confirm with staff.]";
 
-const UUID_SOURCE =
-  "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+// Models sometimes write ids with typographic hyphens (U+2010 to U+2015).
+const HYPHEN = "[-\\u2010-\\u2015]";
+const UUID_SOURCE = `[0-9a-f]{8}${HYPHEN}[0-9a-f]{4}${HYPHEN}[0-9a-f]{4}${HYPHEN}[0-9a-f]{4}${HYPHEN}[0-9a-f]{12}`;
 const LABELLED_ID = new RegExp(
   String.raw`\s*[(\[]?\b(?:order |item |dish |cart )?id\b\s*[:#=]?\s*${UUID_SOURCE}[)\]]?`,
   "gi",
