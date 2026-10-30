@@ -193,3 +193,30 @@ export function acceptsMenuClaims(
 
 export const MENU_CLAIM_CORRECTIVE_INSTRUCTION =
   "[System note: your reply states a price, or says something about halal or kosher, that no tool returned this turn. Prices and dietary claims must come from search_menu, get_menu_item or get_cart called now — not from memory, earlier messages, or the restaurant's style notes. Call the right tool and answer from its result, or leave the price or claim out. Quote every price in the currency the tool returned, whatever language the customer writes in.]";
+
+const UUID_SOURCE =
+  "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const LABELLED_ID = new RegExp(
+  String.raw`\s*[(\[]?\b(?:order |item |dish |cart )?id\b\s*[:#=]?\s*${UUID_SOURCE}[)\]]?`,
+  "gi",
+);
+const BARE_ID = new RegExp(String.raw`\s*[(\[]?\b${UUID_SOURCE}\b[)\]]?`, "gi");
+/** "Tax (7.9%)" or "Tax 7.9%": the amount is real, the percentage the model's own sum. */
+const TAX_PERCENT =
+  /\b(tax(?:es)?)\s*[(\[]?\s*(?:at\s+|of\s+)?\d{1,2}(?:\.\d+)?\s?%\s*[)\]]?/gi;
+
+/**
+ * The last step before a reply reaches a guest. Prompts ask the model not to
+ * do these and the free models sometimes do anyway, so it's code: raw ids
+ * ("the Butter Chicken (ID: ef85e313-…)") and a tax percentage it worked out
+ * for itself ("Tax (7.9%)" at a 6.625% restaurant; no tool returns a rate).
+ * Both found while recording the demo, 2026-10-30. Removing them can't
+ * change what the reply means.
+ */
+export function cleanReplyForGuest(text: string): string {
+  return text
+    .replace(LABELLED_ID, "")
+    .replace(BARE_ID, "")
+    .replace(TAX_PERCENT, "$1")
+    .replace(/[ \t]{2,}/g, " ");
+}

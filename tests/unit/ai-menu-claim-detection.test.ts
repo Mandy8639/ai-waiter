@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LoopToolOutcome } from "@/lib/ai/loop";
 import {
   acceptsMenuClaims,
+  cleanReplyForGuest,
   extractPriceAmounts,
   mentionsReligiousClaim,
   quotesWrongCurrency,
@@ -274,5 +275,40 @@ describe("the currency a reply quotes", () => {
       { toolName: "get_cart", result: { ok: false, error: "x" } },
     ] as unknown as LoopToolOutcome[];
     expect(quotesWrongCurrency(failed, "Total: ₹28.79")).toBe(false);
+  });
+});
+
+describe("the last clean-up before a guest reads a reply", () => {
+  const id = "ef85e313-deb1-428a-a951-5a0f7f00ea3d";
+
+  it.each([
+    [
+      `I found the Butter Chicken (ID: ${id}), but it has dairy.`,
+      "I found the Butter Chicken, but it has dairy.",
+    ],
+    [`Your order is placed! Order ID: ${id}`, "Your order is placed!"],
+    [`Removed item ${id} from your cart.`, "Removed item from your cart."],
+  ])("removes raw ids: %s", (before, after) => {
+    expect(cleanReplyForGuest(before)).toBe(after);
+  });
+
+  it.each([
+    ["Tax (7.9%): $0.80", "Tax: $0.80"],
+    ["Tax 7.9%: $0.80", "Tax: $0.80"],
+    [
+      "Subtotal: $12.00\nTax (6.625%) – $0.80\nTotal – $12.80",
+      "Subtotal: $12.00\nTax – $0.80\nTotal – $12.80",
+    ],
+  ])("removes a tax percentage the model worked out: %s", (before, after) => {
+    expect(cleanReplyForGuest(before)).toBe(after);
+  });
+
+  it("leaves normal replies alone, line breaks included", () => {
+    const reply =
+      "Here's your order:\n\n1 × Chicken 65 — $12.00\n\nOrder #12 is on its way.";
+    expect(cleanReplyForGuest(reply)).toBe(reply);
+    expect(
+      cleanReplyForGuest("We add 20% off? No, there are no discounts."),
+    ).toBe("We add 20% off? No, there are no discounts.");
   });
 });
