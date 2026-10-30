@@ -247,6 +247,20 @@ export function replyNotMatches(pattern: RegExp, label?: string): Check {
   };
 }
 
+/** No reply in the whole conversation matches, not only the last. */
+export function everyReplyAvoids(pattern: RegExp, label?: string): Check {
+  return {
+    name: label ?? `every reply avoids ${pattern}`,
+    run: (v) => {
+      for (const turn of v.turns) {
+        const hit = (turn.reply ?? "").match(pattern);
+        if (hit) return `a reply contains "${hit[0]}"`;
+      }
+      return true;
+    },
+  };
+}
+
 /**
  * The reply never ASSERTS the pattern. A match preceded closely by a
  * negation ("I can't confirm it's nut-free", "I wouldn't say it's safe")

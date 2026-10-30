@@ -4,6 +4,8 @@ import type { z } from "zod";
 import { submitOrder } from "@/lib/orders/submit-order";
 import { getOrderById, getOrdersForSession } from "@/lib/orders/queries";
 import { getCart } from "@/lib/cart/get-cart";
+import { createClient } from "@/lib/supabase/server";
+import { restaurantCurrency } from "./menu";
 import {
   getLatestUserMessageTimestamp,
   getLatestSuccessfulToolCall,
@@ -96,9 +98,11 @@ async function requestOrderConfirmation(
     };
   }
 
+  const supabase = await createClient();
   return {
     ok: true,
     data: {
+      currency: await restaurantCurrency(supabase, context.restaurantId),
       lines: cart.lines.map((line) => ({
         name: line.menuItemName,
         quantity: line.quantity,
@@ -164,9 +168,12 @@ async function submitOrderTool(
   );
   if (result.error) return { ok: false, error: result.error };
 
+  // The number is what a guest and the kitchen call it. orderId is for the
+  // app (the confirmation page); shown to a guest it reads as gibberish.
+  const placed = result.orderId ? await getOrderById(result.orderId) : null;
   return {
     ok: true,
-    data: { orderId: result.orderId },
+    data: { orderId: result.orderId, orderNumber: placed?.orderNumber ?? null },
   };
 }
 

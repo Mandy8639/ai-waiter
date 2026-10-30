@@ -1,6 +1,8 @@
 import "server-only";
 import type { z } from "zod";
 import { getCart } from "@/lib/cart/get-cart";
+import { createClient } from "@/lib/supabase/server";
+import { restaurantCurrency } from "./menu";
 import {
   addToCart,
   updateCartItemQuantity,
@@ -28,8 +30,14 @@ import {
  * through. See src/lib/cart/validate.ts and docs/security.md#price-validation.
  */
 
-function cartSummary(summary: Awaited<ReturnType<typeof getCart>>) {
+function cartSummary(
+  summary: Awaited<ReturnType<typeof getCart>>,
+  currency: string,
+) {
   return {
+    // Without it the model guessed: a Hinglish guest was quoted ₹28.79 at a
+    // USD restaurant (2026-10-30).
+    currency,
     lines: summary.lines.map((line) => ({
       cartItemId: line.id,
       name: line.menuItemName,
@@ -55,7 +63,14 @@ async function getCartTool(
     context.restaurantId,
     context.customerSessionId,
   );
-  return { ok: true, data: cartSummary(summary) };
+  const supabase = await createClient();
+  return {
+    ok: true,
+    data: cartSummary(
+      summary,
+      await restaurantCurrency(supabase, context.restaurantId),
+    ),
+  };
 }
 
 async function addItemToCart(
