@@ -156,6 +156,32 @@ export function quotesWrongCurrency(
   );
 }
 
+const SAFE_PROMISE =
+  /\b(?:safe|okay|ok|fine)\s+(?:for you(?:\s+to\s+(?:eat|have|order))?|to\s+eat|for\s+(?:your|an?)\s+[\w-]*\s*allerg\w*|for\s+someone\s+with)\b/gi;
+const NEGATED_BEFORE =
+  /(\b(cannot|can not|not|never|unable to|no way to|if)\b|\w+n['’]t\b)[^.!?\n]*$/i;
+
+/**
+ * True when the reply tells a guest a dish is safe for them to eat ("I
+ * found several dishes that are safe for you", seen 2026-10-30 at a dairy
+ * question). Tableside can only say what the restaurant has marked; whether
+ * a dish is safe for a person's allergy is never something it can promise.
+ * "I can't say it's safe for you" is the right answer and passes, and so
+ * does a question ("is this okay for you?").
+ */
+export function promisesSafety(finalText: string): boolean {
+  for (const match of finalText.matchAll(SAFE_PROMISE)) {
+    const before = finalText.slice(
+      Math.max(0, (match.index ?? 0) - 60),
+      match.index ?? 0,
+    );
+    const after = finalText.slice((match.index ?? 0) + match[0].length);
+    const isQuestion = /^[^.!?\n]*\?/.test(after);
+    if (!NEGATED_BEFORE.test(before) && !isQuestion) return true;
+  }
+  return false;
+}
+
 /**
  * The guard predicate: accept unless the reply quotes the wrong currency,
  * states a price no tool returned this turn, or mentions halal/kosher without a menu tool having
@@ -168,6 +194,7 @@ export function acceptsMenuClaims(
   const succeeded = toolOutcomes.filter((outcome) => outcome.result.ok);
 
   if (quotesWrongCurrency(toolOutcomes, finalText)) return false;
+  if (promisesSafety(finalText)) return false;
 
   const amounts = extractPriceAmounts(finalText);
   if (amounts.length > 0) {
@@ -192,7 +219,7 @@ export function acceptsMenuClaims(
 }
 
 export const MENU_CLAIM_CORRECTIVE_INSTRUCTION =
-  "[System note: your reply states a price, or says something about halal or kosher, that no tool returned this turn. Prices and dietary claims must come from search_menu, get_menu_item or get_cart called now — not from memory, earlier messages, or the restaurant's style notes. Call the right tool and answer from its result, or leave the price or claim out. Quote every price in the currency the tool returned, whatever language the customer writes in.]";
+  "[System note: your reply states a price, or says something about halal or kosher, that no tool returned this turn. Prices and dietary claims must come from search_menu, get_menu_item or get_cart called now — not from memory, earlier messages, or the restaurant's style notes. Call the right tool and answer from its result, or leave the price or claim out. Quote every price in the currency the tool returned, whatever language the customer writes in. Never tell a customer a dish is safe for them or safe to eat: say what the restaurant has marked, and to confirm with staff.]";
 
 const UUID_SOURCE =
   "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
