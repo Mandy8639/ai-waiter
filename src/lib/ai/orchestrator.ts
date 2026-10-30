@@ -28,6 +28,7 @@ import {
   CART_STATE_GUARD_ID,
   MENU_CLAIM_GUARD_ID,
 } from "./providers/text-acceptance-guards";
+import { cleanReplyForGuest } from "./tools/menu-claim-detection";
 import type { ToolContext } from "./tools/types";
 import {
   selectMentionedItems,
@@ -229,7 +230,7 @@ export async function sendAiMessage(
       return { ok: true, reply: declineText };
     }
 
-    let finalText = loopResult.finalText;
+    let finalText = cleanReplyForGuest(loopResult.finalText);
 
     if (loopResult.toolLimitExceeded) {
       finalText = fallbackText("toolLimit", replyLanguage);
