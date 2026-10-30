@@ -19,6 +19,7 @@ import {
 import {
   fallbackLanguage,
   fallbackText,
+  orderPlacedText,
   foundDishesText,
 } from "./fallback-text";
 import { dishesForEmptyReply } from "./empty-reply-core";
@@ -255,10 +256,20 @@ export async function sendAiMessage(
       // the other "I couldn't confirm your cart".
       const isCartStateGuard =
         loopResult.exhaustedGuardId === CART_STATE_GUARD_ID;
-      finalText = fallbackText(
-        isCartStateGuard ? "cartState" : "menuFact",
-        replyLanguage,
+      // The order itself went through: say that, not "couldn't look it up".
+      const placed = loopResult.toolOutcomes.find(
+        (o) => o.toolName === "submit_order" && o.result.ok,
       );
+      finalText = placed?.result.ok
+        ? orderPlacedText(
+            (placed.result.data as { orderNumber?: number | null })
+              .orderNumber ?? null,
+            replyLanguage,
+          )
+        : fallbackText(
+            isCartStateGuard ? "cartState" : "menuFact",
+            replyLanguage,
+          );
       logAiTurn({
         restaurantId,
         customerSessionId,

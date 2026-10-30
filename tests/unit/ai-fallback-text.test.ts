@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   fallbackLanguage,
   fallbackText,
+  orderPlacedText,
   type FallbackKey,
   type FallbackLanguage,
 } from "@/lib/ai/fallback-text";
@@ -95,5 +96,20 @@ describe("the replies", () => {
         expect(fallbackText(key, language)).not.toMatch(/\d|\$|halal|हलाल/i);
       }
     }
+  });
+});
+
+describe("the reply when an order went through but the model's reply didn't pass", () => {
+  it("says the order is in, with its number, in the guest's language", () => {
+    expect(orderPlacedText(12, "en")).toBe(
+      "Your order #12 is in, and the kitchen has it.",
+    );
+    expect(orderPlacedText(12, "hi")).toContain("#12");
+    expect(orderPlacedText(12, "es")).toContain("#12");
+  });
+  it("still reads properly without a number", () => {
+    expect(orderPlacedText(null, "en")).toBe(
+      "Your order is in, and the kitchen has it.",
+    );
   });
 });

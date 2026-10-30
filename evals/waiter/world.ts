@@ -571,7 +571,12 @@ export class World {
         this.cart = [];
         return {
           ok: true,
-          data: { orderId: order.id, orderNumber: order.orderNumber },
+          data: {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            total: order.total,
+            currency: RESTAURANT.currency,
+          },
         };
       }
 

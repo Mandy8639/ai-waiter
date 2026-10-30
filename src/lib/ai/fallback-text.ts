@@ -51,6 +51,24 @@ const TEXT: Record<FallbackKey, Record<FallbackLanguage, string>> = {
   },
 };
 
+/**
+ * When the order went through but the model's reply failed a check. A
+ * guest who has just placed an order must never read "I wasn't able to
+ * pull that up": it reads as a failure, and they order again. The number
+ * comes from submit_order's result, never from the model.
+ */
+export function orderPlacedText(
+  orderNumber: number | null,
+  language: FallbackLanguage,
+): string {
+  const n = orderNumber === null ? "" : ` #${orderNumber}`;
+  if (language === "hi")
+    return `आपका ऑर्डर${n} मिल गया है और रसोई तक पहुँच गया है।`;
+  if (language === "es")
+    return `Tu pedido${n} está hecho y ya ha llegado a la cocina.`;
+  return `Your order${n} is in, and the kitchen has it.`;
+}
+
 const DEVANAGARI = /\p{Script=Devanagari}/u;
 
 /**
