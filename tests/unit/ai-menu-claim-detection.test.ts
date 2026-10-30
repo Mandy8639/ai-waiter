@@ -6,6 +6,7 @@ import {
   cleanReplyForGuest,
   extractPriceAmounts,
   mentionsReligiousClaim,
+  promisesSafety,
   quotesWrongCurrency,
 } from "@/lib/ai/tools/menu-claim-detection";
 
@@ -310,5 +311,27 @@ describe("the last clean-up before a guest reads a reply", () => {
     expect(
       cleanReplyForGuest("We add 20% off? No, there are no discounts."),
     ).toBe("We add 20% off? No, there are no discounts.");
+  });
+});
+
+describe("telling a guest a dish is safe for them", () => {
+  it.each([
+    "I found several dishes that are safe for you to eat, plus some to be cautious about:",
+    "These are safe to eat with a dairy allergy.",
+    "The Samosa is safe for your dairy allergy.",
+    "Chicken 65 is fine for you.",
+  ])("refuses: %s", (reply) => {
+    expect(promisesSafety(reply)).toBe(true);
+    expect(acceptsMenuClaims([], reply)).toBe(false);
+  });
+
+  it.each([
+    "I can't say whether it's safe for you, so please check with staff.",
+    "The restaurant hasn't confirmed it's safe for you.",
+    "If it's not safe for you, tell the staff.",
+    "These aren't marked as containing dairy. Please confirm with staff before ordering.",
+    "Is this still okay for you to order? It contains dairy.",
+  ])("accepts: %s", (reply) => {
+    expect(promisesSafety(reply)).toBe(false);
   });
 });
