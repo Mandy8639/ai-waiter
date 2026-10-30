@@ -69,6 +69,17 @@ export function orderPlacedText(
   return `Your order${n} is in, and the kitchen has it.`;
 }
 
+/**
+ * The same for a dish that went into the cart when the reply didn't get
+ * through. Seen 2026-10-30: told "wasn't able to pull that up", a guest would
+ * ask again and get two.
+ */
+export function addedToCartText(language: FallbackLanguage): string {
+  if (language === "hi") return "यह आपके कार्ट में जोड़ दिया गया है।";
+  if (language === "es") return "Ya está en tu carrito.";
+  return "That's in your cart.";
+}
+
 const DEVANAGARI = /\p{Script=Devanagari}/u;
 
 /**

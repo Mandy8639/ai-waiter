@@ -13,6 +13,10 @@ import {
   acceptsMenuClaims,
   MENU_CLAIM_CORRECTIVE_INSTRUCTION,
 } from "../tools/menu-claim-detection";
+import {
+  acceptsAllergyHold,
+  ALLERGY_HOLD_CORRECTIVE_INSTRUCTION,
+} from "../tools/allergy-hold";
 
 /**
  * Guard ids, shared between the providers that build the guards and the
@@ -24,6 +28,7 @@ export const MENU_FACT_GUARD_ID = "menu_fact";
 export const ALLERGEN_SOURCE_GUARD_ID = "allergen_source";
 export const CART_STATE_GUARD_ID = "cart_state";
 export const MENU_CLAIM_GUARD_ID = "menu_claim";
+export const ALLERGY_HOLD_GUARD_ID = "allergy_hold";
 
 /**
  * Builds the turn's text-acceptance guards. Both providers call this with
@@ -45,6 +50,16 @@ export function buildTextAcceptanceGuards<TMessages>(params: {
     appendUserMessage,
   } = params;
   const guards: Array<TextAcceptanceGuard<TMessages>> = [];
+
+  // First of all: a guest who wasn't told a dish was held for their allergy
+  // is the worst reply this turn could produce. Accepts everything on a
+  // turn with no hold, so it needs no flag. See tools/allergy-hold.ts.
+  guards.push({
+    id: ALLERGY_HOLD_GUARD_ID,
+    shouldAccept: acceptsAllergyHold,
+    correctiveInstruction: ALLERGY_HOLD_CORRECTIVE_INSTRUCTION,
+    appendUserMessage,
+  });
 
   // First, because it is the most specific: an allergen question whose
   // only lookup was search_menu satisfies the menu guard below, and it

@@ -4,11 +4,18 @@ import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { buildHistoryMessages, buildRecentToolContext } from "@/lib/ai/history";
 import { complimentReply, isOnlyCompliment } from "@/lib/ai/compliment-core";
 import {
+  addedToCartText,
   fallbackLanguage,
   fallbackText,
   foundDishesText,
 } from "@/lib/ai/fallback-text";
 import { dishesForEmptyReply } from "@/lib/ai/empty-reply-core";
+import {
+  acceptsAllergyHold,
+  addedToCart,
+  allergyHoldText,
+  holdsIn,
+} from "@/lib/ai/tools/allergy-hold";
 import { formatMoney } from "@/lib/orders/format";
 import {
   looksLikeAllergenQuestion,
@@ -156,12 +163,14 @@ async function runTurn(
       reply = fallbackText("toolLimit", language);
       path = "fixed";
     } else if (loop.guardCorrectionExhausted) {
-      reply = fallbackText(
-        loop.exhaustedGuardId === CART_STATE_GUARD_ID
-          ? "cartState"
-          : "menuFact",
-        language,
-      );
+      reply = addedToCart(loop.toolOutcomes)
+        ? addedToCartText(language)
+        : fallbackText(
+            loop.exhaustedGuardId === CART_STATE_GUARD_ID
+              ? "cartState"
+              : "menuFact",
+            language,
+          );
       path = "fixed";
     }
     if (!reply) {
@@ -178,6 +187,11 @@ async function runTurn(
               language,
             )
           : fallbackText("didNotCatch", language);
+      path = "fixed";
+    }
+    // As orchestrator.ts: a guest whose dish was held always gets told.
+    if (!acceptsAllergyHold(loop.toolOutcomes, reply)) {
+      reply = allergyHoldText(holdsIn(loop.toolOutcomes), language);
       path = "fixed";
     }
     world.addMessage("assistant", reply);

@@ -2,6 +2,19 @@ import "server-only";
 import type { z } from "zod";
 import { getCart } from "@/lib/cart/get-cart";
 import { createClient } from "@/lib/supabase/server";
+import { loadMenuGraph } from "@/lib/menu-graph/load";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getLatestAssistantMessage,
+  getLatestUserMessageTimestamp,
+  getSuccessfulToolCalls,
+  getUserMessages,
+} from "../conversation";
+import {
+  allergyHoldResult,
+  decideAllergyHold,
+  statedAllergies,
+} from "./allergy-hold";
 import { restaurantCurrency } from "./menu";
 import {
   addToCart,
@@ -73,9 +86,49 @@ async function getCartTool(
   };
 }
 
+/**
+ * Holds a dish the guest said they must avoid (allergy-hold.ts). Only a
+ * guest who stated an allergy pays for the menu read.
+ */
+async function allergyHold(
+  args: z.infer<typeof addItemToCartSchema>,
+  context: ToolContext,
+) {
+  const { customerSessionId } = context;
+  const userMessages = await getUserMessages(customerSessionId);
+  if (statedAllergies(userMessages).length === 0) return null;
+  const supabase = (await createClient()) as unknown as SupabaseClient;
+  // Every dish, so one outside the current menu's hours can't slip past.
+  const { graph } = await loadMenuGraph(supabase, context.restaurantId, {
+    wholeMenu: true,
+  });
+  const [thisTurn, lastWaiterReply] = await Promise.all([
+    getLatestUserMessageTimestamp(customerSessionId),
+    getLatestAssistantMessage(customerSessionId),
+  ]);
+  return decideAllergyHold({
+    graph,
+    userMessages,
+    menuItemId: args.menuItemId,
+    guestAccepted: args.guestAcceptedAllergyRisk === true,
+    earlierCalls: thisTurn
+      ? await getSuccessfulToolCalls(
+          customerSessionId,
+          "add_item_to_cart",
+          thisTurn,
+        )
+      : [],
+    lastWaiterReply,
+  });
+}
+
 async function addItemToCart(
   args: z.infer<typeof addItemToCartSchema>,
+  context: ToolContext,
 ): Promise<ToolResult> {
+  const hold = await allergyHold(args, context);
+  if (hold) return { ok: true, data: allergyHoldResult(hold) };
+
   // requireActiveCustomerSession() inside addToCart() re-derives the
   // session server-side — context.customerSessionId isn't even passed
   // through; this call is identical to what the customer-facing "Add to
@@ -136,7 +189,7 @@ export const cartTools: ToolDefinition[] = [
   {
     name: "add_item_to_cart",
     description:
-      'Add a menu item (with any selected modifier option ids) to the customer\'s cart. The server re-validates availability and modifier rules and computes the price — you never supply a price. Only call this once you have all required modifier selections for the item. If the customer said how they want this one cooked ("can I get that spicy?") pass spicePreference, and pass notes for any other short request they made for this line — both reach the kitchen ticket.',
+      'Add a menu item (with any selected modifier option ids) to the customer\'s cart. The server re-validates availability and modifier rules and computes the price — you never supply a price. Only call this once you have all required modifier selections for the item. If the customer said how they want this one cooked ("can I get that spicy?") pass spicePreference, and pass notes for any other short request they made for this line — both reach the kitchen ticket. If the customer said they must avoid something this dish is flagged for, it comes back heldForAllergy and is NOT added: follow the instruction in the result.',
     schema: addItemToCartSchema,
     execute: addItemToCart as ToolDefinition["execute"],
   },

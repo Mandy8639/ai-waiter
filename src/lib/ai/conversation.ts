@@ -92,6 +92,71 @@ export async function getLatestSuccessfulToolCall(
   return data ? { content: data.content, createdAt: data.created_at } : null;
 }
 
+/**
+ * Everything the customer has said this session, oldest first, regardless
+ * of the context window: an allergy mentioned at the start of a long
+ * conversation still counts (tools/allergy-hold.ts).
+ */
+export async function getUserMessages(
+  customerSessionId: string,
+): Promise<string[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("ai_conversation_messages")
+    .select("content")
+    .eq("customer_session_id", customerSessionId)
+    .eq("role", "user")
+    .order("created_at", { ascending: true })
+    .limit(200);
+  return (data ?? []).map((row) => row.content);
+}
+
+/**
+ * The waiter's most recent reply. During a turn that's the one the customer
+ * is answering: this turn's own reply isn't written until the turn ends.
+ */
+export async function getLatestAssistantMessage(
+  customerSessionId: string,
+): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("ai_conversation_messages")
+    .select("content")
+    .eq("customer_session_id", customerSessionId)
+    .eq("role", "assistant")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.content ?? null;
+}
+
+/**
+ * Every successful call to a tool before `before`, newest first. For the
+ * allergy hold, where the row that matters can sit behind later calls to
+ * the same tool for other dishes, so the single latest one isn't enough.
+ */
+export async function getSuccessfulToolCalls(
+  customerSessionId: string,
+  toolName: string,
+  before: string,
+): Promise<{ content: string; createdAt: string }[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("ai_conversation_messages")
+    .select("content, created_at")
+    .eq("customer_session_id", customerSessionId)
+    .eq("role", "tool")
+    .eq("tool_name", toolName)
+    .eq("tool_success", true)
+    .lt("created_at", before)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  return (data ?? []).map((row) => ({
+    content: row.content,
+    createdAt: row.created_at,
+  }));
+}
+
 export async function insertMessage(
   restaurantId: string,
   customerSessionId: string,

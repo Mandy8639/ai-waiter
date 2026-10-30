@@ -17,9 +17,16 @@ import {
   looksLikeMenuFactQuestion,
 } from "./tools/menu-fact-detection";
 import {
+  acceptsAllergyHold,
+  addedToCart,
+  allergyHoldText,
+  holdsIn,
+} from "./tools/allergy-hold";
+import {
   fallbackLanguage,
   fallbackText,
   orderPlacedText,
+  addedToCartText,
   foundDishesText,
 } from "./fallback-text";
 import { dishesForEmptyReply } from "./empty-reply-core";
@@ -266,10 +273,12 @@ export async function sendAiMessage(
               .orderNumber ?? null,
             replyLanguage,
           )
-        : fallbackText(
-            isCartStateGuard ? "cartState" : "menuFact",
-            replyLanguage,
-          );
+        : addedToCart(loopResult.toolOutcomes)
+          ? addedToCartText(replyLanguage)
+          : fallbackText(
+              isCartStateGuard ? "cartState" : "menuFact",
+              replyLanguage,
+            );
       logAiTurn({
         restaurantId,
         customerSessionId,
@@ -307,6 +316,15 @@ export async function sendAiMessage(
             replyLanguage,
           )
         : fallbackText("didNotCatch", replyLanguage);
+    }
+
+    // Whatever happened above (a rejected reply, an empty one, too many
+    // tool calls), a guest whose dish was held for an allergy gets told.
+    if (!acceptsAllergyHold(loopResult.toolOutcomes, finalText)) {
+      finalText = allergyHoldText(
+        holdsIn(loopResult.toolOutcomes),
+        replyLanguage,
+      );
     }
 
     const orderId = loopResult.toolOutcomes.find(

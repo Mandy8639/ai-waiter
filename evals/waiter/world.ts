@@ -13,6 +13,10 @@ import { assertedClaims, statedAllergens } from "@/lib/menu/diet-filters";
 import { DINER_CONFIRMATIONS } from "@/lib/table-requests/core";
 import { buildMenuGraph, type MenuGraph } from "@/lib/menu-graph/core";
 import {
+  allergyHoldResult,
+  decideAllergyHold,
+} from "@/lib/ai/tools/allergy-hold";
+import {
   allergenCheckResult,
   pairingsResult,
 } from "@/lib/menu-graph/tool-results";
@@ -245,6 +249,32 @@ export class World {
     return { lastUserAt: lastUser.createdAt, row };
   }
 
+  /** The production rule (allergy-hold.ts), over this world's log. */
+  private allergyHold(menuItemId: string, guestAccepted: boolean) {
+    const { lastUserAt } = this.pendingCall("add_item_to_cart");
+    return decideAllergyHold({
+      graph: menuGraph(),
+      userMessages: this.messages
+        .filter((m) => m.role === "user")
+        .map((m) => m.content),
+      menuItemId,
+      guestAccepted,
+      earlierCalls: this.messages
+        .filter(
+          (m) =>
+            m.role === "tool" &&
+            m.toolName === "add_item_to_cart" &&
+            m.toolSuccess === true &&
+            lastUserAt !== null &&
+            m.createdAt < lastUserAt,
+        )
+        .map((m) => ({ content: m.content, createdAt: m.createdAt })),
+      lastWaiterReply:
+        this.messages.filter((m) => m.role === "assistant").at(-1)?.content ??
+        null,
+    });
+  }
+
   // --- the tools ------------------------------------------------------------
 
   async executeTool(name: string, rawArgs: unknown): Promise<LoopToolOutcome> {
@@ -442,6 +472,11 @@ export class World {
           return { ok: false, error: "This item is no longer on the menu." };
         if (!d.available)
           return { ok: false, error: "This item is currently unavailable." };
+        const hold = this.allergyHold(
+          d.id,
+          a.guestAcceptedAllergyRisk === true,
+        );
+        if (hold) return { ok: true, data: allergyHoldResult(hold) };
         const optionIds = (a.selectedOptionIds as string[]) ?? [];
         const allOptions = d.groups.flatMap((g) =>
           g.options.map((o) => ({ ...o, groupId: g.id })),
