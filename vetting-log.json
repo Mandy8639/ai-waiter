@@ -24,6 +24,17 @@
       "reasons": [
         "only 2 of 51 scenarios could be judged (busy or failing calls)"
       ]
+    },
+    {
+      "model": "liquid/lfm-2.5-2.6b:free",
+      "testedAt": "2026-10-31T08:41:30.856Z",
+      "passed": false,
+      "passRate": 82.6,
+      "reasons": [
+        "only 23 of 57 scenarios could be judged (busy or failing calls)",
+        "pass rate 82.6% is more than 3 points below the current model's 94%",
+        "facts only 81.8% (needs 90%)"
+      ]
     }
   ]
 }
