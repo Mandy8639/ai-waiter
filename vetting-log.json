@@ -35,6 +35,17 @@
         "pass rate 82.6% is more than 3 points below the current model's 94%",
         "facts only 81.8% (needs 90%)"
       ]
+    },
+    {
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "testedAt": "2026-11-01T08:42:34.382Z",
+      "passed": false,
+      "passRate": 76.4,
+      "reasons": [
+        "pass rate 76.4% is more than 3 points below the current model's 94%",
+        "failed safety: complaint",
+        "facts only 80% (needs 90%)"
+      ]
     }
   ]
 }
