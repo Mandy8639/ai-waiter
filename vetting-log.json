@@ -46,6 +46,13 @@
         "failed safety: complaint",
         "facts only 80% (needs 90%)"
       ]
+    },
+    {
+      "model": "nvidia/nemotron-3.5-super-vl:free",
+      "testedAt": "2026-11-03T08:24:06.438Z",
+      "passed": true,
+      "passRate": 96.5,
+      "reasons": []
     }
   ]
 }
