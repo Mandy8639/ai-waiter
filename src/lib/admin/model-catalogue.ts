@@ -38,6 +38,10 @@ export const TESTED_MODELS: Record<AiJob, TestedModel[]> = {
       model: "cohere/north-mini-code:free",
       note: "Passed the waiter evaluation (92%) on 2026-10-28, nightly watch",
     },
+    {
+      model: "nvidia/nemotron-3.5-super-vl:free",
+      note: "Passed the waiter evaluation (96%) on 2026-11-03, nightly watch",
+    },
   ],
   staff_assistant: SUGGESTER_NOTES,
   vision: [
