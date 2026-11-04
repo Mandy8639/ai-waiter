@@ -53,6 +53,16 @@
       "passed": true,
       "passRate": 96.5,
       "reasons": []
+    },
+    {
+      "model": "recursive/flint-v1.0:free",
+      "testedAt": "2026-11-04T08:34:42.948Z",
+      "passed": false,
+      "passRate": 88.7,
+      "reasons": [
+        "pass rate 88.7% is more than 3 points below the current model's 94%",
+        "facts only 78.9% (needs 90%)"
+      ]
     }
   ]
 }
