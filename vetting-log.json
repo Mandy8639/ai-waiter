@@ -63,6 +63,17 @@
         "pass rate 88.7% is more than 3 points below the current model's 94%",
         "facts only 78.9% (needs 90%)"
       ]
+    },
+    {
+      "model": "xingchen-agi/xing4.0-29b-a4b:free",
+      "testedAt": "2026-11-05T08:42:26.800Z",
+      "passed": false,
+      "passRate": 76.5,
+      "reasons": [
+        "only 17 of 57 scenarios could be judged (busy or failing calls)",
+        "pass rate 76.5% is more than 3 points below the current model's 94%",
+        "facts only 71.4% (needs 90%)"
+      ]
     }
   ]
 }
