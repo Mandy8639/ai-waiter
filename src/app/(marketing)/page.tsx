@@ -130,11 +130,11 @@ export default function Home() {
       {/* Hero */}
       <section className="mk-paper overflow-hidden border-b">
         <div className="mx-auto grid w-full max-w-6xl items-center gap-14 px-4 pt-14 pb-16 sm:px-6 sm:pt-20 lg:grid-cols-[1.1fr_1fr] lg:pb-24">
-          <div className="flex flex-col items-start gap-6">
+          <div className="flex min-w-0 flex-col items-start gap-6">
             <p className="mk-eyebrow text-primary">
               An AI waiter for restaurants.
             </p>
-            <h1 className="mk-display text-[3.25rem] sm:text-7xl">
+            <h1 className="mk-display text-[clamp(2.4rem,12.5vw,3.25rem)] sm:text-7xl">
               <span className="sr-only">Tableside: </span>
               Your menu, with <em className="text-primary">a waiter</em> in it.
             </h1>
