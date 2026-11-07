@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/seo/metadata";
+import { DEMO_RESTAURANT_SLUG } from "@/lib/marketing/content";
 
 /**
  * Crawler instructions. Not access control: the signed-in areas are
@@ -31,6 +32,8 @@ export default function robots(): MetadataRoute.Robots {
         "/r/*/receipt/",
         "/r/*/split/",
         "/r/*/table/",
+        // The fictional demo restaurant behind /demo: not a real place.
+        `/r/${DEMO_RESTAURANT_SLUG}`,
       ],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,

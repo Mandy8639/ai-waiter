@@ -74,12 +74,19 @@ describe("reaching it", () => {
     }
   });
 
-  it.each([
-    "src/app/page.tsx",
-    "src/app/login/page.tsx",
-    "src/app/signup/page.tsx",
-  ])("is linked from %s", (file) => {
-    const source = readFileSync(join(process.cwd(), file), "utf8");
-    expect(source).toContain("href={PRIVACY_POLICY_PATH}");
+  it("is linked from the marketing site's footer", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/lib/marketing/content.ts"),
+      "utf8",
+    );
+    expect(source).toContain("href: PRIVACY_POLICY_PATH");
   });
+
+  it.each(["src/app/login/page.tsx", "src/app/signup/page.tsx"])(
+    "is linked from %s",
+    (file) => {
+      const source = readFileSync(join(process.cwd(), file), "utf8");
+      expect(source).toContain("href={PRIVACY_POLICY_PATH}");
+    },
+  );
 });

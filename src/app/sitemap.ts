@@ -19,6 +19,9 @@ import { TERMS_PATH, TERMS_UPDATED } from "@/lib/legal/terms";
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${SITE_URL}/`, changeFrequency: "monthly", priority: 1 },
+    { url: `${SITE_URL}/features`, changeFrequency: "monthly", priority: 0.9 },
+    { url: `${SITE_URL}/pricing`, changeFrequency: "monthly", priority: 0.9 },
+    { url: `${SITE_URL}/demo`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_URL}/signup`, changeFrequency: "yearly", priority: 0.8 },
     { url: `${SITE_URL}/login`, changeFrequency: "yearly", priority: 0.5 },
     {

@@ -14,6 +14,9 @@ describe("sitemap.xml", () => {
   it("lists public pages on tableside.menu only", () => {
     expect(urls).toEqual([
       "https://tableside.menu/",
+      "https://tableside.menu/features",
+      "https://tableside.menu/pricing",
+      "https://tableside.menu/demo",
       "https://tableside.menu/signup",
       "https://tableside.menu/login",
       "https://tableside.menu/support",
@@ -43,5 +46,9 @@ describe("robots.txt", () => {
       expect.arrayContaining(["/dashboard", "/account", "/api/", "/r/*/cart"]),
     );
     expect(rules.allow).toBe("/");
+  });
+
+  it("keeps crawlers away from the fictional demo restaurant", () => {
+    expect(rules.disallow).toContain("/r/lantern-table-demo");
   });
 });
