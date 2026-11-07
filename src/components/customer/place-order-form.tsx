@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect } from "@/components/dashboard/native-select";
 import { submitOrder } from "@/lib/orders/submit-order";
+import { submitTableGroupOrder } from "@/lib/table-groups/actions";
 import { formatPickupTime, type PickupOptions } from "@/lib/pickup/format-core";
 
 /**
@@ -23,17 +24,23 @@ import { formatPickupTime, type PickupOptions } from "@/lib/pickup/format-core";
  * Full slots stay in the list, marked, so a diner can see why their usual
  * time is missing; the database re-checks the time when the order is
  * placed, because a slot can fill while this page is open.
+ *
+ * With `group`, it sends the whole table's shared order instead
+ * (submit_table_group_order(), 20261129090000). Groups exist only at
+ * tables, so a group never has a pickup choice.
  */
 export function PlaceOrderForm({
   restaurantSlug,
   disabled,
   allowCustomerNotes,
   pickup,
+  group = false,
 }: {
   restaurantSlug: string;
   disabled: boolean;
   allowCustomerNotes: boolean;
   pickup?: Extract<PickupOptions, { isCounter: true }>;
+  group?: boolean;
 }) {
   const router = useRouter();
   const [idempotencyKey] = useState(() => crypto.randomUUID());
@@ -51,11 +58,13 @@ export function PlaceOrderForm({
   function handleSubmit() {
     setError(null);
     startTransition(async () => {
-      const result = await submitOrder(
-        idempotencyKey,
-        note.trim() || undefined,
-        pickup ? { at: pickupAt, name: pickupName.trim() } : undefined,
-      );
+      const result = group
+        ? await submitTableGroupOrder(idempotencyKey, note.trim() || undefined)
+        : await submitOrder(
+            idempotencyKey,
+            note.trim() || undefined,
+            pickup ? { at: pickupAt, name: pickupName.trim() } : undefined,
+          );
       if (result.error) {
         setError(result.error);
         return;
@@ -154,10 +163,14 @@ export function PlaceOrderForm({
         onClick={handleSubmit}
       >
         {isPending
-          ? "Placing order…"
-          : pickup
-            ? "Place pickup order"
-            : "Place order"}
+          ? group
+            ? "Sending…"
+            : "Placing order…"
+          : group
+            ? "Send to kitchen"
+            : pickup
+              ? "Place pickup order"
+              : "Place order"}
       </Button>
     </div>
   );

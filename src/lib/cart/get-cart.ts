@@ -103,17 +103,11 @@ export async function getCart(
 
   if (!items || items.length === 0) return { ...empty, taxRate };
 
-  const menuItemIds = [...new Set(items.map((i) => i.menu_item_id))];
-  const [{ data: menuItems }, menusResult] = await Promise.all([
-    supabase
-      .from("menu_items")
-      .select("id, name, image_url, is_available, category_id")
-      .in("id", menuItemIds),
-    // Phase L: a dish added while its menu was on may not be served now.
-    getPublicMenus(restaurantId, supabase),
-  ]);
-  const menuItemById = new Map((menuItems ?? []).map((m) => [m.id, m]));
-  const onNow = onNowFilter(menusResult);
+  const menuInfo = await getLineMenuInfo(
+    restaurantId,
+    items.map((i) => i.menu_item_id),
+    supabase,
+  );
 
   const itemIds = items.map((i) => i.id);
   const { data: modifiers } =
@@ -143,12 +137,12 @@ export async function getCart(
   }
 
   const lines: CartLine[] = items.map((item) => {
-    const menuItem = menuItemById.get(item.menu_item_id);
+    const info = menuInfo.get(item.menu_item_id);
     return {
       id: item.id,
       menuItemId: item.menu_item_id,
-      menuItemName: menuItem?.name ?? "Item no longer available",
-      menuItemImageUrl: menuItem?.image_url ?? null,
+      menuItemName: info?.name ?? "Item no longer available",
+      menuItemImageUrl: info?.imageUrl ?? null,
       quantity: item.quantity,
       unitPrice: Number(item.unit_price),
       modifiersPrice: Number(item.modifiers_price),
@@ -156,11 +150,7 @@ export async function getCart(
       modifiers: modifiersByCartItemId.get(item.id) ?? [],
       spicePreference: item.spice_preference,
       notes: item.notes,
-      // Off the menu right now counts as unavailable: the order would be
-      // refused (ORDER_ITEM_NOT_SERVED_NOW), so the cart says so first.
-      stillAvailable:
-        (menuItem?.is_available ?? false) &&
-        (!onNow || onNow.has(menuItem!.category_id)),
+      stillAvailable: info?.stillAvailable ?? false,
     };
   });
 
@@ -170,4 +160,44 @@ export async function getCart(
   const hasUnavailableItems = lines.some((line) => !line.stillAvailable);
 
   return { lines, subtotal, taxRate, taxAmount, total, hasUnavailableItems };
+}
+
+export interface LineMenuInfo {
+  name: string;
+  imageUrl: string | null;
+  /** Off the menu right now counts as unavailable: the order would be refused (ORDER_ITEM_NOT_SERVED_NOW), so the cart says so first. */
+  stillAvailable: boolean;
+}
+
+/**
+ * Name, photo and current availability for the dishes in a cart, read
+ * fresh — shared by the diner's own cart and the table's shared one
+ * (src/lib/table-groups/queries.ts).
+ */
+export async function getLineMenuInfo(
+  restaurantId: string,
+  menuItemIds: string[],
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<Map<string, LineMenuInfo>> {
+  const ids = [...new Set(menuItemIds)];
+  if (ids.length === 0) return new Map();
+  const [{ data: menuItems }, menusResult] = await Promise.all([
+    supabase
+      .from("menu_items")
+      .select("id, name, image_url, is_available, category_id")
+      .in("id", ids),
+    // Phase L: a dish added while its menu was on may not be served now.
+    getPublicMenus(restaurantId, supabase),
+  ]);
+  const onNow = onNowFilter(menusResult);
+  return new Map(
+    (menuItems ?? []).map((m) => [
+      m.id,
+      {
+        name: m.name,
+        imageUrl: m.image_url,
+        stillAvailable: m.is_available && (!onNow || onNow.has(m.category_id)),
+      },
+    ]),
+  );
 }

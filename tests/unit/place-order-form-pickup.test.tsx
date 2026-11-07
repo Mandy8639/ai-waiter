@@ -15,6 +15,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 const submitOrder = vi.fn();
+vi.mock("@/lib/table-groups/actions", () => ({
+  submitTableGroupOrder: vi.fn(),
+}));
 vi.mock("@/lib/orders/submit-order", () => ({
   submitOrder: (...args: unknown[]) => submitOrder(...args),
 }));
