@@ -26,7 +26,8 @@ const NAME = "Lantern Table";
 const DESCRIPTION =
   "A demo restaurant for trying Tableside. The dishes are made up, and orders placed here are never cooked.";
 
-type Allergen = "Tree nuts" | "Milk" | "Wheat" | "Eggs" | "Soy" | "Sesame";
+type Allergen =
+  "Tree nuts" | "Milk" | "Wheat" | "Eggs" | "Soy" | "Sesame" | "Fish";
 type Spice = "none" | "mild" | "medium" | "hot";
 
 interface Dish {
@@ -127,7 +128,7 @@ const MENU: { name: string; description?: string; dishes: Dish[] }[] = [
         price: 23,
         minutes: 16,
         spice: "none",
-        allergens: ["Milk"],
+        allergens: ["Fish", "Milk"],
       },
       {
         name: "Wild Mushroom Pasta",
