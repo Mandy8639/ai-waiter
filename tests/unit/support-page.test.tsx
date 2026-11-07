@@ -55,11 +55,19 @@ describe("reaching it", () => {
     expect(appShellRedirect(SUPPORT_PATH, "android")).toBeNull();
   });
 
-  it.each(["src/app/page.tsx", "src/app/login/page.tsx"])(
-    "is linked from %s",
-    (file) => {
-      const source = readFileSync(join(process.cwd(), file), "utf8");
-      expect(source).toContain("href={SUPPORT_PATH}");
-    },
-  );
+  it("is linked from the login page", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/app/login/page.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("href={SUPPORT_PATH}");
+  });
+
+  it("is in the marketing site's header and footer", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/lib/marketing/content.ts"),
+      "utf8",
+    );
+    expect(source).toContain("href: SUPPORT_PATH");
+  });
 });

@@ -297,3 +297,101 @@
     transform: translateY(3px);
   }
 }
+
+/*
+ * Public marketing site (src/app/(marketing)). These are for the pages an
+ * owner reads before signing up; the diner and staff screens don't use
+ * them, so the "no gradients, glows" rule in docs/DESIGN_SYSTEM.md still
+ * governs the product itself.
+ *
+ * The display face is Instrument Serif (--font-display, set in the
+ * marketing layout). Geist stays the body face and Geist Mono carries the
+ * kitchen-ticket motif, so the one signature element is typographic too.
+ */
+@utility mk-display {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+@utility mk-eyebrow {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Thermal-paper kitchen ticket: warm white, torn bottom edge. */
+.mk-ticket {
+  background: oklch(0.985 0.01 92);
+  color: oklch(0.22 0.02 45);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  padding-bottom: 1.25rem;
+  mask: conic-gradient(
+      from -45deg at bottom,
+      #0000,
+      #000 1deg 89deg,
+      #0000 90deg
+    )
+    50% / 14px 100%;
+}
+.mk-ticket-rule {
+  border: 0;
+  border-top: 1.5px dashed oklch(0.22 0.02 45 / 0.35);
+}
+
+.mk-paper {
+  background-image: radial-gradient(
+    oklch(0.2 0.02 40 / 0.045) 1px,
+    transparent 1px
+  );
+  background-size: 18px 18px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mk-rise {
+    opacity: 0;
+    transform: translateY(14px);
+    animation: mk-rise 650ms var(--ease-out-soft) forwards;
+    animation-delay: var(--mk-delay, 0ms);
+  }
+  .mk-print {
+    transform-origin: top center;
+    animation: mk-print 900ms var(--ease-out-soft) both;
+    animation-delay: var(--mk-delay, 0ms);
+  }
+  /* Armed by Reveal only when it starts off-screen, so slow JavaScript
+     never hides content someone is already looking at. */
+  [data-reveal="armed"] {
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+      opacity 600ms var(--ease-out-soft),
+      transform 600ms var(--ease-out-soft);
+  }
+  [data-reveal="armed"][data-shown="true"] {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mk-rise {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mk-print {
+  from {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-6px);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    transform: none;
+  }
+}
+
+[data-armed]:not([data-play]) :is(.mk-rise, .mk-print) {
+  animation-play-state: paused;
+}
