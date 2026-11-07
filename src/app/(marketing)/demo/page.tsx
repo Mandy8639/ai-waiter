@@ -2,9 +2,8 @@ import Link from "next/link";
 import { ArrowRight, MessageCircle } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { publicPageMetadata } from "@/lib/seo/metadata";
-import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { generateTableQrDataUrl, getRequestOrigin } from "@/lib/tables/qr";
-import { DEMO_RESTAURANT_SLUG } from "@/lib/marketing/content";
+import { getDemoTablePath } from "@/lib/marketing/demo-table";
 import { PageHero } from "@/components/marketing/page-hero";
 import { Section, SectionHeading } from "@/components/marketing/section";
 import { ClosingCta } from "@/components/marketing/closing-cta";
@@ -30,11 +29,12 @@ const TRY_ASKING = [
  * link that would 404.
  */
 export default async function DemoPage() {
-  const restaurant = await getPublicRestaurantBySlug(DEMO_RESTAURANT_SLUG);
-  const live = Boolean(restaurant?.isActive);
-  const menuPath = `/r/${DEMO_RESTAURANT_SLUG}`;
-  const qr = live
-    ? await generateTableQrDataUrl(`${await getRequestOrigin()}${menuPath}`)
+  // A table link, not the bare menu: the waiter and ordering only exist
+  // inside a table session.
+  const tablePath = await getDemoTablePath();
+  const live = tablePath !== null;
+  const qr = tablePath
+    ? await generateTableQrDataUrl(`${await getRequestOrigin()}${tablePath}`)
     : null;
 
   return (
@@ -69,13 +69,12 @@ export default async function DemoPage() {
                   Point your phone&apos;s camera at the code, just like a guest
                   at the table.
                 </p>
-                <Link
-                  href={menuPath}
-                  className={buttonVariants({ size: "lg" })}
-                >
+                {/* A plain <a>, not <Link>: the table link is a route that
+                    starts a guest session, and Link would prefetch it. */}
+                <a href={tablePath!} className={buttonVariants({ size: "lg" })}>
                   Open the demo menu
                   <ArrowRight data-icon="inline-end" />
-                </Link>
+                </a>
                 <p className="text-muted-foreground text-xs">
                   Demo orders aren&apos;t cooked or charged.
                 </p>
