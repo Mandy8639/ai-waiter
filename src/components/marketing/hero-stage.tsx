@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { Sparkles } from "lucide-react";
+import { ChefArt } from "@/components/customer/chef-art";
 import { KitchenTicket } from "./kitchen-ticket";
 import { PlayWhenVisible } from "./play-when-visible";
 
@@ -16,19 +16,20 @@ export function HeroStage() {
   return (
     <PlayWhenVisible
       className="relative mx-auto w-full max-w-[28rem] pb-44 sm:pb-36 lg:pb-24"
-      aria-label="Example: a guest asks the waiter for a dish, and the order prints in the kitchen"
+      aria-label="Example: a guest asks the Chef for a dish, and the order prints in the kitchen"
       role="img"
     >
-      <div className="bg-foreground relative mx-auto w-[17.5rem] rounded-[2.6rem] p-2.5 shadow-[var(--shadow-float)] sm:mx-0 sm:w-[19rem]">
+      <div className="bg-foreground relative mx-auto w-[min(17.5rem,100%)] rounded-[2.6rem] p-2.5 shadow-[var(--shadow-float)] sm:mx-0 sm:w-[19rem]">
         <div className="bg-background flex h-[30rem] flex-col overflow-hidden rounded-[2.1rem] sm:h-[33rem]">
           <div className="flex items-center justify-between border-b px-5 pt-5 pb-3">
             <div>
               <p className="text-[0.95rem] font-semibold">Lantern Table</p>
               <p className="text-muted-foreground text-xs">Table 7</p>
             </div>
-            <span className="bg-ai-soft text-ai-foreground flex items-center gap-1 rounded-full px-2.5 py-1 text-[0.7rem] font-medium">
-              <Sparkles className="size-3" aria-hidden />
-              Waiter
+            {/* The Chef, as the demo restaurant shows it (CHEF_RESTAURANTS). */}
+            <span className="bg-ai-soft text-ai-foreground flex items-center gap-1.5 rounded-full py-1 pr-3 pl-1 text-[0.7rem] font-medium">
+              <ChefArt pose="hello" size={22} />
+              Ask the Chef
             </span>
           </div>
 
@@ -77,7 +78,7 @@ export function HeroStage() {
           { qty: 1, name: "Braised short rib", note: "no greens" },
           { qty: 1, name: "Ginger lemonade" },
         ]}
-        footer="— sent by the waiter —"
+        footer="— sent by the Chef —"
       />
     </PlayWhenVisible>
   );
