@@ -30,6 +30,7 @@ describe("the kitchen account", () => {
   it.each([
     "/dashboard",
     "/dashboard/orders",
+    "/dashboard/floor",
     "/dashboard/checkout",
     "/dashboard/payments",
     "/dashboard/reports",
@@ -63,6 +64,7 @@ describe("front-of-house staff", () => {
     "/dashboard/checkout",
     "/dashboard/reservations",
     "/dashboard/reservations/new",
+    "/dashboard/floor",
   ])("opens %s", (path) => {
     expect(canOpen("staff", path)).toBe(true);
   });
@@ -156,9 +158,10 @@ describe("basic mode: QR menu, AI waiter and kitchen only", () => {
     );
   });
 
-  it("shows staff only what's left: the overview, the board and orders", () => {
+  it("shows staff only what's left: the overview, the floor, the board and orders", () => {
     expect(navItemsFor("staff", true).map((i) => i.label)).toEqual([
       "Overview",
+      "Floor",
       "Kitchen",
       "Orders",
     ]);
