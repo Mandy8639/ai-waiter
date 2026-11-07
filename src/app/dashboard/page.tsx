@@ -189,9 +189,17 @@ export default async function DashboardOverviewPage() {
         aria-labelledby="service-requests-heading"
         className="flex flex-col gap-3"
       >
-        <h2 id="service-requests-heading" className="type-label">
-          Tables waiting
-        </h2>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="service-requests-heading" className="type-label">
+            Tables waiting
+          </h2>
+          <Link
+            href="/dashboard/floor"
+            className="text-primary text-sm underline-offset-4 hover:underline"
+          >
+            See the floor
+          </Link>
+        </div>
         <ServiceRequestQueue
           restaurantId={restaurant.id}
           initial={openRequests}

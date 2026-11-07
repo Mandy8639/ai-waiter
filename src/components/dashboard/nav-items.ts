@@ -9,6 +9,7 @@ import {
   HandCoins,
   HeartHandshake,
   LayoutDashboard,
+  LayoutGrid,
   LayoutList,
   MessageSquare,
   QrCode,
@@ -56,7 +57,7 @@ export interface NavItem {
 /**
  * Who opens what:
  *   - owner, manager: everything.
- *   - staff (floor and front desk): Overview, Kitchen, Take order, Orders,
+ *   - staff (floor and front desk): Overview, Floor, Kitchen, Take order, Orders,
  *     Settle up, Reservations.
  *   - kitchen (the screen on the pass): Kitchen, Sold out and Waiter.
  * src/lib/dashboard/access-core.ts enforces the same table on the server.
@@ -71,6 +72,15 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/dashboard",
     group: "Service",
     icon: LayoutDashboard,
+    roles: FRONT_OF_HOUSE,
+  },
+  // The room at a glance: each table's most urgent state, live
+  // (src/lib/floor/). The kitchen account works the pass, not the room.
+  {
+    label: "Floor",
+    href: "/dashboard/floor",
+    group: "Service",
+    icon: LayoutGrid,
     roles: FRONT_OF_HOUSE,
   },
   {
