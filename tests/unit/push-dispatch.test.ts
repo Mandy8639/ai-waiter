@@ -306,6 +306,9 @@ describe("the boundary around the service-role sender", () => {
       // order the member rang up.
       "src/lib/pos/actions.ts",
       "src/lib/push/actions.ts",
+      // A table's shared order: submit_table_group_order() just returned
+      // this id, through submit_order(), as the diner's own submit does.
+      "src/lib/table-groups/actions.ts",
       "src/lib/table-requests/actions.ts",
     ]);
   });

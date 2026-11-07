@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, QrCode, ShoppingBag } from "lucide-react";
+import { AlertCircle, QrCode, ShoppingBag, Users } from "lucide-react";
 import { AskWaiterButton } from "@/components/customer/ask-waiter-card";
 import { isChefEnabled } from "@/lib/chef/feature";
 import { buttonVariants } from "@/components/ui/button";
@@ -19,6 +19,19 @@ import { getKitchenStatus } from "@/lib/kitchen/busy-queries";
 import { clearCart } from "@/lib/cart/actions";
 import { getPickupOptions } from "@/lib/pickup/queries";
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
+import {
+  getTableGroupLines,
+  getTableGroupState,
+} from "@/lib/table-groups/queries";
+import {
+  groupSections,
+  memberLabel,
+  othersList,
+  type GroupLine,
+} from "@/lib/table-groups/core";
+import { OrderTogetherCard } from "@/components/customer/order-together-card";
+import { GroupLiveRefresh } from "@/components/customer/group-live-refresh";
+import { LeaveGroupButton } from "@/components/customer/leave-group-button";
 
 export async function generateMetadata({
   params,
@@ -65,27 +78,59 @@ export default async function CartPage({
     );
   }
 
-  const [cart, orderSettings, kitchen, pickup] = await Promise.all([
+  const [cart, orderSettings, kitchen, pickup, group] = await Promise.all([
     getCart(restaurant.id, session.id),
     getPublicOrderSettings(restaurant.id),
     getKitchenStatus(restaurant.id),
     getPickupOptions(),
+    getTableGroupState(),
   ]);
+
+  // Ordering together (20261129090000): in a group, the page shows the
+  // whole table's order; everyone else may be offered one to start or join.
+  const groupLines =
+    group.kind === "member" ? await getTableGroupLines(restaurant.id) : [];
+  const inGroup = group.kind === "member";
+  const lineCount = inGroup ? groupLines.length : cart.lines.length;
+  const hasUnavailable = inGroup
+    ? groupLines.some((line) => !line.stillAvailable)
+    : cart.hasUnavailableItems;
+  const subtotal = inGroup
+    ? groupLines.reduce((sum, line) => sum + line.lineTotal, 0)
+    : cart.subtotal;
+  const taxAmount = inGroup ? subtotal * cart.taxRate : cart.taxAmount;
+  const total = subtotal + taxAmount;
 
   const canPlaceOrder =
     restaurant.isActive &&
     orderSettings.acceptingOrders &&
     !kitchen.paused &&
-    cart.lines.length > 0 &&
-    !cart.hasUnavailableItems;
+    lineCount > 0 &&
+    !hasUnavailable;
 
-  const itemCount = cart.lines.reduce((sum, line) => sum + line.quantity, 0);
+  const itemCount = (inGroup ? groupLines : cart.lines).reduce(
+    (sum, line) => sum + line.quantity,
+    0,
+  );
+
+  const togetherCard =
+    group.kind === "can_join" ? (
+      <OrderTogetherCard
+        mode="join"
+        groupId={group.groupId}
+        startedBy={othersList(group.members) || "Someone"}
+      />
+    ) : group.kind === "none" ? (
+      <OrderTogetherCard mode="start" />
+    ) : null;
 
   const notices = [
     !restaurant.isActive &&
       "This restaurant is currently unavailable. You can still review or clear your order, but new items can't be added right now.",
-    cart.hasUnavailableItems &&
-      "One or more dishes in your order are no longer available — please remove them.",
+    hasUnavailable &&
+      (inGroup
+        ? "One or more dishes in your table's order are no longer available — whoever added them needs to remove them."
+        : "One or more dishes in your order are no longer available — please remove them."),
     restaurant.isActive &&
       !orderSettings.acceptingOrders &&
       "The kitchen isn't taking new orders right now. You can still review or clear your order.",
@@ -97,38 +142,58 @@ export default async function CartPage({
       "New orders are paused for a little while. Your order is saved here, so you can place it as soon as the kitchen opens again.",
   ].filter((notice): notice is string => Boolean(notice));
 
-  if (cart.lines.length === 0) {
+  if (!inGroup && cart.lines.length === 0) {
     return (
-      <EmptyState
-        icon={<ShoppingBag />}
-        title="Your order is empty"
-        description={`Browse the menu, or ask the ${isChefEnabled(restaurantSlug) ? "Chef" : "waiter"} for a suggestion — dishes you add will show up here.`}
-      >
-        <Link
-          href={`/r/${restaurantSlug}/menu`}
-          className={buttonVariants({ size: "lg" })}
+      <div className="flex flex-1 flex-col gap-6">
+        {togetherCard}
+        <EmptyState
+          icon={<ShoppingBag />}
+          title="Your order is empty"
+          description={`Browse the menu, or ask the ${isChefEnabled(restaurantSlug) ? "Chef" : "waiter"} for a suggestion — dishes you add will show up here.`}
         >
-          Browse the menu
-        </Link>
-        <AskWaiterButton
-          prompt="What do you recommend?"
-          chefLabel="Ask the Chef"
-        >
-          Ask the waiter
-        </AskWaiterButton>
-      </EmptyState>
+          <Link
+            href={`/r/${restaurantSlug}/menu`}
+            className={buttonVariants({ size: "lg" })}
+          >
+            Browse the menu
+          </Link>
+          <AskWaiterButton
+            prompt="What do you recommend?"
+            chefLabel="Ask the Chef"
+          >
+            Ask the waiter
+          </AskWaiterButton>
+        </EmptyState>
+      </div>
     );
   }
 
   return (
     <div className="flex flex-1 flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="type-title">Your order</h1>
-        <p className="type-body-sm text-muted-foreground">
-          {itemCount} {itemCount === 1 ? "item" : "items"} · review and place it
-          when you&apos;re ready
-        </p>
-      </div>
+      {inGroup ? (
+        <div className="flex flex-col gap-1">
+          <GroupLiveRefresh groupId={group.groupId} />
+          <h1 className="type-title flex items-center gap-2">
+            <Users className="text-primary size-6" aria-hidden />
+            Your table&apos;s order
+          </h1>
+          <p className="type-body-sm text-muted-foreground">
+            {othersList(group.members)
+              ? `Shared with ${othersList(group.members)}`
+              : "Shared order · others at your table can join from their phones"}
+            {" · "}
+            {itemCount} {itemCount === 1 ? "item" : "items"}
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1">
+          <h1 className="type-title">Your order</h1>
+          <p className="type-body-sm text-muted-foreground">
+            {itemCount} {itemCount === 1 ? "item" : "items"} · review and place
+            it when you&apos;re ready
+          </p>
+        </div>
+      )}
 
       {notices.map((notice) => (
         <p
@@ -144,15 +209,67 @@ export default async function CartPage({
         </p>
       ))}
 
-      <ul className="flex flex-col gap-3" aria-label="Dishes in your order">
-        {cart.lines.map((line) => (
-          <CartLineItem
-            key={line.id}
-            line={line}
-            currency={restaurant.currency}
-          />
-        ))}
-      </ul>
+      {inGroup ? (
+        groupSections(group.members, groupLines).map((section) => (
+          <section
+            key={section.member.position}
+            aria-label={`${memberLabel(section.member)}: dishes`}
+            className="flex flex-col gap-3"
+          >
+            <h2 className="type-label flex items-baseline justify-between gap-2">
+              <span>{memberLabel(section.member)}</span>
+              {section.subtotal > 0 && (
+                <span className="type-price text-muted-foreground">
+                  {price(section.subtotal)}
+                </span>
+              )}
+            </h2>
+            {section.member.isMe ? (
+              cart.lines.length > 0 ? (
+                <ul className="flex flex-col gap-3">
+                  {cart.lines.map((line) => (
+                    <CartLineItem
+                      key={line.id}
+                      line={line}
+                      currency={restaurant.currency}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <p className="type-body-sm text-muted-foreground">
+                  Nothing yet.{" "}
+                  <Link
+                    href={`/r/${restaurantSlug}/menu`}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    Add dishes
+                  </Link>
+                </p>
+              )
+            ) : section.lines.length > 0 ? (
+              <ul className="bg-card flex flex-col divide-y rounded-xl border">
+                {section.lines.map((line) => (
+                  <OtherMemberLine key={line.id} line={line} price={price} />
+                ))}
+              </ul>
+            ) : (
+              <p className="type-body-sm text-muted-foreground">
+                Still choosing.
+              </p>
+            )}
+          </section>
+        ))
+      ) : (
+        <ul className="flex flex-col gap-3" aria-label="Dishes in your order">
+          {cart.lines.map((line) => (
+            <CartLineItem
+              key={line.id}
+              line={line}
+              currency={restaurant.currency}
+            />
+          ))}
+        </ul>
+      )}
 
       <section
         aria-label="Order total"
@@ -161,19 +278,19 @@ export default async function CartPage({
         <dl className="type-body-sm flex flex-col gap-2">
           <div className="flex justify-between">
             <dt className="text-muted-foreground">Subtotal</dt>
-            <dd className="type-price">{price(cart.subtotal)}</dd>
+            <dd className="type-price">{price(subtotal)}</dd>
           </div>
           {cart.taxRate > 0 && (
             <div className="flex justify-between">
               <dt className="text-muted-foreground">
                 Estimated tax ({(cart.taxRate * 100).toFixed(2)}%)
               </dt>
-              <dd className="type-price">{price(cart.taxAmount)}</dd>
+              <dd className="type-price">{price(taxAmount)}</dd>
             </div>
           )}
           <div className="flex justify-between border-t pt-3 text-base">
             <dt className="font-semibold">Total</dt>
-            <dd className="type-price text-lg">{price(cart.total)}</dd>
+            <dd className="type-price text-lg">{price(total)}</dd>
           </div>
         </dl>
 
@@ -181,8 +298,15 @@ export default async function CartPage({
           restaurantSlug={restaurantSlug}
           disabled={!canPlaceOrder}
           allowCustomerNotes={orderSettings.allowCustomerNotes}
-          pickup={pickup.isCounter ? pickup : undefined}
+          pickup={pickup.isCounter && !inGroup ? pickup : undefined}
+          group={inGroup}
         />
+        {inGroup && (
+          <p className="type-caption text-muted-foreground text-center">
+            Anyone at the table can send it. Everyone sees the order once
+            it&apos;s sent.
+          </p>
+        )}
       </section>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -192,13 +316,53 @@ export default async function CartPage({
         >
           Add more dishes
         </Link>
-        <DeleteButton
-          onDelete={clearCart}
-          confirmTitle="Clear your order?"
-          confirmDescription="This removes every dish from your order. This can't be undone."
-          triggerLabel="Clear order"
-        />
+        {inGroup ? (
+          <LeaveGroupButton />
+        ) : (
+          <DeleteButton
+            onDelete={clearCart}
+            confirmTitle="Clear your order?"
+            confirmDescription="This removes every dish from your order. This can't be undone."
+            triggerLabel="Clear order"
+          />
+        )}
       </div>
+
+      {togetherCard}
     </div>
+  );
+}
+
+/** Someone else's dish in the shared order: visible, not editable. */
+function OtherMemberLine({
+  line,
+  price,
+}: {
+  line: GroupLine;
+  price: (amount: number) => string;
+}) {
+  const extras = [...line.modifiers, line.notes].filter(Boolean).join(" · ");
+  return (
+    <li className="flex items-start justify-between gap-3 px-4 py-3">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p
+          className={
+            "type-body-sm font-medium " +
+            (line.stillAvailable ? "" : "text-destructive line-through")
+          }
+        >
+          {line.quantity > 1 && `${line.quantity} × `}
+          {line.name}
+        </p>
+        {extras && (
+          <p className="type-caption text-muted-foreground truncate">
+            {extras}
+          </p>
+        )}
+      </div>
+      <span className="type-price shrink-0 text-sm">
+        {price(line.lineTotal)}
+      </span>
+    </li>
   );
 }

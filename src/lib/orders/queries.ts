@@ -206,6 +206,11 @@ export interface OrderSummary {
  * signup/account required, so there is no cross-session order history to
  * offer — a new QR scan starts a new session with an empty history, by
  * design).
+ *
+ * Plus orders sent by a table group the caller is in (20261129090000): a
+ * friend may have pressed send. Which groups those are is RLS's call
+ * (orders_select_own_or_staff); this only asks for "own, or sent by a
+ * group", and a diner can see no group's orders but their own group's.
  */
 export async function getOrdersForSession(
   customerSessionId: string,
@@ -214,7 +219,9 @@ export async function getOrdersForSession(
   const { data } = await supabase
     .from("orders")
     .select("id, order_number, status, total, currency, created_at")
-    .eq("customer_session_id", customerSessionId)
+    .or(
+      `customer_session_id.eq.${customerSessionId},table_group_id.not.is.null`,
+    )
     .order("created_at", { ascending: false });
 
   return (data ?? []).map((o) => ({

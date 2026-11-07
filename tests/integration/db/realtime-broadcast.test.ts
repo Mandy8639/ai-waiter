@@ -100,6 +100,8 @@ describe("what sends pings", () => {
        order by 1;`,
     );
     expect(rows.map((r) => r.table)).toEqual([
+      // A shared table order's cart (20261129090000).
+      "cart_items",
       "order_payments",
       "orders",
       "reservations",
