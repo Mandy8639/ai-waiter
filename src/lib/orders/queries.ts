@@ -23,6 +23,8 @@ export interface OrderItemView {
 
 export interface OrderView {
   id: string;
+  /** The session that placed it. A table group's other members see the order too (20261129090000), but only this session may change, cancel or rate it. */
+  customerSessionId: string;
   orderNumber: number;
   status: string;
   subtotal: number;
@@ -60,7 +62,7 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
     .from("orders")
     .select(
       // pickup_*: 20261022090000, newer than database.types.ts.
-      "id, order_number, status, subtotal, discount_total, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id, pickup_at, pickup_name" as "id, order_number, status, subtotal, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id",
+      "id, customer_session_id, order_number, status, subtotal, discount_total, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id, pickup_at, pickup_name" as "id, customer_session_id, order_number, status, subtotal, tax, service_charge, total, currency, customer_note, created_at, restaurant_id, table_id",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -148,6 +150,7 @@ export async function getOrderById(orderId: string): Promise<OrderView | null> {
 
   return {
     id: order.id,
+    customerSessionId: order.customer_session_id,
     orderNumber: order.order_number,
     status: order.status,
     subtotal: Number(order.subtotal),
