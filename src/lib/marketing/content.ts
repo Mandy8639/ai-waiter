@@ -28,6 +28,10 @@ export const STAFF_APP = {
     "https://play.google.com/store/apps/details?id=menu.tableside.app",
 } as const;
 
+/** The notice Apple's and Google's badge rules ask for, shown in the footer. */
+export const STORE_TRADEMARKS =
+  "Apple and the Apple logo are trademarks of Apple Inc. App Store is a service mark of Apple Inc. Google Play and the Google Play logo are trademarks of Google LLC.";
+
 export const FOOTER_GROUPS = [
   {
     title: "Product",
@@ -35,8 +39,6 @@ export const FOOTER_GROUPS = [
       { href: "/features", label: "Features" },
       { href: "/pricing", label: "Pricing" },
       { href: "/demo", label: "Live demo" },
-      { href: STAFF_APP.appStore, label: "Staff app for iPhone" },
-      { href: STAFF_APP.googlePlay, label: "Staff app for Android" },
     ],
   },
   {
