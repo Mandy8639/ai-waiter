@@ -17,6 +17,9 @@ import { updateGoogleReviewUrl } from "@/lib/reviews/actions";
 import { GuestWifiForm } from "@/components/settings/guest-wifi-form";
 import { getRestaurantWifiForStaff } from "@/lib/wifi/queries";
 import { updateRestaurantWifi } from "@/lib/wifi/actions";
+import { WaitGamesForm } from "@/components/settings/wait-games-form";
+import { updateWaitGames } from "@/lib/wait-games/actions";
+import { getWaitGamesSetting } from "@/lib/wait-games/queries";
 import { OperationalSettingsForm } from "@/components/settings/operational-settings-form";
 import { AiPersonaForm } from "@/components/settings/ai-persona-form";
 import { EmailPreferencesForm } from "@/components/settings/email-preferences-form";
@@ -194,6 +197,23 @@ export default async function SettingsPage() {
             defaultValue={
               canManage ? await getRestaurantWifiForStaff(restaurant.id) : null
             }
+            disabled={!canManage}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">While-you-wait games</CardTitle>
+          <CardDescription>
+            Something for guests to do while the kitchen cooks, built from your
+            own menu.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <WaitGamesForm
+            action={updateWaitGames.bind(null, restaurant.id)}
+            enabled={await getWaitGamesSetting(restaurant.id)}
             disabled={!canManage}
           />
         </CardContent>

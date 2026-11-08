@@ -21,6 +21,13 @@ import { getActiveCustomerSession } from "@/lib/customer/session";
 import { getGoogleReviewUrl } from "@/lib/reviews/queries";
 import { showStandaloneReviewLink } from "@/lib/reviews/core";
 import { GoogleReviewLink } from "@/components/customer/google-review-link";
+import { getWaitGameDishes } from "@/lib/wait-games/queries";
+import {
+  buildMatchDeck,
+  buildQuiz,
+  showWaitGames,
+} from "@/lib/wait-games/core";
+import { WaitGames } from "@/components/customer/wait-games";
 
 /**
  * The title and the page read the same order: once per render, not twice.
@@ -67,13 +74,19 @@ export default async function OrderConfirmationPage({
   // Payment is offered only when a card could actually be charged: the
   // restaurant has switched card payments on AND its Stripe account can
   // take them. A cancelled order is never payable.
-  const [payment, eta, feedback, session, googleReviewUrl] = await Promise.all([
-    getOrderPaymentState(order.id, order.restaurantId),
-    getOrderEta(order),
-    getMyFeedbackState(order.id),
-    getActiveCustomerSession(),
-    getGoogleReviewUrl(order.restaurantId),
-  ]);
+  const [payment, eta, feedback, session, googleReviewUrl, gameDishes] =
+    await Promise.all([
+      getOrderPaymentState(order.id, order.restaurantId),
+      getOrderEta(order),
+      getMyFeedbackState(order.id),
+      getActiveCustomerSession(),
+      getGoogleReviewUrl(order.restaurantId),
+      // Only while the food is on its way; the rating panel takes over
+      // once it's served.
+      showWaitGames(order.status)
+        ? getWaitGameDishes(order.restaurantId)
+        : Promise.resolve(null),
+    ]);
   // A friend at the table who didn't press send can follow and pay for a
   // shared order, but changing, cancelling and rating stay with whoever
   // sent it, as the database requires.
@@ -268,6 +281,13 @@ export default async function OrderConfirmationPage({
         state is "not_yours" for staff opening the page — and only once the
         food has reached the table.
       */}
+      {gameDishes && (
+        <WaitGames
+          quiz={buildQuiz(gameDishes, order.id)}
+          deck={buildMatchDeck(gameDishes, order.id)}
+        />
+      )}
+
       {feedbackPanelShown && (
         <OrderFeedbackPanel
           restaurantSlug={restaurantSlug}
