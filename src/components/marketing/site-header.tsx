@@ -8,10 +8,13 @@ import { buttonVariants } from "@/components/ui/button";
 import { MARKETING_NAV } from "@/lib/marketing/content";
 import { cn } from "@/lib/utils";
 import { Wordmark } from "./wordmark";
+import { GetTheAppMenu, StaffAppDetails } from "./get-the-app";
 
 /**
- * Sticky header for the public pages. A client component only for the
- * phone menu's open state; everything in it is a plain link.
+ * Sticky header for the public pages. A client component for the phone
+ * menu's and the "Get the app" panel's open state; everything else in it
+ * is a plain link. The staff app lives here (and in the footer and on
+ * Features) rather than in the hero, where it competed with signing up.
  */
 export function SiteHeader() {
   const pathname = usePathname();
@@ -43,7 +46,8 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-1 md:flex lg:gap-2">
+          <GetTheAppMenu pathname={pathname} />
           <Link href="/login" className={buttonVariants({ variant: "ghost" })}>
             Sign in
           </Link>
@@ -71,7 +75,7 @@ export function SiteHeader() {
         <nav
           id="mk-mobile-nav"
           aria-label="Main"
-          className="border-t px-4 pt-2 pb-5 md:hidden"
+          className="bg-background border-t px-4 pt-2 pb-5 md:hidden"
         >
           <ul className="flex flex-col">
             {MARKETING_NAV.map((item) => (
@@ -95,6 +99,10 @@ export function SiteHeader() {
             <Link href="/signup" className={buttonVariants({ size: "lg" })}>
               Get started free
             </Link>
+          </div>
+          <div className="mt-6 flex flex-col gap-3 border-t pt-5">
+            <p className="mk-eyebrow text-muted-foreground">Staff app</p>
+            <StaffAppDetails />
           </div>
         </nav>
       ) : null}
