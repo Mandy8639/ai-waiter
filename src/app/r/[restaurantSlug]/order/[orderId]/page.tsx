@@ -17,6 +17,7 @@ import { getMyFeedbackState } from "@/lib/feedback/queries";
 import { OrderFeedbackPanel } from "@/components/customer/order-feedback-panel";
 import { OrderChangeControls } from "@/components/customer/order-change-controls";
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
+import { getActiveCustomerSession } from "@/lib/customer/session";
 
 /**
  * The title and the page read the same order: once per render, not twice.
@@ -63,11 +64,16 @@ export default async function OrderConfirmationPage({
   // Payment is offered only when a card could actually be charged: the
   // restaurant has switched card payments on AND its Stripe account can
   // take them. A cancelled order is never payable.
-  const [payment, eta, feedback] = await Promise.all([
+  const [payment, eta, feedback, session] = await Promise.all([
     getOrderPaymentState(order.id, order.restaurantId),
     getOrderEta(order),
     getMyFeedbackState(order.id),
+    getActiveCustomerSession(),
   ]);
+  // A friend at the table who didn't press send can follow and pay for a
+  // shared order, but changing, cancelling and rating stay with whoever
+  // sent it, as the database requires.
+  const placedByMe = session?.id === order.customerSessionId;
   const payable =
     payment.canTakeCard && !payment.paid && order.status !== "cancelled";
 
@@ -137,13 +143,15 @@ export default async function OrderConfirmationPage({
         }
       />
 
-      <OrderChangeControls
-        orderId={order.id}
-        orderNumber={order.orderNumber}
-        restaurantSlug={restaurantSlug}
-        status={order.status}
-        paid={Boolean(payment.paid)}
-      />
+      {placedByMe && (
+        <OrderChangeControls
+          orderId={order.id}
+          orderNumber={order.orderNumber}
+          restaurantSlug={restaurantSlug}
+          status={order.status}
+          paid={Boolean(payment.paid)}
+        />
+      )}
 
       <div className="flex flex-col gap-4">
         {order.items.map((item) => (
@@ -254,14 +262,15 @@ export default async function OrderConfirmationPage({
         state is "not_yours" for staff opening the page — and only once the
         food has reached the table.
       */}
-      {(feedback.state === "open" || feedback.state === "given") && (
-        <OrderFeedbackPanel
-          restaurantSlug={restaurantSlug}
-          orderId={order.id}
-          items={order.items.map((i) => ({ id: i.id, name: i.itemName }))}
-          alreadyGiven={feedback.state === "given"}
-        />
-      )}
+      {placedByMe &&
+        (feedback.state === "open" || feedback.state === "given") && (
+          <OrderFeedbackPanel
+            restaurantSlug={restaurantSlug}
+            orderId={order.id}
+            items={order.items.map((i) => ({ id: i.id, name: i.itemName }))}
+            alreadyGiven={feedback.state === "given"}
+          />
+        )}
 
       <p className="text-muted-foreground text-center text-xs">
         Placed {new Date(order.createdAt).toLocaleString()}
