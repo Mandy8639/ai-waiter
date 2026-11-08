@@ -9,6 +9,8 @@ import {
   generateTableQrSvg,
   getRequestOrigin,
 } from "@/lib/tables/qr";
+import { getRestaurantWifiForStaff } from "@/lib/wifi/queries";
+import { wifiQrPayload } from "@/lib/wifi/core";
 import {
   QR_CARDS_PER_PAGE,
   qrCardLabel,
@@ -27,6 +29,10 @@ export const metadata = {
  * On paper only the sheet prints: the print styles below hide the
  * dashboard's sidebar and header and set the page to A4 with no browser
  * margins (each sheet carries its own).
+ *
+ * With guest Wi-Fi set (20261201090000), each card also carries a small
+ * "join Wi-Fi" code under the order code, which shrinks a little to make
+ * room. The order code stays the big one, so it's the one people scan.
  */
 export default async function PrintQrCodesPage() {
   const { restaurant } = await requireCurrentRestaurant();
@@ -49,6 +55,9 @@ export default async function PrintQrCodesPage() {
       ),
     })),
   );
+  const wifi = await getRestaurantWifiForStaff(restaurant.id);
+  // generateTableQrSvg draws any text; this one is the Wi-Fi join string.
+  const wifiSvg = wifi ? await generateTableQrSvg(wifiQrPayload(wifi)) : null;
   const pages = qrSheetPages(tables);
   const count = pages.reduce((sum, page) => sum + page.length, 0);
 
@@ -123,13 +132,37 @@ export default async function PrintQrCodesPage() {
                   </p>
                   <div
                     className="[&>svg]:h-full [&>svg]:w-full"
-                    style={{ width: "52mm", height: "52mm" }}
+                    style={
+                      wifiSvg
+                        ? { width: "44mm", height: "44mm" }
+                        : { width: "52mm", height: "52mm" }
+                    }
                     // The qrcode library's own SVG for this table's link.
                     dangerouslySetInnerHTML={{ __html: table.svg }}
                   />
                   <p className="text-[14pt] font-semibold">
                     {qrCardLabel(table)}
                   </p>
+                  {wifi && wifiSvg && (
+                    <div className="mt-[1mm] flex items-center gap-[3mm] border-t border-neutral-300 pt-[2mm] text-left">
+                      <div
+                        className="shrink-0 [&>svg]:h-full [&>svg]:w-full"
+                        style={{ width: "17mm", height: "17mm" }}
+                        dangerouslySetInnerHTML={{ __html: wifiSvg }}
+                      />
+                      <div className="flex flex-col leading-tight">
+                        <span className="text-[9pt] font-semibold">
+                          Free Wi-Fi
+                        </span>
+                        <span className="max-w-[40mm] truncate text-[9pt]">
+                          {wifi.ssid}
+                        </span>
+                        <span className="text-[7pt] text-neutral-500">
+                          Scan with your camera to join
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </section>
