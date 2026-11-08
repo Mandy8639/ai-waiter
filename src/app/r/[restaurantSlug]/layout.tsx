@@ -5,6 +5,8 @@ import { AiWaiterProvider } from "@/components/customer/ai-waiter";
 import { DinerDock } from "@/components/customer/diner-dock";
 import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { getActiveCustomerSession } from "@/lib/customer/session";
+import { getRestaurantWifiForGuest } from "@/lib/wifi/queries";
+import { GuestWifiButton } from "@/components/customer/guest-wifi-button";
 import { getCartItemCount } from "@/lib/cart/get-cart";
 import { isAiWaiterAvailable } from "@/lib/ai/actions";
 import { isChefEnabled } from "@/lib/chef/feature";
@@ -36,7 +38,14 @@ export default async function CustomerRestaurantLayout({
 
   const session = await getActiveCustomerSession();
   const isThisRestaurant = session && session.restaurantId === restaurant.id;
-  const cartCount = isThisRestaurant ? await getCartItemCount(session.id) : 0;
+  const [cartCount, wifi] = isThisRestaurant
+    ? await Promise.all([
+        getCartItemCount(session.id),
+        // Only for a guest seated here: the function reads the restaurant
+        // from their own session (20261201090000).
+        getRestaurantWifiForGuest(),
+      ])
+    : [0, null];
   // Requires an active session (the AI waiter's tools operate on this
   // customer's own cart/orders) and the restaurant's own opt-in — see
   // docs/ai.md#restaurant-opt-in.
@@ -75,6 +84,9 @@ export default async function CustomerRestaurantLayout({
             </Link>
             {isThisRestaurant && (
               <nav aria-label="Your visit" className="flex items-center gap-1">
+                {wifi && (
+                  <GuestWifiButton ssid={wifi.ssid} password={wifi.password} />
+                )}
                 <Link
                   href={`/r/${restaurantSlug}/orders`}
                   className="type-label text-muted-foreground hover:text-foreground hover:bg-muted flex h-9 items-center gap-1.5 rounded-lg px-2.5 transition-colors"

@@ -14,6 +14,9 @@ import { RestaurantProfileForm } from "@/components/settings/restaurant-profile-
 import { GoogleReviewLinkForm } from "@/components/settings/google-review-link-form";
 import { getGoogleReviewUrl } from "@/lib/reviews/queries";
 import { updateGoogleReviewUrl } from "@/lib/reviews/actions";
+import { GuestWifiForm } from "@/components/settings/guest-wifi-form";
+import { getRestaurantWifiForStaff } from "@/lib/wifi/queries";
+import { updateRestaurantWifi } from "@/lib/wifi/actions";
 import { OperationalSettingsForm } from "@/components/settings/operational-settings-form";
 import { AiPersonaForm } from "@/components/settings/ai-persona-form";
 import { EmailPreferencesForm } from "@/components/settings/email-preferences-form";
@@ -170,6 +173,27 @@ export default async function SettingsPage() {
           <GoogleReviewLinkForm
             action={updateGoogleReviewUrl.bind(null, restaurant.id)}
             defaultValue={await getGoogleReviewUrl(restaurant.id)}
+            disabled={!canManage}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Guest Wi-Fi</CardTitle>
+          <CardDescription>
+            A small &ldquo;join Wi-Fi&rdquo; code goes on each printed table
+            card, and seated guests can see the password in the app, so the menu
+            loads quickly even where phone signal is weak. It&apos;s never shown
+            on your public menu page.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GuestWifiForm
+            action={updateRestaurantWifi.bind(null, restaurant.id)}
+            defaultValue={
+              canManage ? await getRestaurantWifiForStaff(restaurant.id) : null
+            }
             disabled={!canManage}
           />
         </CardContent>
