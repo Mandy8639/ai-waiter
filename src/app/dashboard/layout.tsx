@@ -33,6 +33,9 @@ import { countPendingReservationRequests } from "@/lib/notifications/pending-req
 import { getExampleDish } from "@/lib/staff-assistant/examples";
 import { selectRestaurant } from "@/lib/restaurants/actions";
 import { PRIVATE_PAGE_ROBOTS } from "@/lib/seo/metadata";
+import { StaffAppNudge } from "@/components/dashboard/staff-app-nudge";
+import { shouldOfferStaffApp, staffAppPitch } from "@/lib/staff-app/core";
+import { getAppQrDataUrl, hasStaffAppOnAPhone } from "@/lib/staff-app/queries";
 
 // Signed in only; never listed. Pages below set just their title, which
 // the shallow metadata merge keeps alongside this.
@@ -131,6 +134,7 @@ export default async function DashboardLayout({
     switchedOff,
     exampleDish,
     pendingRequestCount,
+    hasAppOnAPhone,
   ] = await Promise.all([
     getPublicPricing(),
     getRestaurantBilling(restaurant.id),
@@ -140,7 +144,25 @@ export default async function DashboardLayout({
     canSeeReservations
       ? countPendingReservationRequests(restaurant.id)
       : Promise.resolve(undefined),
+    hasStaffAppOnAPhone(restaurant.id, user.id),
   ]);
+
+  // "Get the app" (src/lib/staff-app/core.ts): on the web, to someone
+  // without it on a phone, and never on top of the two-step reminder.
+  const twoFactorReminderShown =
+    ["owner", "manager"].includes(restaurant.role) &&
+    !hasVerifiedTwoFactor(user.factors);
+  const offerApp = shouldOfferStaffApp({
+    inApp: appShell !== null,
+    hasAppOnAPhone,
+    twoFactorReminderShown,
+  });
+  const appNudge = offerApp ? (
+    <StaffAppNudge
+      {...staffAppPitch(restaurant.role)}
+      qrDataUrl={await getAppQrDataUrl()}
+    />
+  ) : null;
 
   // The free month / plan notice (20261018120000). Plans can't be offered
   // for purchase inside the store apps, so there it carries no price or link.
@@ -204,6 +226,7 @@ export default async function DashboardLayout({
         <main className="w-full flex-1 px-3 pt-4 pb-24 sm:px-4">
           {notice && <BillingBanner notice={notice} />}
           {aiOffNotice && <BillingBanner notice={aiOffNotice} />}
+          {appNudge}
           {withChef(children)}
         </main>
         <NativeAppBridge />
@@ -284,8 +307,8 @@ export default async function DashboardLayout({
         >
           {notice && <BillingBanner notice={notice} />}
           {aiOffNotice && <BillingBanner notice={aiOffNotice} />}
-          {["owner", "manager"].includes(restaurant.role) &&
-            !hasVerifiedTwoFactor(user.factors) && <TwoFactorReminder />}
+          {twoFactorReminderShown && <TwoFactorReminder />}
+          {appNudge}
           {withChef(children)}
         </main>
         <NativeAppBridge />

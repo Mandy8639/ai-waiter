@@ -20,6 +20,8 @@ import { updateRestaurantWifi } from "@/lib/wifi/actions";
 import { WaitGamesForm } from "@/components/settings/wait-games-form";
 import { updateWaitGames } from "@/lib/wait-games/actions";
 import { getWaitGamesSetting } from "@/lib/wait-games/queries";
+import { getAppQrDataUrl } from "@/lib/staff-app/queries";
+import { StoreLinks } from "@/components/marketing/store-links";
 import { OperationalSettingsForm } from "@/components/settings/operational-settings-form";
 import { AiPersonaForm } from "@/components/settings/ai-persona-form";
 import { EmailPreferencesForm } from "@/components/settings/email-preferences-form";
@@ -45,6 +47,8 @@ export const metadata = {
 export default async function SettingsPage() {
   const { user, restaurant } = await requireCurrentRestaurant();
   const supabase = await createClient();
+  // The Staff app card's code for tableside.menu/get-app.
+  const appQrDataUrl = await getAppQrDataUrl();
 
   const [{ data: profile }, { data: settings }] = await Promise.all([
     supabase
@@ -216,6 +220,34 @@ export default async function SettingsPage() {
             enabled={await getWaitGamesSetting(restaurant.id)}
             disabled={!canManage}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Staff app</CardTitle>
+          <CardDescription>
+            Tableside for Restaurants: new-order alerts and the kitchen board on
+            your team&apos;s phones, even when they&apos;re locked. Everyone
+            signs in with their own Tableside account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-6">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a generated data URL */}
+          <img
+            src={appQrDataUrl}
+            alt="QR code for tableside.menu/get-app"
+            width={112}
+            height={112}
+            className="rounded-md border bg-white p-1"
+          />
+          <div className="flex flex-col gap-3">
+            <StoreLinks />
+            <p className="text-muted-foreground text-xs">
+              Or share tableside.menu/get-app: it opens the right store on any
+              phone.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
