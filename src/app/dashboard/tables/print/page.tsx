@@ -163,7 +163,12 @@ export default async function PrintQrCodesPage({
                       </span>
                     </div>
                   )}
-                  <p className="text-[11pt] font-medium text-neutral-600">
+                  <p
+                    className="text-[11pt] font-medium text-neutral-600"
+                    // Clear of the tap spot in the corner: a long name
+                    // wraps instead of running under it.
+                    style={nfcSpot ? { paddingInline: "22mm" } : undefined}
+                  >
                     {restaurant.name}
                   </p>
                   <p className="text-[16pt] font-semibold text-[#842B02]">
