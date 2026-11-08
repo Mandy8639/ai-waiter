@@ -9,8 +9,9 @@ restaurant's own Stripe account, with the platform fee collected correctly — s
 (QR scan → menu → AI waiter → order → kitchen board → card payment → payout) has now run
 end-to-end in production, not just in tests.
 
-Deployed at **https://order.beacondigitalconsulting.org**. `beacondigitalconsulting.org` and its
-`www` redirect there.
+Deployed at **https://tableside.menu**. The old address, `order.beacondigitalconsulting.org`,
+redirects its pages there (its `/api/` addresses still answer in place; see
+[`src/lib/domains/core.ts`](src/lib/domains/core.ts)).
 
 Built since: **payments** — Stripe Connect onboarding per restaurant, card checkout for a single
 order or a whole table's tab, tips, cash recorded by staff, refunds, receipts, and three platform
@@ -279,7 +280,7 @@ fixed.
 
 ## Deployment
 
-Deployed on Vercel at **https://order.beacondigitalconsulting.org**, against the production
+Deployed on Vercel at **https://tableside.menu**, against the production
 Supabase project. `GET /api/health` reports high-level readiness (Supabase/AI configured, never a
 secret) and currently answers `{"status":"ok","supabaseConfigured":true,"aiConfigured":true}` — see
 [`docs/security.md`](docs/security.md#health-check-endpoint--implemented-in-batch-8).

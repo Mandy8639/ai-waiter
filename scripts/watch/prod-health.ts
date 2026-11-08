@@ -44,7 +44,9 @@ const checks: Check[] = [
   { name: "Sitemap", url: `${SITE}/sitemap.xml`, ok: [200] },
   // Serves, not redirects: printed QR codes and webhooks depend on it.
   {
-    name: "Old domain still serving",
+    // Its pages redirect to tableside.menu since 2026-11-08; its /api/
+    // addresses keep answering for machines (src/lib/domains/core.ts).
+    name: "Old domain's API still answering",
     url: `${OLD_SITE}/api/health`,
     ok: [200],
   },
