@@ -10,23 +10,31 @@ import {
 } from "@/lib/feedback/actions";
 import { COMMENT_MAX, RATING_WORDS } from "@/lib/feedback/core";
 import { cn } from "@/lib/utils";
+import { GoogleReviewLink } from "./google-review-link";
 
 /**
  * "How was it?" on the diner's own order page, once the order is served
  * (phase N). Private to the restaurant, and it says so. A low rating ends
  * with an offer — never an automatic summons — to have someone come over.
+ *
+ * With a Google review link set (20261130090000), every diner is offered
+ * it, whatever they rated: after a low rating too, once they've answered
+ * the offer. Asking only happy diners to post publicly is the "review
+ * gating" Google's policy forbids.
  */
 export function OrderFeedbackPanel({
   restaurantSlug,
   orderId,
   items,
   alreadyGiven,
+  googleReviewUrl = null,
 }: {
   restaurantSlug: string;
   orderId: string;
   /** One entry per order line, for the dish thumbs. */
   items: Array<{ id: string; name: string }>;
   alreadyGiven: boolean;
+  googleReviewUrl?: string | null;
 }) {
   const [rating, setRating] = useState(0);
   const [votes, setVotes] = useState<Record<string, boolean>>({});
@@ -94,6 +102,16 @@ export function OrderFeedbackPanel({
           <p className="text-muted-foreground text-sm">
             It goes straight to the restaurant.
           </p>
+        )}
+        {googleReviewUrl && done !== "low" && (
+          <div className="flex flex-col items-start gap-2 border-t pt-3">
+            <p className="text-muted-foreground text-sm">
+              Want to share it on Google too?
+            </p>
+            <GoogleReviewLink url={googleReviewUrl} orderId={orderId}>
+              Leave a Google review
+            </GoogleReviewLink>
+          </div>
         )}
       </section>
     );
@@ -227,6 +245,18 @@ export function OrderFeedbackPanel({
       >
         {pending ? "Sending…" : "Send to the restaurant"}
       </Button>
+
+      {googleReviewUrl && (
+        <p className="text-center">
+          <GoogleReviewLink
+            url={googleReviewUrl}
+            orderId={orderId}
+            variant="quiet"
+          >
+            Or review us on Google
+          </GoogleReviewLink>
+        </p>
+      )}
     </section>
   );
 }

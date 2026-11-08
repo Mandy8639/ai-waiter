@@ -17,6 +17,10 @@ const submitOrderFeedback = vi.fn();
 const askStaffAboutFeedback = vi.fn(async (_orderId: string) => ({
   ok: true,
 }));
+const recordGoogleReviewTap = vi.fn(async (_orderId: string) => undefined);
+vi.mock("@/lib/reviews/actions", () => ({
+  recordGoogleReviewTap: (orderId: string) => recordGoogleReviewTap(orderId),
+}));
 vi.mock("@/lib/feedback/actions", () => ({
   submitOrderFeedback: (...args: unknown[]) => submitOrderFeedback(...args),
   askStaffAboutFeedback: (orderId: string) => askStaffAboutFeedback(orderId),
@@ -35,7 +39,7 @@ afterEach(() => {
   askStaffAboutFeedback.mockClear();
 });
 
-function renderPanel(alreadyGiven = false) {
+function renderPanel(alreadyGiven = false, googleReviewUrl?: string) {
   return render(
     <OrderFeedbackPanel
       restaurantSlug="nashta"
@@ -45,9 +49,12 @@ function renderPanel(alreadyGiven = false) {
         { id: "i2", name: "Mango Lassi" },
       ]}
       alreadyGiven={alreadyGiven}
+      googleReviewUrl={googleReviewUrl}
     />,
   );
 }
+
+const REVIEW = "https://g.page/r/abc/review";
 
 describe("OrderFeedbackPanel", () => {
   it("says it's private, and can't be sent without a rating", () => {
@@ -156,5 +163,55 @@ describe("OrderFeedbackPanel", () => {
     renderPanel(true);
     expect(screen.getByText("Thanks for your feedback")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  describe("the Google review link (offered to every rating)", () => {
+    it.each([5, 3])("is offered after %i stars", async (stars) => {
+      submitOrderFeedback.mockResolvedValue({ ok: true, low: false });
+      renderPanel(false, REVIEW);
+      fireEvent.click(screen.getByLabelText(new RegExp(`${stars} stars`)));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Send to the restaurant" }),
+      );
+      const link = await screen.findByRole(
+        "link",
+        { name: /Leave a Google review/ },
+        WAIT,
+      );
+      expect(link).toHaveAttribute("href", REVIEW);
+      expect(link).toHaveAttribute("target", "_blank");
+      fireEvent.click(link);
+      expect(recordGoogleReviewTap).toHaveBeenCalledWith("o1");
+    });
+
+    it("is offered after a low rating too, once the diner has answered", async () => {
+      submitOrderFeedback.mockResolvedValue({ ok: true, low: true });
+      renderPanel(false, REVIEW);
+      fireEvent.click(screen.getByLabelText(/1 star\b/));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Send to the restaurant" }),
+      );
+      await screen.findByText("Sorry it wasn't right", undefined, WAIT);
+      const no = screen.getByRole("button", { name: "No thanks" });
+      await waitFor(() => expect(no).toBeEnabled(), WAIT);
+      fireEvent.click(no);
+      expect(
+        await screen.findByRole(
+          "link",
+          { name: /Leave a Google review/ },
+          WAIT,
+        ),
+      ).toHaveAttribute("href", REVIEW);
+    });
+
+    it("is there before rating too, and absent with no link set", () => {
+      renderPanel(false, REVIEW);
+      expect(
+        screen.getByRole("link", { name: /Or review us on Google/ }),
+      ).toHaveAttribute("href", REVIEW);
+      cleanup();
+      renderPanel(false);
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    });
   });
 });

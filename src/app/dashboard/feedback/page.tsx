@@ -4,6 +4,10 @@ import { Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireCurrentRestaurant } from "@/lib/restaurants/require-current-restaurant";
 import { getFeedbackOverview } from "@/lib/feedback/queries";
+import {
+  getGoogleReviewTapCount,
+  getGoogleReviewUrl,
+} from "@/lib/reviews/queries";
 import { LOW_RATING } from "@/lib/feedback/core";
 import { cn } from "@/lib/utils";
 
@@ -49,10 +53,12 @@ export default async function FeedbackPage({
 
   const { days: raw } = await searchParams;
   const days = PERIODS.find((p) => String(p) === raw) ?? 30;
-  const { summary, servedOrders, entries, dishes } = await getFeedbackOverview(
-    restaurant.id,
-    days,
-  );
+  const [{ summary, servedOrders, entries, dishes }, reviewUrl, reviewTaps] =
+    await Promise.all([
+      getFeedbackOverview(restaurant.id, days),
+      getGoogleReviewUrl(restaurant.id),
+      getGoogleReviewTapCount(restaurant.id, days),
+    ]);
   const responseRate =
     servedOrders > 0 ? Math.round((summary.count / servedOrders) * 100) : null;
   const maxBar = Math.max(1, ...Object.values(summary.distribution));
@@ -94,6 +100,29 @@ export default async function FeedbackPage({
           </Link>
         ))}
       </nav>
+
+      <p className="text-muted-foreground text-sm">
+        {reviewUrl ? (
+          <>
+            <span className="text-foreground font-medium">
+              {reviewTaps ?? 0} {reviewTaps === 1 ? "guest" : "guests"}
+            </span>{" "}
+            opened your Google review page in the last {days} days. Google
+            doesn&apos;t tell us who went on to post.
+          </>
+        ) : (
+          <>
+            Add your Google review link in{" "}
+            <Link
+              href="/dashboard/settings"
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              Settings
+            </Link>{" "}
+            and guests will be offered it after their meal.
+          </>
+        )}
+      </p>
 
       {summary.count === 0 ? (
         <Card>
