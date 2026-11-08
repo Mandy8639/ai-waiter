@@ -83,3 +83,32 @@ export function shouldShowOfflineBanner(
 ): boolean {
   return offlineSince !== null && now - offlineSince >= OFFLINE_BANNER_AFTER_MS;
 }
+
+/**
+ * The note on a guest page (offline mode, phase 2): whether it's the menu
+ * saved on the phone, and whether the phone is offline right now. Null
+ * when it's a live page and the phone is online.
+ */
+export function offlineMenuNote(input: {
+  savedAt: number | null;
+  offline: boolean;
+  timeZone?: string;
+}): string | null {
+  const when = input.savedAt
+    ? new Date(input.savedAt).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: input.timeZone,
+      })
+    : null;
+  if (input.offline && when) {
+    return `You're offline. This is the menu saved on your phone at ${when}. Prices and what's available are checked when you order.`;
+  }
+  if (input.offline) {
+    return "You're offline. You can keep reading the menu; ordering will work again once you have signal.";
+  }
+  if (when) {
+    return `The connection was slow, so this is the menu saved on your phone at ${when}.`;
+  }
+  return null;
+}
