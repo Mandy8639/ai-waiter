@@ -18,6 +18,16 @@ export const MARKETING_NAV = [
   { href: SUPPORT_PATH, label: "Support" },
 ] as const;
 
+/**
+ * The staff app (Tableside for Restaurants): order alerts and the kitchen
+ * board on the restaurant's own phones. Guests never need an app.
+ */
+export const STAFF_APP = {
+  appStore: "https://apps.apple.com/us/app/id6826677708",
+  googlePlay:
+    "https://play.google.com/store/apps/details?id=menu.tableside.app",
+} as const;
+
 export const FOOTER_GROUPS = [
   {
     title: "Product",
@@ -25,6 +35,8 @@ export const FOOTER_GROUPS = [
       { href: "/features", label: "Features" },
       { href: "/pricing", label: "Pricing" },
       { href: "/demo", label: "Live demo" },
+      { href: STAFF_APP.appStore, label: "Staff app for iPhone" },
+      { href: STAFF_APP.googlePlay, label: "Staff app for Android" },
     ],
   },
   {

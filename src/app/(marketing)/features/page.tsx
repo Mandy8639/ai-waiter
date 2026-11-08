@@ -26,6 +26,7 @@ import { Section, SectionHeading } from "@/components/marketing/section";
 import { Reveal } from "@/components/marketing/reveal";
 import { ClosingCta } from "@/components/marketing/closing-cta";
 import { cn } from "@/lib/utils";
+import { StoreLinks } from "@/components/marketing/store-links";
 
 export const metadata = publicPageMetadata({
   title: "Features — Tableside",
@@ -38,6 +39,8 @@ interface Feature {
   icon: LucideIcon;
   title: string;
   body: string;
+  /** Show the App Store / Google Play links under it. */
+  storeLinks?: true;
 }
 
 /**
@@ -123,6 +126,7 @@ const GROUPS: {
         icon: Smartphone,
         title: "Staff app",
         body: "Tableside for Restaurants on iPhone and Android, with push alerts for new orders and requests.",
+        storeLinks: true,
       },
       {
         icon: MessageSquareHeart,
@@ -247,6 +251,7 @@ export default function FeaturesPage() {
                     <p className="text-muted-foreground text-sm text-pretty">
                       {f.body}
                     </p>
+                    {f.storeLinks && <StoreLinks />}
                   </Reveal>
                 </li>
               ))}

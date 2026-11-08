@@ -18,6 +18,7 @@ import { publicPageMetadata } from "@/lib/seo/metadata";
 import { JsonLd } from "@/components/seo/json-ld";
 import { organizationJsonLd } from "@/lib/seo/structured-data";
 import { HeroStage } from "@/components/marketing/hero-stage";
+import { StoreLinks } from "@/components/marketing/store-links";
 import { KitchenTicket } from "@/components/marketing/kitchen-ticket";
 import { Reveal } from "@/components/marketing/reveal";
 import { Section, SectionHeading } from "@/components/marketing/section";
@@ -134,7 +135,7 @@ export default function Home() {
             <p className="mk-eyebrow text-primary">
               An AI waiter for restaurants.
             </p>
-            <h1 className="mk-display text-[clamp(2.4rem,12.5vw,3.25rem)] sm:text-7xl">
+            <h1 className="mk-display text-[clamp(2.4rem,12.5vw,3.25rem)] sm:text-7xl lg:text-[5.25rem] lg:leading-[0.95]">
               <span className="sr-only">Tableside: </span>
               Your menu, with <em className="text-primary">a waiter</em> in it.
             </h1>
@@ -158,6 +159,13 @@ export default function Home() {
             <p className="text-muted-foreground text-sm">
               Free to use. No commission on your orders.
             </p>
+            <div className="flex flex-col gap-2 border-t pt-5">
+              <p className="text-muted-foreground text-sm">
+                Staff app for your kitchen and floor, on iPhone and Android.
+                Guests never need an app.
+              </p>
+              <StoreLinks />
+            </div>
           </div>
           <HeroStage />
         </div>
