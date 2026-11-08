@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { FOOTER_GROUPS } from "@/lib/marketing/content";
+import { FOOTER_GROUPS, STORE_TRADEMARKS } from "@/lib/marketing/content";
+import { StoreLinks } from "./store-links";
 import { LEGAL_ENTITY } from "@/lib/legal/terms";
 import { Wordmark } from "./wordmark";
 
@@ -15,6 +16,10 @@ export function SiteFooter() {
           <p className="text-muted-foreground text-sm">
             At a restaurant? Scan the code on your table to see the menu.
           </p>
+          <div className="flex flex-col gap-2 pt-2">
+            <p className="mk-eyebrow text-muted-foreground">Staff app</p>
+            <StoreLinks />
+          </div>
         </div>
         {FOOTER_GROUPS.map((group) => (
           <nav key={group.title} aria-label={group.title}>
@@ -37,9 +42,12 @@ export function SiteFooter() {
         ))}
       </div>
       <div className="text-muted-foreground border-t">
-        <p className="mx-auto w-full max-w-6xl px-4 py-5 text-xs sm:px-6">
-          © {new Date().getFullYear()} {LEGAL_ENTITY}
-        </p>
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-5 text-xs sm:px-6">
+          <p>
+            © {new Date().getFullYear()} {LEGAL_ENTITY}
+          </p>
+          <p className="opacity-80">{STORE_TRADEMARKS}</p>
+        </div>
       </div>
     </footer>
   );

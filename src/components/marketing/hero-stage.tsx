@@ -20,7 +20,7 @@ export function HeroStage() {
   return (
     <PlayWhenVisible
       className="relative mx-auto w-full max-w-[34rem] pt-6 pb-44 sm:pb-36 lg:pb-24"
-      aria-label="Example: a guest asks the Chef for a dish, and the order prints in the kitchen"
+      aria-label="Example: a guest with a nut allergy asks the Chef for something sweet, and the order prints in the kitchen"
       role="img"
     >
       {/* The pass: a warm field the scene stands on. */}
@@ -52,7 +52,7 @@ export function HeroStage() {
       {/* Plated dishes from the demo's menu. */}
       {/* eslint-disable-next-line @next/next/no-img-element -- a small local image, sized here */}
       <img
-        src="/marketing/dishes/braised-short-rib.webp"
+        src="/marketing/dishes/mango-sorbet.webp"
         alt=""
         width={160}
         height={160}
@@ -61,7 +61,7 @@ export function HeroStage() {
       />
       {/* eslint-disable-next-line @next/next/no-img-element -- a small local image, sized here */}
       <img
-        src="/marketing/dishes/mango-lassi.webp"
+        src="/marketing/dishes/sticky-toffee-pudding.webp"
         alt=""
         width={120}
         height={120}
@@ -88,39 +88,38 @@ export function HeroStage() {
               className="mk-rise bg-primary text-primary-foreground ml-auto max-w-[80%] rounded-2xl rounded-br-md px-3.5 py-2"
               style={delay(200)}
             >
-              Something filling, not too spicy?
+              Something sweet? I&apos;m allergic to nuts.
             </p>
             <div
               className="mk-rise bg-ai-soft text-ai-foreground max-w-[88%] rounded-2xl rounded-bl-md px-3.5 py-2.5"
               style={delay(800)}
             >
-              The Braised Short Rib is the heartiest dish here, and it&apos;s
-              mild. It comes with mash and greens.
+              The Mango Sorbet has no nuts on its allergen list, and it&apos;s
+              vegan. Two scoops with fresh mint.
               <div className="bg-card text-card-foreground mt-2.5 flex items-center gap-2.5 rounded-xl border p-1.5 pr-3">
                 {/* eslint-disable-next-line @next/next/no-img-element -- a small local image, sized here */}
                 <img
-                  src="/marketing/dishes/braised-short-rib.webp"
+                  src="/marketing/dishes/mango-sorbet.webp"
                   alt=""
                   width={36}
                   height={36}
                   className="size-9 rounded-lg object-cover"
                 />
-                <span className="flex-1 font-medium">Braised Short Rib</span>
-                <span className="type-price">$24</span>
+                <span className="flex-1 font-medium">Mango Sorbet</span>
+                <span className="type-price">$7</span>
               </div>
             </div>
             <p
               className="mk-rise bg-primary text-primary-foreground ml-auto max-w-[80%] rounded-2xl rounded-br-md px-3.5 py-2"
               style={delay(1500)}
             >
-              One of those, no greens please.
+              Two of those, please.
             </p>
             <p
               className="mk-rise bg-ai-soft text-ai-foreground max-w-[88%] rounded-2xl rounded-bl-md px-3.5 py-2"
               style={delay(2100)}
             >
-              Done: Braised Short Rib, no greens. It&apos;s on its way to the
-              kitchen.
+              Done: 2 Mango Sorbet. It&apos;s on its way to the kitchen.
             </p>
           </div>
         </div>
@@ -132,10 +131,7 @@ export function HeroStage() {
         table="TABLE 7"
         orderNumber={142}
         time="7:42 PM"
-        lines={[
-          { qty: 1, name: "Braised short rib", note: "no greens" },
-          { qty: 1, name: "Ginger lemonade" },
-        ]}
+        lines={[{ qty: 2, name: "Mango sorbet" }]}
         footer="— sent by the Chef —"
       />
     </PlayWhenVisible>
