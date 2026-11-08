@@ -657,3 +657,69 @@ describe("KitchenBoard — pickup orders", () => {
     expect(screen.queryByText("Start now")).toBeNull();
   });
 });
+
+describe("KitchenBoard — offline (phase 1)", () => {
+  async function renderWithOrder() {
+    const { transitionOrderStatus } = await import("@/lib/orders/transition");
+    const transition = vi.mocked(transitionOrderStatus);
+    transition.mockReset();
+    mockFetchActiveOrders.mockResolvedValue([makeOrder()]);
+    render(
+      <KitchenBoard
+        restaurantId="r1"
+        restaurantName="Test"
+        timeZone="UTC"
+        role="owner"
+        initialOrders={[makeOrder()]}
+      />,
+    );
+    subscribed();
+    await flush();
+    return transition;
+  }
+
+  it("shows a loud banner once the board has been offline for a while, and clears it when back", async () => {
+    await renderWithOrder();
+    mockFetchActiveOrders.mockRejectedValue(new TypeError("Failed to fetch"));
+    act(() => realtimeState.onCallback?.({ payload: { table: "orders" } }));
+    await flush();
+    expect(screen.queryByText(/Offline since/)).toBeNull();
+
+    await flush(KDS_NORMAL_POLL_INTERVAL_MS * 2 + 1_000);
+    expect(screen.getByText(/Offline since/)).toBeTruthy();
+
+    mockFetchActiveOrders.mockResolvedValue([makeOrder()]);
+    act(() => realtimeState.onCallback?.({ payload: { table: "orders" } }));
+    await flush();
+    expect(screen.queryByText(/Offline since/)).toBeNull();
+  });
+
+  it("keeps a tap made offline on screen and sends it once the board reconnects", async () => {
+    const transition = await renderWithOrder();
+    transition.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    mockFetchActiveOrders.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Confirm" }).click();
+    });
+    // Past the Undo window, when the tap is actually sent.
+    await flush(5_500);
+    expect(transition).toHaveBeenCalledTimes(1);
+    // Not crashed, and the card shows the tap.
+    expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+
+    await flush(KDS_NORMAL_POLL_INTERVAL_MS * 2 + 1_000);
+    expect(screen.getByText(/1 tap waiting to send/)).toBeTruthy();
+
+    // Back online: the next refresh gets through and the tap is sent.
+    transition.mockResolvedValue({});
+    mockFetchActiveOrders.mockResolvedValue([
+      makeOrder({ status: "confirmed" }),
+    ]);
+    act(() => realtimeState.onCallback?.({ payload: { table: "orders" } }));
+    await flush(1_000);
+    expect(transition).toHaveBeenCalledTimes(2);
+    expect(transition).toHaveBeenLastCalledWith("order-1", "confirmed");
+    expect(screen.queryByText(/waiting to send/)).toBeNull();
+  });
+});

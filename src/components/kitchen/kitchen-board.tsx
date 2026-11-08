@@ -60,6 +60,14 @@ import {
   isStaleResync,
   hasNewPendingOrder,
 } from "./kds-reconciliation";
+import {
+  KITCHEN_NOT_SENT,
+  dropLaterTapsFor,
+  enqueueTap,
+  queuedTapsLabel,
+  shouldShowOfflineBanner,
+  type QueuedTap,
+} from "@/lib/offline/core";
 
 type Role = "owner" | "manager" | "kitchen" | "staff";
 
@@ -153,6 +161,20 @@ export function KitchenBoard({
     null,
   );
   const [connected, setConnected] = useState(false);
+  // Offline mode, phase 1 (src/lib/offline/core.ts). Set by a server call
+  // that couldn't get through or the browser's offline event; cleared by
+  // the next resync that does. Not the badge's `connected`, which also
+  // blips while live updates (re)join.
+  const [offlineSince, setOfflineSince] = useState<number | null>(null);
+  const markOffline = useCallback(
+    () => setOfflineSince((since) => since ?? Date.now()),
+    [],
+  );
+  // Taps made while offline, sent in order once the board reconnects.
+  const tapQueueRef = useRef<QueuedTap[]>([]);
+  const [queuedTaps, setQueuedTaps] = useState(0);
+  // The latest drainTapQueue(), for resync() above it to call.
+  const drainRef = useRef<() => Promise<void>>(async () => undefined);
   const { muted, toggleMuted, unlock, play } = useNotificationSound();
   const [stationChoice, setStationChoice] = useState<StationChoice>("all");
   // A pickup order's "start at" passes on its own, with no event to say
@@ -271,6 +293,7 @@ export function KitchenBoard({
         // the next trigger (Realtime event, next poll tick, reconnect)
         // retry naturally.
         console.error("KDS resync failed, will retry on next trigger", error);
+        markOffline();
         return;
       } finally {
         resyncInFlightRef.current = false;
@@ -302,8 +325,11 @@ export function KitchenBoard({
       }
       knownIdsRef.current = new Set(fresh.map((o) => o.id));
       setOrders(withOverrides(fresh, overridesRef.current));
+      // Reached the server: back online, and any taps made offline go now.
+      setOfflineSince(null);
+      if (tapQueueRef.current.length > 0) void drainRef.current();
     },
-    [restaurantId, play],
+    [restaurantId, play, markOffline],
   );
   // The latest resync(), for the follow-up run above.
   const resyncRef = useRef(resync);
@@ -481,9 +507,85 @@ export function KitchenBoard({
     };
   }, []);
 
+  function queueTap(orderId: string, target: OrderStatus) {
+    tapQueueRef.current = enqueueTap(tapQueueRef.current, { orderId, target });
+    setQueuedTaps(tapQueueRef.current.length);
+  }
+
+  /**
+   * Sends the taps made offline, oldest first, one at a time: the server
+   * only accepts a card's steps in order. Stops at the first one that
+   * still can't get through. One the server refuses (the card moved on
+   * elsewhere meanwhile) drops that card's later taps; the resync after
+   * shows the card where it really is.
+   */
+  const drainingRef = useRef(false);
+  async function drainTapQueue() {
+    if (drainingRef.current) return;
+    drainingRef.current = true;
+    try {
+      while (tapQueueRef.current.length > 0) {
+        const tap = tapQueueRef.current[0];
+        let result;
+        try {
+          result = await transitionOrderStatus(
+            tap.orderId,
+            tap.target as OrderStatus,
+          );
+        } catch {
+          markOffline();
+          return;
+        }
+        tapQueueRef.current = result.error
+          ? dropLaterTapsFor(tapQueueRef.current, tap.orderId)
+          : tapQueueRef.current.slice(1);
+        if (
+          result.error ||
+          !tapQueueRef.current.some((t) => t.orderId === tap.orderId)
+        ) {
+          overridesRef.current.delete(tap.orderId);
+        }
+        setQueuedTaps(tapQueueRef.current.length);
+      }
+    } finally {
+      drainingRef.current = false;
+      setQueuedTaps(tapQueueRef.current.length);
+      if (isMountedRef.current) void resyncRef.current(false);
+    }
+  }
+  useEffect(() => {
+    drainRef.current = drainTapQueue;
+  });
+
+  useEffect(() => {
+    window.addEventListener("offline", markOffline);
+    return () => window.removeEventListener("offline", markOffline);
+  }, [markOffline]);
+
+  // While offline, keep the banner's clock moving.
+  useEffect(() => {
+    if (offlineSince === null) return;
+    const timer = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(timer);
+  }, [offlineSince]);
+
   function sendTransition(orderId: string, target: OrderStatus) {
+    // Taps already waiting go first, so this one waits behind them.
+    if (tapQueueRef.current.length > 0) {
+      queueTap(orderId, target);
+      return;
+    }
     startTransitionAction(async () => {
-      const result = await transitionOrderStatus(orderId, target);
+      let result;
+      try {
+        result = await transitionOrderStatus(orderId, target);
+      } catch {
+        // Couldn't reach the server. The card stays where the cook put
+        // it, and the tap is sent when the board reconnects.
+        queueTap(orderId, target);
+        markOffline();
+        return;
+      }
       // Saved or refused, this tap no longer needs holding on screen —
       // unless a newer tap on the same card has replaced it.
       if (overridesRef.current.get(orderId) === target) {
@@ -498,7 +600,14 @@ export function KitchenBoard({
   function handleGroupTransition(ticketGroupId: string, target: OrderStatus) {
     setActionError(null);
     startTransitionAction(async () => {
-      const result = await transitionTicketGroupStatus(ticketGroupId, target);
+      let result;
+      try {
+        result = await transitionTicketGroupStatus(ticketGroupId, target);
+      } catch {
+        markOffline();
+        setActionError(KITCHEN_NOT_SENT);
+        return;
+      }
       if (result.error) {
         setActionError(result.error);
       } else {
@@ -515,7 +624,13 @@ export function KitchenBoard({
     setActionError(null);
     setPendingIds((prev) => new Set(prev).add(orderId));
     startTransitionAction(async () => {
-      const result = await setStationDone(orderId, stationId, done);
+      let result;
+      try {
+        result = await setStationDone(orderId, stationId, done);
+      } catch {
+        result = { error: KITCHEN_NOT_SENT };
+        markOffline();
+      }
       setPendingIds((prev) => {
         const next = new Set(prev);
         next.delete(orderId);
@@ -533,13 +648,25 @@ export function KitchenBoard({
     orderId: string,
     groups: { label?: string; itemIds: string[] }[],
   ) {
-    const result = await splitOrderIntoTickets(orderId, groups);
+    let result;
+    try {
+      result = await splitOrderIntoTickets(orderId, groups);
+    } catch {
+      markOffline();
+      return { error: KITCHEN_NOT_SENT };
+    }
     if (!result.error) void resync(false);
     return result;
   }
 
   async function handleMerge(orderIds: string[], label: string | null) {
-    const result = await mergeOrdersIntoTicket(orderIds, label);
+    let result;
+    try {
+      result = await mergeOrdersIntoTicket(orderIds, label);
+    } catch {
+      markOffline();
+      return { error: KITCHEN_NOT_SENT };
+    }
     if (!result.error) void resync(false);
     return result;
   }
@@ -687,6 +814,29 @@ export function KitchenBoard({
           station. Mark your part done here; the order is marked ready from All
           stations.
         </p>
+      )}
+
+      {shouldShowOfflineBanner(offlineSince, now) && offlineSince && (
+        <div
+          role="alert"
+          className="border-destructive bg-destructive/10 text-destructive flex flex-col gap-1 rounded-md border-2 px-4 py-3 text-sm"
+        >
+          <p className="font-semibold">
+            Offline since{" "}
+            {new Date(offlineSince).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+            . New orders can&apos;t reach this screen until the connection is
+            back.
+          </p>
+          <p>
+            Check the restaurant&apos;s internet. Staff phones on mobile data
+            still get order alerts.
+            {queuedTapsLabel(queuedTaps) &&
+              ` ${queuedTapsLabel(queuedTaps)}; they'll go as soon as it's back.`}
+          </p>
+        </div>
       )}
 
       {actionError && (
