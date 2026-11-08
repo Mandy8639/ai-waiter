@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Nfc } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { PrintSheetButton } from "@/components/tables/print-sheet-button";
@@ -33,8 +34,18 @@ export const metadata = {
  * With guest Wi-Fi set (20261201090000), each card also carries a small
  * "join Wi-Fi" code under the order code, which shrinks a little to make
  * room. The order code stays the big one, so it's the one people scan.
+ *
+ * ?nfc=1 adds a small "Tap your phone here" spot in each card's corner,
+ * for restaurants sticking an NFC tag there (src/lib/nfc/core.ts). Off by
+ * default: a spot with no sticker behind it would have guests tapping
+ * paper.
  */
-export default async function PrintQrCodesPage() {
+export default async function PrintQrCodesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ nfc?: string }>;
+}) {
+  const nfcSpot = (await searchParams).nfc === "1";
   const { restaurant } = await requireCurrentRestaurant();
   const supabase = await createClient();
 
@@ -94,6 +105,18 @@ export default async function PrintQrCodesPage() {
           >
             Back to tables
           </Link>
+          {count > 0 && (
+            <Link
+              href={
+                nfcSpot
+                  ? "/dashboard/tables/print"
+                  : "/dashboard/tables/print?nfc=1"
+              }
+              className={buttonVariants({ variant: "outline" })}
+            >
+              {nfcSpot ? "Remove NFC tap spot" : "Add NFC tap spot"}
+            </Link>
+          )}
           {count > 0 && <PrintSheetButton />}
         </div>
       </div>
@@ -122,8 +145,24 @@ export default async function PrintQrCodesPage() {
               {page.map((table) => (
                 <div
                   key={table.id}
-                  className="flex flex-col items-center justify-center gap-[2mm] border border-dashed border-neutral-400 text-center text-neutral-900"
+                  className="relative flex flex-col items-center justify-center gap-[2mm] border border-dashed border-neutral-400 text-center text-neutral-900"
                 >
+                  {nfcSpot && (
+                    <div
+                      className="absolute top-[3mm] right-[3mm] flex flex-col items-center justify-center rounded-full border border-neutral-500 text-neutral-700"
+                      style={{ width: "18mm", height: "18mm" }}
+                    >
+                      <Nfc
+                        style={{ width: "6mm", height: "6mm" }}
+                        aria-hidden="true"
+                      />
+                      <span className="text-[6pt] leading-tight font-medium">
+                        Tap phone
+                        <br />
+                        here
+                      </span>
+                    </div>
+                  )}
                   <p className="text-[11pt] font-medium text-neutral-600">
                     {restaurant.name}
                   </p>
