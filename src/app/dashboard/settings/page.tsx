@@ -11,6 +11,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { RestaurantProfileForm } from "@/components/settings/restaurant-profile-form";
+import { GoogleReviewLinkForm } from "@/components/settings/google-review-link-form";
+import { getGoogleReviewUrl } from "@/lib/reviews/queries";
+import { updateGoogleReviewUrl } from "@/lib/reviews/actions";
 import { OperationalSettingsForm } from "@/components/settings/operational-settings-form";
 import { AiPersonaForm } from "@/components/settings/ai-persona-form";
 import { EmailPreferencesForm } from "@/components/settings/email-preferences-form";
@@ -153,6 +156,24 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Google reviews</CardTitle>
+          <CardDescription>
+            After their meal, every guest is offered a link to review you on
+            Google, whatever they rated you privately. Google doesn&apos;t allow
+            asking only happy guests, so Tableside never does.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GoogleReviewLinkForm
+            action={updateGoogleReviewUrl.bind(null, restaurant.id)}
+            defaultValue={await getGoogleReviewUrl(restaurant.id)}
+            disabled={!canManage}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
