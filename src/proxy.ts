@@ -14,6 +14,7 @@ import {
   appShellRedirect,
   parseAppShell,
 } from "@/lib/app-shell/core";
+import { oldHostRedirect } from "@/lib/domains/core";
 
 /**
  * Refreshes the Supabase auth session on every request (required for SSR —
@@ -29,6 +30,15 @@ import {
  * never needs SUPABASE_SECRET_KEY to run.
  */
 export async function proxy(request: NextRequest) {
+  // The old app address: its pages live on tableside.menu now
+  // (src/lib/domains/core.ts). Permanent, path and query intact.
+  const moved = oldHostRedirect(
+    request.headers.get("host"),
+    request.nextUrl.pathname,
+    request.nextUrl.search,
+  );
+  if (moved) return NextResponse.redirect(moved, 308);
+
   // App mode (src/lib/app-shell/core.ts): the store apps open their start
   // URL with ?app=android|ios. Remembered in a cookie on every response
   // from that request, so the pages after it know they're in an app too.
