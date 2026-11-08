@@ -13,6 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { formatPrice } from "@/lib/format/price";
 import { cn } from "@/lib/utils";
 import type { CartActionState } from "@/lib/cart/actions";
+import { ADD_NOT_CONFIRMED } from "@/lib/offline/core";
 
 export interface ModifierOptionData {
   id: string;
@@ -81,7 +82,20 @@ export function ItemDetailForm({
     Object.fromEntries(groups.map((g) => [g.id, new Set<string>()])),
   );
   const [quantity, setQuantity] = useState(1);
-  const [state, formAction, isPending] = useActionState(action, initialState);
+  // A dropped connection makes the action throw rather than answer, which
+  // would replace the page with an error. Say what happened instead, and
+  // don't retry: if the first attempt did arrive, a retry would add the
+  // dish twice (src/lib/offline/core.ts).
+  const [state, formAction, isPending] = useActionState(
+    async (prev: CartActionState, formData: FormData) => {
+      try {
+        return await action(prev, formData);
+      } catch {
+        return { error: ADD_NOT_CONFIRMED };
+      }
+    },
+    initialState,
+  );
 
   function toggleOption(group: ModifierGroupData, optionId: string) {
     setSelected((prev) => {
