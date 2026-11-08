@@ -12,6 +12,7 @@ import {
   getRequestOrigin,
 } from "@/lib/tables/qr";
 import { regenerateTableToken } from "@/lib/tables/actions";
+import { NfcTagWriter } from "@/components/tables/nfc-tag-writer";
 
 export const metadata = {
   title: "Table QR code — Tableside",
@@ -44,6 +45,21 @@ export default async function TableQrPage({
     table.public_token,
   );
   const qrDataUrl = await generateTableQrDataUrl(customerUrl);
+
+  // For "Next table" after writing an NFC tag: the next active table in
+  // the order staff number them.
+  const { data: siblings } = await supabase
+    .from("tables")
+    .select("id, table_number")
+    .eq("restaurant_id", restaurant.id)
+    .eq("is_active", true);
+  const ordered = (siblings ?? []).slice().sort((a, b) =>
+    String(a.table_number).localeCompare(String(b.table_number), undefined, {
+      numeric: true,
+    }),
+  );
+  const at = ordered.findIndex((t) => t.id === table.id);
+  const next = at >= 0 ? ordered[at + 1] : undefined;
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-6">
@@ -106,10 +122,23 @@ export default async function TableQrPage({
                 table.id,
               )}
               confirmTitle="Regenerate this table's QR code?"
-              confirmDescription="Any previously printed or saved QR code for this table will stop working immediately. This can't be undone."
+              confirmDescription="Any previously printed or saved QR code for this table, and any NFC tag written with it, will stop working immediately. This can't be undone."
               triggerLabel="Regenerate"
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">NFC tag</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <NfcTagWriter
+            url={customerUrl}
+            tableLabel={`Table ${table.table_number}`}
+            nextTableHref={next ? `/dashboard/tables/${next.id}/qr` : null}
+          />
         </CardContent>
       </Card>
     </div>
