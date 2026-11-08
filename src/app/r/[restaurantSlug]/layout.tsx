@@ -7,6 +7,7 @@ import { getPublicRestaurantBySlug } from "@/lib/customer/restaurant";
 import { getActiveCustomerSession } from "@/lib/customer/session";
 import { getRestaurantWifiForGuest } from "@/lib/wifi/queries";
 import { GuestWifiButton } from "@/components/customer/guest-wifi-button";
+import { GuestOfflineSupport } from "@/components/customer/guest-offline-support";
 import { getCartItemCount } from "@/lib/cart/get-cart";
 import { isAiWaiterAvailable } from "@/lib/ai/actions";
 import { isChefEnabled } from "@/lib/chef/feature";
@@ -118,6 +119,7 @@ export default async function CustomerRestaurantLayout({
             )}
           </div>
         </header>
+        <GuestOfflineSupport />
 
         {hoursNotice && (
           <div role="status" className="bg-muted text-foreground border-b">
