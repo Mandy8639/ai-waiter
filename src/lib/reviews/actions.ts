@@ -9,6 +9,8 @@ import { parseGoogleReviewUrl } from "./core";
 export interface ReviewLinkFormState {
   error?: string;
   success?: boolean;
+  /** What the field should show next: the cleaned link, or what was typed when it was refused (React resets the form after every submit). */
+  value?: string;
 }
 
 /** Settings: save or clear the restaurant's Google review link. */
@@ -23,8 +25,9 @@ export async function updateGoogleReviewUrl(
   ]);
   if (!auth.ok) return { error: auth.error };
 
-  const parsed = parseGoogleReviewUrl(String(formData.get("url") ?? ""));
-  if (!parsed.ok) return { error: parsed.error };
+  const typed = String(formData.get("url") ?? "");
+  const parsed = parseGoogleReviewUrl(typed);
+  if (!parsed.ok) return { error: parsed.error, value: typed };
 
   // google_review_url postdates database.types.ts.
   const from = auth.context.supabase.from.bind(
@@ -40,10 +43,15 @@ export async function updateGoogleReviewUrl(
   const { error } = await from("restaurants")
     .update({ google_review_url: parsed.url })
     .eq("id", restaurantId);
-  if (error) return { error: "That link couldn't be saved. Please try again." };
+  if (error) {
+    return {
+      error: "That link couldn't be saved. Please try again.",
+      value: typed,
+    };
+  }
 
   revalidatePath("/dashboard/settings");
-  return { success: true };
+  return { success: true, value: parsed.url ?? "" };
 }
 
 /**

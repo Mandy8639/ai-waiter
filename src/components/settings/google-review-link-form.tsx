@@ -47,7 +47,11 @@ export function GoogleReviewLinkForm({
           name="url"
           type="url"
           inputMode="url"
-          defaultValue={defaultValue ?? ""}
+          // Keyed on the last answer so the field shows it after React
+          // resets the form: what was typed when refused, the cleaned link
+          // when saved.
+          key={state.value ?? "initial"}
+          defaultValue={state.value ?? defaultValue ?? ""}
           maxLength={500}
           placeholder="https://g.page/r/…/review"
           disabled={disabled || isPending}
