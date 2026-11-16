@@ -117,7 +117,6 @@ export default function CardPage() {
           Hindi or Hinglish, and order from their phone. Your servers keep the
           Friday rush.
         </p>
-        <p className="mt-3 text-sm leading-relaxed">{card.offer}</p>
         <p className="mt-6 text-center text-sm">
           <Link
             href="/"

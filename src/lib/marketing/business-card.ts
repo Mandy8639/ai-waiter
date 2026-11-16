@@ -20,8 +20,8 @@ export interface BusinessCard {
   phone: string;
   email: string;
   url: string;
-  /** The offer line under the name. */
-  offer: string;
+  /** One line on what Tableside does, saved in the contact's notes. */
+  note: string;
 }
 
 export const BUSINESS_CARD: BusinessCard = {
@@ -33,8 +33,7 @@ export const BUSINESS_CARD: BusinessCard = {
   phone: "+12035282273",
   email: "tableside34@gmail.com",
   url: "https://tableside.menu",
-  offer:
-    "Founding Table: 5 restaurants. Free for 90 days, then $29 a month, locked for 12 months. No contract.",
+  note: "QR menu and AI waiter for Indian and South Asian restaurants. Guests ask about spice, Jain and allergens in English, Hindi or Hinglish.",
 };
 
 /** "+17325550123" → "(732) 555-0123"; anything else is shown as given. */
@@ -73,7 +72,7 @@ export function buildVCard(card: BusinessCard): string {
   if (card.phone) lines.push(`TEL;TYPE=CELL,VOICE:${card.phone}`);
   if (card.email) lines.push(`EMAIL;TYPE=INTERNET:${card.email}`);
   lines.push(`URL:${card.url}`);
-  lines.push(`NOTE:${esc(card.offer)}`);
+  lines.push(`NOTE:${esc(card.note)}`);
   lines.push("END:VCARD");
   return lines.join("\r\n") + "\r\n";
 }

@@ -24,7 +24,7 @@ describe("business card", () => {
   });
 
   it("escapes commas and semicolons in text fields", () => {
-    const v = buildVCard({ ...full, offer: "Free; then $29, locked" });
+    const v = buildVCard({ ...full, note: "Free; then $29, locked" });
     expect(v).toContain("NOTE:Free\\; then $29\\, locked\r\n");
   });
 
