@@ -7,6 +7,7 @@ import {
   formatUsPhone,
   whatsappUrl,
 } from "@/lib/marketing/business-card";
+import { JaaliCard } from "./jaali-card";
 
 const instrumentSerif = Instrument_Serif({
   variable: "--font-display",
@@ -64,23 +65,7 @@ export default function CardPage() {
       className={`${instrumentSerif.variable} bg-background flex min-h-dvh flex-col items-center px-4 py-10`}
     >
       <div className="w-full max-w-sm">
-        <div className="bg-primary text-primary-foreground rounded-2xl px-6 pt-8 pb-7 shadow-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element -- a static brand SVG */}
-          <img
-            src="/brand/tableside-mark-white.svg"
-            alt=""
-            width={44}
-            height={38}
-            className="mb-6 h-[38px] w-auto"
-          />
-          <h1 className="mk-display text-4xl leading-tight">{card.name}</h1>
-          <p className="mt-1 text-base opacity-90">
-            {card.title}, {card.company}
-          </p>
-          <p className="mk-display mt-6 text-xl italic opacity-95">
-            The menu that answers.
-          </p>
-        </div>
+        <JaaliCard />
 
         <div className="mt-5 flex flex-col gap-3">
           {actions.map(({ href, label, detail, icon: Icon }) => (
