@@ -30,8 +30,8 @@ export const BUSINESS_CARD: BusinessCard = {
   familyName: "Gouraram",
   title: "Founder",
   company: "Tableside",
-  phone: "",
-  email: "",
+  phone: "+12035282273",
+  email: "tableside34@gmail.com",
   url: "https://tableside.menu",
   offer:
     "Founding Table: 5 restaurants. Free for 90 days, then $29 a month, locked for 12 months. No contract.",
