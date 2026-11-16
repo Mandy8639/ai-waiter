@@ -7,6 +7,7 @@ import {
   formatUsPhone,
   whatsappUrl,
 } from "@/lib/marketing/business-card";
+import { CardFlip } from "./card-flip";
 import { JaaliCard } from "./jaali-card";
 
 const instrumentSerif = Instrument_Serif({
@@ -65,7 +66,22 @@ export default function CardPage() {
       className={`${instrumentSerif.variable} bg-background flex min-h-dvh flex-col items-center px-4 py-10`}
     >
       <div className="w-full max-w-sm">
-        <JaaliCard />
+        <h1 className="sr-only">
+          {card.name}, {card.title}, {card.company}
+        </h1>
+        <CardFlip
+          front={<JaaliCard />}
+          back={
+            // eslint-disable-next-line @next/next/no-img-element -- the printed card's back, a static image
+            <img
+              src="/brand/card-back.webp"
+              alt="Back of the card: a QR code that opens this page, the line 'Ask it is this Jain? in Hindi, English or Hinglish', and my phone, email and web address."
+              width={1049}
+              height={599}
+              className="aspect-[7/4] w-full rounded-2xl object-cover shadow-sm"
+            />
+          }
+        />
 
         <div className="mt-5 flex flex-col gap-3">
           {actions.map(({ href, label, detail, icon: Icon }) => (

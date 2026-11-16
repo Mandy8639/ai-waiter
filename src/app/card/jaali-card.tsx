@@ -74,9 +74,9 @@ export function JaaliCard() {
           className="mt-[3.4cqw] block h-px w-[9cqw]"
           style={{ backgroundColor: TURMERIC }}
         />
-        <h1 className="mk-display mt-[3.2cqw] text-[5.4cqw] leading-tight">
+        <p className="mk-display mt-[3.2cqw] text-[5.4cqw] leading-tight">
           {card.name}
-        </h1>
+        </p>
         <p className="mt-[0.8cqw] text-[max(9px,2.6cqw)] font-medium tracking-[0.2em] uppercase">
           {card.title}
         </p>
