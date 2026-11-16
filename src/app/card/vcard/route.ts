@@ -8,7 +8,8 @@ export function GET() {
   return new Response(buildVCard(BUSINESS_CARD), {
     headers: {
       "Content-Type": "text/vcard; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="manideep-gouraram-tableside.vcf"',
+      "Content-Disposition":
+        'attachment; filename="manideep-gouraram-tableside.vcf"',
       "Cache-Control": "public, max-age=300",
     },
   });

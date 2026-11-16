@@ -18,7 +18,8 @@ const instrumentSerif = Instrument_Serif({
 export const metadata = {
   ...publicPageMetadata({
     title: `${card.name}, ${card.title} — Tableside`,
-    description: "Tableside: the menu that answers. Save my contact or try the demo.",
+    description:
+      "Tableside: the menu that answers. Save my contact or try the demo.",
     path: "/card",
   }),
   // Opened from the printed card's QR code; nothing for search engines.
@@ -118,7 +119,10 @@ export default function CardPage() {
         </p>
         <p className="mt-3 text-sm leading-relaxed">{card.offer}</p>
         <p className="mt-6 text-center text-sm">
-          <Link href="/" className="text-primary underline-offset-4 hover:underline">
+          <Link
+            href="/"
+            className="text-primary underline-offset-4 hover:underline"
+          >
             tableside.menu
           </Link>
         </p>
